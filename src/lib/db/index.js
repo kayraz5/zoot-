@@ -1,7 +1,9 @@
 import { HAS_SUPABASE } from "../config.js";
 import { localDb } from "./local.js";
 
-let remote = null;
+/* Steven: index.js to merge logics between local and remote db */
+
+let remoteDb = null;
 
 export function isGuestMode() {
     try  {
@@ -24,10 +26,10 @@ export async function getDb() {
     if (isGuestMode()) {
         return localDb
     }
-    if (!remote) {
+    if (!remoteDb) {
         const {createRemoteDb} = await import('./remote.js');
-        remote = createRemoteDb();
+        remoteDb = createRemoteDb();
     }
 
-    return remote;
+    return remoteDb;
 }

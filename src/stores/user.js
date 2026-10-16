@@ -4,6 +4,7 @@ import { HAS_SUPABASE } from '../lib/config.js';
 import { levelFor, titleFor } from '../lib/xp.js';
 
 /* Steven: User Profile Authentication & Session */
+
 export const useUserStore = defineStore('user', {
     // initial state
     state: () => ({
