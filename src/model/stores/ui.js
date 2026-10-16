@@ -1,5 +1,5 @@
 import { defineStore } from 'pinia'
-import { fetchForecast } from '../lib/weather.js'
+import { fetchForecast } from '../services/weather.js'
 
 /** Theme, toasts, celebrations, weather and dev flags (Matthew + Hulbert lanes). */
 export const useUiStore = defineStore('ui', {

@@ -1,7 +1,7 @@
 <script setup>
 import { computed } from 'vue'
-import { tick } from '../lib/clock.js'
-import { fmtTime } from '../lib/hours.js'
+import { tick } from '../../model/services/clock.js'
+import { fmtTime } from '../../model/services/hours.js'
 
 /** Always-visible countdown, styled like a departure board. Yellow under 90 min, red under 45 (IA §7.1). */
 const props = defineProps({

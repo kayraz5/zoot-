@@ -1,4 +1,4 @@
-import { BRAND, DEFAULT_COVER, onColor } from '../lib/brand.js'
+import { BRAND, DEFAULT_COVER, onColor } from '../../model/services/brand.js'
 
 /**
  * Canvas painters for passport pages (Shrey's lane). Each returns nothing and

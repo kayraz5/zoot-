@@ -1,8 +1,8 @@
 <script setup>
 import { computed } from 'vue'
-import { useUiStore } from '../stores/ui.js'
-import { describeCode } from '../lib/weather.js'
-import { tick } from '../lib/clock.js'
+import { useUiStore } from '../../model/stores/ui.js'
+import { describeCode } from '../../model/services/weather.js'
+import { tick } from '../../model/services/clock.js'
 
 const ui = useUiStore()
 const hour = computed(() => ui.weather?.hours?.find((h) => tick.value >= h.ms && tick.value < h.ms + 3600000))

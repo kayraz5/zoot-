@@ -1,9 +1,9 @@
 <script setup>
 import { computed } from 'vue'
 import { useRouter } from 'vue-router'
-import { useUiStore } from '../stores/ui.js'
-import { useUserStore } from '../stores/user.js'
-import { AREAS } from '../data/origins.js'
+import { useUiStore } from '../../model/stores/ui.js'
+import { useUserStore } from '../../model/stores/user.js'
+import { AREAS } from '../../model/data/origins.js'
 
 const ui = useUiStore()
 const user = useUserStore()

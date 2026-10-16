@@ -1,6 +1,6 @@
 import * as THREE from 'three'
 import { PAGE_W, PAGE_H } from './pageArt.js'
-import { DEFAULT_COVER } from '../lib/brand.js'
+import { DEFAULT_COVER } from '../../model/services/brand.js'
 
 /**
  * 3D flip passport (Shrey's set piece).

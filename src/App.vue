@@ -1,11 +1,11 @@
 <script setup>
 import { computed, watch } from 'vue'
 import { useRoute } from 'vue-router'
-import AppNav from './components/AppNav.vue'
-import ToastHost from './components/ToastHost.vue'
-import StampCelebration from './components/StampCelebration.vue'
-import { useUserStore } from './stores/user.js'
-import { usePassportStore } from './stores/passport.js'
+import AppNav from './view/components/AppNav.vue'
+import ToastHost from './view/components/ToastHost.vue'
+import StampCelebration from './view/components/StampCelebration.vue'
+import { useUserStore } from './model/stores/user.js'
+import { usePassportStore } from './model/stores/passport.js'
 
 const route = useRoute()
 const user = useUserStore()
