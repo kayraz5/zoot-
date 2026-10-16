@@ -32,7 +32,7 @@ function write(key, value) {
 }
 
 export const localDb = {
-    type: 'local',
+    kind: 'local',
 
     async getSession() {
         return read(state.session, null)
