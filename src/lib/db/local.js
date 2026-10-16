@@ -3,6 +3,11 @@ import {DEFAULT_COVER} from '../brand.js';
 
 /* Steven: guest-mode adapter, will fallback to local if database is down also */
 
+/* 
+    Leverages localStorage to store the guest data.
+    Have almost the same function definitions as remote.js.
+*/
+
 // website state constructor
 const state = { 
     session: 'zoot.session',
