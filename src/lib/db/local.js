@@ -193,7 +193,7 @@ export const localDb = {
                 accuracy_m: position?.accuracy ?? null,
                 xp,
                 area: place.area, 
-                stamped_at: new Date(now).toISOString();
+                stamped_at: new Date(now).toISOString()
             }
 
             stamps.push(stamp);
