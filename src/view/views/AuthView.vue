@@ -1,7 +1,7 @@
 <script setup>
 import {ref} from 'vue';
 import {useRoute, useRouter} from 'vue-router';
-import {useUserStore} from '../../stores/user.js';
+import {useUserStore} from '../../model/stores/user.js';
 
 /* Steven: Authentication page (login, signup, or continue as guest) */
 

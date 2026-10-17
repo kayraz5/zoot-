@@ -1,6 +1,5 @@
 import { createClient } from '@supabase/supabase-js';
 import { SUPABASE_URL, SUPABASE_ANON_KEY } from "../config.js";
-import { m } from 'vue-router/dist/options-B1Pk0SIa.mjs';
 
 /* Steven: Supabase adaptor */
 

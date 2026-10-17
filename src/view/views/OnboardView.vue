@@ -1,8 +1,8 @@
 <script setup>
 import {computed, ref} from 'vue';
 import {useRoute, useRouter} from 'vue-router';
-import {useUserStore} from '../../stores/user.js';
-import {STYLES} from '../data/origins.js';
+import {useUserStore} from '../../model/stores/user.js';
+import {STYLES} from '../../model/data/origins.js';
 
 /* Steven: Four question quiz after user authentication */
 

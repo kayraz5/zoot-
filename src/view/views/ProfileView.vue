@@ -1,12 +1,12 @@
 <script setup>
 import {computed, ref} from 'vue';
 import {useRouter} from 'vue-router';
-import {useUserStore} from '../../stores/user.js';
-import {usePassportStore} from '../stores/passport.js';
-import {useUiStore} from '../stores/ui.js';
-import {STYLES} from '../data/origins.js';
-import {DEV_PANEL} from '../lib/config.js';
-import {COVERS, DEFAULT_COVER, onColor} from '../lib/brand.js';
+import {useUserStore} from '../../model/stores/user.js';
+import {usePassportStore} from '../../model/stores/passport.js';
+import {useUiStore} from '../../model/stores/ui.js';
+import {STYLES} from '../../model/data/origins.js';
+import {DEV_PANEL} from '../../model/services/config.js';
+import {COVERS, DEFAULT_COVER, onColor} from '../../model/services/brand.js';
 
 /* Steven: Profile view (except passport, only entry point here) */
 

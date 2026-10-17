@@ -1,5 +1,5 @@
 import {defineStore} from 'pinia';
-import {getDb, isGuestMode, setGuestMode} from '../lib/db/index.js';
+import {getDb, isGuestMode, setGuestMode} from '../services/db/index.js';
 import {HAS_SUPABASE} from '../services/config.js';
 import {levelFor, titleFor} from '../services/xp.js';
 
