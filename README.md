@@ -2,6 +2,18 @@
 
 This template should help get you started developing with Vue 3 in Vite.
 
+## Project structure (MVC)
+
+`src/` is split into three buckets:
+
+- **`model/`** — state and data: `stores/` (Pinia), `data/` (static JSON/data), `services/` (business logic, calculations, API/DB access — formerly `lib/`).
+- **`view/`** — UI: `views/` (route-level pages), `components/` (reusable UI pieces), `gl/` (canvas/3D rendering), `styles/`.
+- **`controller/`** — flow control: `router/` (routes + navigation guards).
+
+`App.vue` and `main.js` stay at `src/` root and wire the three together. When adding code: new state/business logic goes in `model/`, new screens/widgets go in `view/`, new routing/navigation logic goes in `controller/`.
+
+> Note: a few files are referenced across the app but not yet present on this branch (e.g. `model/stores/user.js`, `model/services/db/`, `model/services/{groq,planner,clock,geo,hours}.js`, `model/data/origins.js`, some `view/components/*` and `view/views/*`). These are pending from other in-progress branches, not part of this restructure.
+
 ## Recommended IDE Setup
 
 [VS Code](https://code.visualstudio.com/) + [Vue (Official)](https://marketplace.visualstudio.com/items?itemName=Vue.volar) (and disable Vetur).

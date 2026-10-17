@@ -2,12 +2,12 @@
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 import { PassportBook } from '../gl/passportScene.js'
 import { drawCover, drawIdentity, drawAreaPage, drawBackPage } from '../gl/pageArt.js'
-import { AREAS, STYLES } from '../data/origins.js'
-import { catalog, loadCatalog } from '../lib/catalog.js'
-import { usePassportStore } from '../stores/passport.js'
-import { useUserStore } from '../stores/user.js'
-import { useMissionStore } from '../stores/mission.js'
-import { DEFAULT_COVER } from '../lib/brand.js'
+import { AREAS, STYLES } from '../../model/data/origins.js'
+import { catalog, loadCatalog } from '../../model/services/catalog.js'
+import { usePassportStore } from '../../model/stores/passport.js'
+import { useUserStore } from '../../model/stores/user.js'
+import { useMissionStore } from '../../model/stores/mission.js'
+import { DEFAULT_COVER } from '../../model/services/brand.js'
 
 /** 3D flip passport with chop slams for newly stamped areas (Shrey's lane). */
 const passport = usePassportStore()

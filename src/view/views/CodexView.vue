@@ -1,8 +1,8 @@
 <script setup>
 import { computed, onMounted, ref } from 'vue'
-import { catalog, loadCatalog } from '../lib/catalog.js'
-import { usePassportStore } from '../stores/passport.js'
-import { AREAS } from '../data/origins.js'
+import { catalog, loadCatalog } from '../../model/services/catalog.js'
+import { usePassportStore } from '../../model/stores/passport.js'
+import { AREAS } from '../../model/data/origins.js'
 
 /** City Codex: every place, seen vs stamped (the collection screen). */
 const passport = usePassportStore()

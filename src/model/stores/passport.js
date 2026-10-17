@@ -1,5 +1,5 @@
 import { defineStore } from 'pinia'
-import { getDb } from '../lib/db/index.js'
+import { getDb } from '../services/db/index.js'
 
 /** Stamps, chops and the Codex (Shrey: 3D passport · Kayra: stamps table). */
 export const usePassportStore = defineStore('passport', {
