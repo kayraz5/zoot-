@@ -21,7 +21,9 @@ const routes = [
   { path: '/swipe', name: 'swipe', component: () => import('../../view/views/SwipeView.vue'), meta: { auth: true, nav: true } },
   { path: '/party/:id?', name: 'party', component: () => import('../../view/views/PartyView.vue'), meta: { auth: true, nav: true } },
   ...(DEV_PANEL ? [{ path: '/dev', name: 'dev', component: () => import('../../view/views/DevView.vue'), meta: { auth: true, nav: true } }] : []),
-  { path: '/:pathMatch(.*)*', redirect: '/' }
+  { path: '/:pathMatch(.*)*', redirect: '/' },
+  { path: '/3d-map', name: '3d-map', component: () => 
+    import('../../view/views/3D_Map.vue') },
 ]
 
 export const router = createRouter({
