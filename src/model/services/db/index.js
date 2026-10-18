@@ -27,7 +27,7 @@ export async function getDb() {
         return localDb
     }
     if (!remoteDb) {
-        const {createRemoteDb} = await import('../../../lib/db/remote.js');
+        const {createRemoteDb} = await import('./remote.js');
         remoteDb = createRemoteDb();
     }
 

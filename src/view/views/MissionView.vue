@@ -4,7 +4,7 @@ import { useRoute, useRouter } from 'vue-router'
 import { useMissionStore } from '../../model/stores/mission.js'
 import { useUiStore } from '../../model/stores/ui.js'
 import { loadCatalog, placeById } from '../../model/services/catalog.js'
-import { fmtTime, fmtDuration } from '../../model/services/hours.js'
+import { formatTime, formatDuration } from '../../model/services/hours.js'
 import { rainLookup } from '../../model/services/weather.js'
 import { RAIN_LIMIT } from '../../model/services/planner.js'
 import { STYLES } from '../../model/data/origins.js'
@@ -78,7 +78,7 @@ const replans = [
 
       <section class="zt-card p-3 mb-3">
         <div class="d-flex justify-content-between align-items-center mb-2">
-          <b class="small">Where your {{ fmtDuration(Math.round((store.mustReturnMs - Date.parse(m.start_iso)) / 60000)) }} goes</b>
+          <b class="small">Where your {{ formatDuration(Math.round((store.mustReturnMs - Date.parse(m.start_iso)) / 60000)) }} goes</b>
           <WeatherChip />
         </div>
         <BufferBar
@@ -99,7 +99,7 @@ const replans = [
       <ol class="timeline list-unstyled">
         <li class="tl-start">
           <div class="dot start"><i class="bi bi-airplane-fill"></i></div>
-          <div class="small"><b class="mono">{{ fmtTime(Date.parse(m.start_iso) + m.buffers.exit_min * 60000) }}</b> Leave {{ m.origin.label }}<span v-if="m.buffers.exit_min" class="text-muted"> (after {{ m.buffers.exit_min }} min immigration)</span></div>
+          <div class="small"><b class="mono">{{ formatTime(Date.parse(m.start_iso) + m.buffers.exit_min * 60000) }}</b> Leave {{ m.origin.label }}<span v-if="m.buffers.exit_min" class="text-muted"> (after {{ m.buffers.exit_min }} min immigration)</span></div>
         </li>
         <template v-for="leg in m.legs" :key="leg.seq + leg.place_id">
           <li class="tl-travel">
@@ -117,8 +117,8 @@ const replans = [
                 <PlacePhoto v-if="leg.kind === 'visit'" :place="placeById.get(leg.place_id)" />
                 <div class="flex-grow-1">
                   <div class="tiny text-muted fw-800 mono">
-                    {{ fmtTime(leg.arrive_iso) }}<template v-if="leg.kind === 'visit'">–{{ fmtTime(leg.depart_iso) }} · stay {{ leg.stay_min }} min</template>
-                    <template v-else> · must arrive by {{ fmtTime(leg.arrive_by) }}</template>
+                    {{ formatTime(leg.arrive_iso) }}<template v-if="leg.kind === 'visit'">–{{ formatTime(leg.depart_iso) }} · stay {{ leg.stay_min }} min</template>
+                    <template v-else> · must arrive by {{ formatTime(leg.arrive_by) }}</template>
                   </div>
                   <h2 class="h6 mb-1">
                     <RouterLink v-if="leg.kind === 'visit'" :to="`/place/${leg.place_id}`" class="text-reset">{{ leg.name }}</RouterLink>
@@ -138,7 +138,7 @@ const replans = [
                 <RouterLink :to="`/map?focus=${leg.seq}`" class="btn btn-sm btn-soft"><i class="bi bi-geo"></i> On map</RouterLink>
                 <button class="btn btn-sm btn-link text-muted" @click="store.skip(leg)">Skip</button>
               </div>
-              <div v-else-if="leg.status === 'stamped'" class="tiny text-success fw-800"><i class="bi bi-check2-circle"></i> Stamped {{ leg.stamped_at ? fmtTime(leg.stamped_at) : '' }}</div>
+              <div v-else-if="leg.status === 'stamped'" class="tiny text-success fw-800"><i class="bi bi-check2-circle"></i> Stamped {{ leg.stamped_at ? formatTime(leg.stamped_at) : '' }}</div>
               <div v-else-if="leg.status === 'skipped'" class="tiny text-muted fw-800">Skipped</div>
             </div>
           </li>
