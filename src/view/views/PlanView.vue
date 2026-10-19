@@ -106,8 +106,7 @@ async function submit() {
 				<input id="hours" type="range" class="form-range" min="2" :max="MAX_LAYOVER_H" step="0.5"
 					:value="d.hours" @input="trip.setHours(Number($event.target.value))" />
 				<label class="form-label mt-2" for="ret">{{ trip.origin.kind === 'airport' ? 'Gate / boarding time' :
-					'Must be
-					back at the hotel by' }} <span class="text-muted fw-normal">(Singapore time)</span></label>
+					'Must be back at the hotel by' }} <span class="text-muted fw-normal">(Singapore time)</span></label>
 				<input id="ret" v-model="d.mustReturnLocal" type="datetime-local" class="form-control"
 					@change="onReturnChange" required />
 
