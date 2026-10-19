@@ -1,5 +1,5 @@
 <script setup>
-import {ref} from 'vue';
+import {ref, watchEffect} from 'vue';
 import {useRoute, useRouter} from 'vue-router';
 import {useUserStore} from '../../model/stores/user.js';
 
