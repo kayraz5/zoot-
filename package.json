@@ -11,39 +11,7 @@
     "test:e2e": "playwright test"
   },
   "dependencies": {
-    "bootstrap": "^5.3.8",
-    "bootstrap-icons": "^1.13.2",
-    "maplibre-gl": "^6.14.0",
-    "pinia": "^4.0.3",
-    "vue": "^3.5.42",
-    "vue-router": "^5.3.1"
-  },
-  "devDependencies": {
-    "@playwright/test": "^1.63.0",
-    "@vitejs/plugin-vue": "^6.0.8",
-    "@vue/test-utils": "^2.5.0",
-    "jsdom": "^30.0.1",
-    "vite": "^8.2.2",
-    "vite-plugin-vue-devtools": "^8.2.1",
-    "vitest": "^4.1.11"
-  },
-  "engines": {
-    "node": "^22.18.0 || >=24.12.0"
-  }
-}
-{
-  "name": "vue-project",
-  "version": "0.0.0",
-  "private": true,
-  "type": "module",
-  "scripts": {
-    "dev": "vite",
-    "build": "vite build",
-    "preview": "vite preview",
-    "test:unit": "vitest",
-    "test:e2e": "playwright test"
-  },
-  "dependencies": {
+    "@supabase/supabase-js": "^2.118.0",
     "@turf/destination": "^7.4.0",
     "@turf/distance": "^7.4.0",
     "@turf/helpers": "^7.4.0",
@@ -51,6 +19,7 @@
     "bootstrap-icons": "^1.13.2",
     "maplibre-gl": "^6.14.0",
     "pinia": "^4.0.3",
+    "three": "^0.186.1",
     "vue": "^3.5.42",
     "vue-router": "^5.3.1"
   },
