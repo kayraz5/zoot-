@@ -147,14 +147,16 @@ export const localDb = {
         
         write(state.missions, all);
 
-        return mission;
+        return missions;
     },
     async getMission(id) {
         return read(state.missions, {})[id] || null;
     },
     async listMissions() {
-        return Object.values(read(state.missions, {})).sort(
-            (a,b) => b.created_at.localeCompare(a.created_at)
+        return Object.values(
+            read(state.missions, {}).sort(
+                (a,b) => b.created_at.localeCompare(a.created_at)
+            )
         )
     },
     
@@ -169,7 +171,7 @@ export const localDb = {
             if (!dev) {
                 const status = checkInStatus({place, position, fake});
                 if (!status.ok) {
-                    throw new Error(status.message);
+                    throw new Error(s.message);
                 }
             }
 

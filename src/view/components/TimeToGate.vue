@@ -1,7 +1,7 @@
 <script setup>
 import { computed } from 'vue'
 import { tick } from '../../model/services/clock.js'
-import { fmtTime } from '../../model/services/hours.js'
+import { formatTime } from '../../model/services/hours.js'
 
 /** Always-visible countdown, styled like a departure board. Yellow under 90 min, red under 45 (IA §7.1). */
 const props = defineProps({
@@ -26,7 +26,7 @@ const leaveSoon = computed(() => props.leaveByMs && props.leaveByMs - tick.value
   <div class="ttg" :class="level" role="timer" :aria-label="`${label} ${text}`">
     <div class="lbl"><i class="bi bi-airplane-fill"></i> {{ label }}</div>
     <div class="val mono">{{ text }}</div>
-    <div v-if="leaveByMs" class="leave" :class="{ soon: leaveSoon }">Head back by {{ fmtTime(leaveByMs) }}</div>
+    <div v-if="leaveByMs" class="leave" :class="{ soon: leaveSoon }">Head back by {{ formatTime(leaveByMs) }}</div>
   </div>
 </template>
 
