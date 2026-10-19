@@ -7,7 +7,7 @@ export const GROQ_URL = 'https://api.groq.com/openai/v1/chat/completions'
 export function groqConfig() {
   return {
     key: process.env.GROQ_API_KEY || '',
-    model: process.env.GROQ_MODEL || 'llama-3.3-70b-versatile'
+    model: process.env.GROQ_MODEL || 'openai/gpt-oss-120b'
   }
 }
 
@@ -22,6 +22,8 @@ export async function groqJson({ system, user, temperature = 0.4, maxTokens = 90
       headers: { Authorization: `Bearer ${key}`, 'Content-Type': 'application/json' },
       body: JSON.stringify({
         model,
+        // gpt-oss models reason before answering; keep it short so the JSON fits in max_tokens.
+        ...(model.startsWith('openai/gpt-oss') && { reasoning_effort: 'low' }),
         temperature,
         max_tokens: maxTokens,
         response_format: { type: 'json_object' },

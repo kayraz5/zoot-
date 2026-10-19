@@ -164,7 +164,7 @@ function tryVisit(ctx, budget, cur, t, p) {
  * Greedy nearest-neighbour + time budget. With a seed cluster the first stop must
  * come from it and cluster-mates get a bonus, so the day does not zig-zag.
  */
-export function greedy(ctx, budget, cands, { seed = null, limit = maxStops(ctx, budget), start, variety = true }) {
+export function greedy(ctx, budget, cands, { seed = null, limit = maxStops(ctx, budget), start, variety = true, zigzag = true }) {
 	let cur = start.point
 	let t = start.ms
 	const visits = []
@@ -176,7 +176,7 @@ export function greedy(ctx, budget, cands, { seed = null, limit = maxStops(ctx, 
 		for (const p of cands) {
 			if (used.has(p.id)) continue
 			if (visits.length === 0 && seed && !seed.has(p.id)) continue
-			if (visits.length > 0 && distanceM(cur, p) > ZIGZAG_LIMIT_M && !(seed && seed.has(p.id))) continue
+			if (zigzag && visits.length > 0 && distanceM(cur, p) > ZIGZAG_LIMIT_M && !(seed && seed.has(p.id))) continue
 			const v = tryVisit(ctx, budget, cur, t, p)
 			if (!v) continue
 			const worth = p._score * (variety ? varietyFactor(p, visits) : 1) * (1 + (abundance * v.stay) / 60)
@@ -336,8 +336,9 @@ export function sequencePicks(ctx, pickIds, meta) {
 	const byId = new Map(buildCandidates(ctx, budget).map((p) => [p.id, p]))
 	const picks = pickIds.map((id) => byId.get(id)).filter(Boolean)
 	// Nearest-neighbour order: equal scores make value ∝ 1 / travel time.
+	// No zig-zag limit here: Groq already chose the set, so only the clock may drop a pick.
 	const flat = picks.map((p) => ({ ...p, _score: 1 }))
-	const visits = greedy(ctx, budget, flat, { limit: 10, start, variety: false })
+	const visits = greedy(ctx, budget, flat, { limit: 10, start, variety: false, zigzag: false })
 	if (!visits.length) return { ok: false, budget, reason: 'None of the chosen places fit the clock.' }
 	const kept = ctx.keepVisits || []
 	return { ok: true, budget, mission: assembleMission({ ...ctx, start }, budget, [...kept, ...visits], meta), dropped: picks.length - visits.length }

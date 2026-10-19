@@ -17,9 +17,9 @@ export function createRemoteDb() {
         }
     }) 
 
-    const must = ({ data, err }) => {
-        if (err) {
-            throw new Error(err.message);
+    const must = ({ data, error }) => {
+        if (error) {
+            throw new Error(error.message);
         }
         return data;
     }
@@ -92,7 +92,7 @@ export function createRemoteDb() {
                 title: mission.title,
                 payload_json: mission,
                 buffer_min: mission.buffer_min,
-                groq_mode: mission.groq_model,
+                groq_model: mission.groq_model,
                 fallback_used: mission.fallback_used,
             }));
             must(await db.from('mission_legs').delete().eq('mission_id', mission.id));
@@ -119,8 +119,11 @@ export function createRemoteDb() {
             return row?.payload_json || null;
         },
         async listMissions() {
-            const row = must(await db.from('missions').select('payload_json').eq('id', id).maybeSingle())
-            return row?.payload_json || null
+            const rows = must(await db.from('missions').select('payload_json'))
+            return rows
+                .map((r) => r.payload_json)
+                .filter(Boolean)
+                .sort((a, b) => Date.parse(b.created_at) - Date.parse(a.created_at))
         },
 
         async stampPlace({
