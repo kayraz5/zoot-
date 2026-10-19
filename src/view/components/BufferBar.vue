@@ -78,7 +78,7 @@ const segs = computed(() => {
 [data-bs-theme='dark'] .reentry,
 [data-bs-theme='dark'] .legend i.reentry {
 	background: #6b6b6b;
-}
+  }
 
 .legend {
 	display: flex;
