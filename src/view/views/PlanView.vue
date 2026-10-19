@@ -24,7 +24,7 @@ const planning = ref(false)
 
 onMounted(() => {
 	if (!ui.weather) ui.loadWeather()
-	ui.loadAdvisories()
+	ui.loadAdvisories?.()
 })
 
 const budget = computed(() => {
