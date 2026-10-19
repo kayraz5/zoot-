@@ -11,7 +11,7 @@ import { STYLES } from '../../model/data/origins.js'
 import TimeToGate from '../components/TimeToGate.vue'
 import BufferBar from '../components/BufferBar.vue'
 import WeatherChip from '../components/WeatherChip.vue'
-import PlacePhoto from '../components/PlacePhoto.vue'
+import StopGallery from '../components/StopGallery.vue'
 
 const route = useRoute()
 const router = useRouter()
@@ -113,8 +113,8 @@ const replans = [
               <span v-else>{{ leg.seq }}</span>
             </div>
             <div class="zt-card p-3 stop-card">
+              <StopGallery v-if="leg.kind === 'visit' && placeById.get(leg.place_id)" :place="placeById.get(leg.place_id)" class="mb-3" />
               <div class="d-flex justify-content-between gap-2">
-                <PlacePhoto v-if="leg.kind === 'visit'" :place="placeById.get(leg.place_id)" />
                 <div class="flex-grow-1">
                   <div class="tiny text-muted fw-800 mono">
                     {{ formatTime(leg.arrive_iso) }}<template v-if="leg.kind === 'visit'">–{{ formatTime(leg.depart_iso) }} · stay {{ leg.stay_min }} min</template>
