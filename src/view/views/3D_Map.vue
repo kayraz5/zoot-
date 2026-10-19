@@ -224,8 +224,12 @@ onUnmounted(() => map?.remove())
           <span class="stamp-label">Stamp</span>
         </button>
       </div>
+      
       <button id="ChangeMap" class="btn btn-sm bg-warning" @click="MapStyle = !MapStyle">
         <i class="bi bi-map"></i> Change Map Style
+      </button>
+      <button id="NeedHelp" class="btn btn-sm bg-danger" >
+        <i class="bi bi-question-circle-fill"></i> Need help?
       </button>
     </div>
   </div>
@@ -326,6 +330,16 @@ onUnmounted(() => map?.remove())
   font-size: 30px;
   text-align: left;
 }
+
+#NeedHelp{
+  margin-top: 3px;
+  color: black;
+  max-width: fit-content;
+  border-color: rgb(238, 238, 107);
+  margin-left: 8px;
+  margin-top: 10px;
+}
+
 
 .map-btn {
   position: absolute;
@@ -451,6 +465,7 @@ onUnmounted(() => map?.remove())
   text-align: left;
   width: fit-content;
   border-radius: 13px;
+  margin-top: 10px;
 }
 
 #demo-controls {
