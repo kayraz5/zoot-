@@ -4,22 +4,36 @@ import { catalog, loadCatalog } from '../../model/services/catalog.js'
 import { usePassportStore } from '../../model/stores/passport.js'
 import { AREAS } from '../../model/data/origins.js'
 
-/** City Codex: every place, seen vs stamped (the collection screen). */
+// City Codex: every place by area, shown as stamped, seen or undiscovered
 const passport = usePassportStore()
 const filter = ref('all')
+const FILTERS = ['all', 'stamped', 'seen', 'unknown']
+
 onMounted(loadCatalog)
 
-const groups = computed(() =>
-  AREAS.map((a) => {
-    const places = catalog.value.filter((p) => p.area === a.id)
-    return { ...a, places, stamped: places.filter((p) => passport.stampedIds.has(p.id)).length }
-  }).filter((g) => g.places.length)
+const isStamped = (place) => passport.stampedIds.has(place.id)
+const isSeen = (place) => passport.seen.has(place.id)
+
+function placeState(place) {
+  if (isStamped(place)) return 'stamped'
+  if (isSeen(place)) return 'seen'
+  return 'unknown'
+}
+
+const isVisible = (place) => filter.value === 'all' || placeState(place) === filter.value
+
+const areaGroups = computed(() =>
+  AREAS
+    .map((area) => {
+      const places = catalog.value.filter((place) => place.area === area.id)
+      return { ...area, places, stampedCount: places.filter(isStamped).length }
+    })
+    .filter((group) => group.places.length > 0)
 )
+
 const total = computed(() => catalog.value.length)
-const stampedTotal = computed(() => catalog.value.filter((p) => passport.stampedIds.has(p.id)).length)
-const seenTotal = computed(() => catalog.value.filter((p) => passport.seen.has(p.id)).length)
-const state = (p) => (passport.stampedIds.has(p.id) ? 'stamped' : passport.seen.has(p.id) ? 'seen' : 'unknown')
-const visible = (p) => filter.value === 'all' || state(p) === filter.value
+const stampedTotal = computed(() => catalog.value.filter(isStamped).length)
+const seenTotal = computed(() => catalog.value.filter(isSeen).length)
 </script>
 
 <template>
@@ -31,22 +45,22 @@ const visible = (p) => filter.value === 'all' || state(p) === filter.value
       <div class="progress-bar bar-seen" :style="{ width: ((seenTotal - stampedTotal) / total) * 100 + '%' }"></div>
     </div>
     <div class="d-flex gap-2 mb-3">
-      <button v-for="f in ['all', 'stamped', 'seen', 'unknown']" :key="f" class="zt-chip text-capitalize" :class="{ active: filter === f }" @click="filter = f">{{ f === 'unknown' ? 'undiscovered' : f }}</button>
+      <button v-for="f in FILTERS" :key="f" class="zt-chip text-capitalize" :class="{ active: filter === f }" @click="filter = f">{{ f === 'unknown' ? 'undiscovered' : f }}</button>
     </div>
 
-    <section v-for="g in groups" :key="g.id" class="mb-3">
+    <section v-for="group in areaGroups" :key="group.id" class="mb-3">
       <div class="zt-section-title">
-        <span class="area-glyph" :style="{ color: g.ink }">{{ g.glyph }}</span> {{ g.id }}
-        <span class="ms-auto tiny text-muted mono">{{ g.stamped }}/{{ g.places.length }}</span>
+        <span class="area-glyph" :style="{ color: group.ink }">{{ group.glyph }}</span> {{ group.id }}
+        <span class="ms-auto tiny text-muted mono">{{ group.stampedCount }}/{{ group.places.length }}</span>
       </div>
       <div class="codex-grid">
-        <RouterLink v-for="p in g.places.filter(visible)" :key="p.id" :to="`/place/${p.id}`" class="cell" :class="state(p)">
+        <RouterLink v-for="place in group.places.filter(isVisible)" :key="place.id" :to="`/place/${place.id}`" class="cell" :class="placeState(place)">
           <span class="icon">
-            <i v-if="state(p) === 'stamped'" class="bi bi-patch-check-fill"></i>
-            <i v-else-if="state(p) === 'seen'" class="bi bi-eye"></i>
+            <i v-if="placeState(place) === 'stamped'" class="bi bi-patch-check-fill"></i>
+            <i v-else-if="placeState(place) === 'seen'" class="bi bi-eye"></i>
             <i v-else class="bi bi-question-lg"></i>
           </span>
-          <span class="name">{{ state(p) === 'unknown' ? '???' : p.name }}</span>
+          <span class="name">{{ placeState(place) === 'unknown' ? '???' : place.name }}</span>
         </RouterLink>
       </div>
     </section>
