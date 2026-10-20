@@ -1,0 +1,79 @@
+name: CI
+on:
+  push:
+  pull_request:
+
+jobs:
+  build-and-test:
+    runs-on: ubuntu-24.04
+    strategy:
+      fail-fast: false
+      matrix:
+        # package.json engines: ^22.18.0 || >=24.12.0
+        node-version: ['22.18.0', '24']
+    steps:
+      - uses: actions/checkout@v6
+
+      # pnpm version is read from "packageManager" in package.json (pnpm@10.34.7)
+      - name: Install pnpm
+        uses: pnpm/action-setup@v6
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node-version }}
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Build
+        run: pnpm run build
+
+      # `vitest` alone starts watch mode locally; `--run` makes it exit in CI
+      - name: Run unit tests
+        run: pnpm run test:unit --run
+
+  # E2E tests - uncomment when ready to enable.
+  # Notes before enabling:
+  #  - playwright.config.js uses `npm run preview` on CI, which needs a prior build
+  #    (preview serves ./dist on port 4173). Consider changing it to `pnpm run preview`.
+  #  - playwright.config.js runs chromium, firefox and webkit; install only what you need
+  #    to keep CI fast, e.g. `pnpm exec playwright install --with-deps chromium`.
+  #  - Any env vars the app needs at build time (e.g. Supabase keys, see .env.example)
+  #    must be provided via repo secrets.
+  #
+  # e2e:
+  #   needs: build-and-test
+  #   runs-on: ubuntu-24.04
+  #   steps:
+  #     - uses: actions/checkout@v6
+  #
+  #     - name: Install pnpm
+  #       uses: pnpm/action-setup@v6
+  #
+  #     - name: Setup Node.js
+  #       uses: actions/setup-node@v4
+  #       with:
+  #         node-version: 24
+  #         cache: pnpm
+  #
+  #     - name: Install dependencies
+  #       run: pnpm install --frozen-lockfile
+  #
+  #     - name: Install Playwright browsers
+  #       run: pnpm exec playwright install --with-deps
+  #
+  #     - name: Build
+  #       run: pnpm run build
+  #
+  #     - name: Run E2E tests
+  #       run: pnpm run test:e2e
+  #
+  #     - name: Upload Playwright report
+  #       if: always()
+  #       uses: actions/upload-artifact@v4
+  #       with:
+  #         name: playwright-report
+  #         path: playwright-report/
+  #         retention-days: 7
