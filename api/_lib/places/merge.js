@@ -1,5 +1,4 @@
 import { AREAS } from '../../../src/model/data/origins.js'
-import { parseStbHours } from './stb.js'
 import { parseOsmHours } from './osm.js'
 
 // Defaults per place kind. Hours here are a safe guess and get flagged hours_verified: false.
@@ -21,75 +20,47 @@ const PROFILES = {
   nightmarket: { label: 'A night market', tags: ['food', 'nightlife', 'shopping'], indoor: false, duration_min: 60, cost_band: 1, hours: [['18:00', '23:00']] }
 }
 
-// STB latitudes are rounded (some to ±550 m), so similar names can match further apart
+// A seed point can sit at an entrance while OSM uses the centre, so similar names can match further apart
 const MATCH_RADIUS_M = 700
 const SAME_SPOT_M = 40
 const SAME_NAME_RADIUS_M = 3000
 
 /**
- * Seed + STB + OpenStreetMap -> one place list.
- * Seed places are never changed. Places from a source that worked this run but
- * didn't come back are kept as active: false, so old stamps still point somewhere.
+ * Seed + OpenStreetMap -> one place list. Seed places are never changed.
+ * Places that drop out of OSM are kept as active: false, so old stamps still point somewhere.
  */
-export function mergePlaces({ seed, stb = null, osm = null, previous = [] }) {
+export function mergePlaces({ seed, osm, previous = [] }) {
   const centres = areaCentres(seed)
   const previousByRef = new Map(previous.filter((p) => p.source_ref).map((p) => [p.source_ref, p]))
   const places = seed.map((p) => ({ ...p, source: 'seed', active: true }))
+  const seedIds = new Set(places.map((p) => p.id))
   const usedIds = new Set([...places, ...previous].map((p) => p.id))
-  const checkedRefs = new Set()
   const addedRefs = new Set()
 
-  const add = (item, buildPlace) => {
-    if (checkedRefs.has(item.ref)) return
-    checkedRefs.add(item.ref)
+  // Places from last run first so their ids stay put, then the well-known and bigger ones,
+  // so a maze inside a park can't block the park itself
+  const rank = (item) => [previousByRef.get(item.ref)?.active === false || !previousByRef.has(item.ref), !item.blurb, OSM_TYPE_RANK[osmType(item)]]
+  const order = (a, b) => rank(a).reduce((diff, x, i) => diff || Number(x) - Number(rank(b)[i]), 0)
 
-    const match = places.find((p) => isSamePlace(p, item))
-    if (match) {
-      if (match.source === 'stb' && item.preciseCoords) improveStbPlace(match, item)
-      return
-    }
-    if (item.enrichOnly) return
-
-    const place = buildPlace(item, nearestArea(item, centres))
+  for (const item of [...osm].sort(order)) {
+    if (addedRefs.has(item.ref) || places.some((p) => isSamePlace(p, item))) continue
+    const place = fromOsm(item, nearestArea(item, centres))
     place.id = previousByRef.get(item.ref)?.id || uniqueId(place, usedIds)
     usedIds.add(place.id)
     addedRefs.add(item.ref)
     places.push(place)
   }
 
-  for (const item of stb || []) add(item, fromStb)
-  for (const item of osm || []) add(item, fromOsm)
-
-  // Too far off to geofence a stamp, so leave these out until OSM corrects them
-  for (const place of places) {
-    if (place.coords_approx) place.active = false
-  }
-
-  // Keep places that vanished from a source that answered, but switch them off
-  const answered = new Set([stb && 'stb', osm && 'osm'].filter(Boolean))
   for (const old of previous) {
-    if (old.source === 'seed' || addedRefs.has(old.source_ref)) continue
-    if (answered.has(old.source)) places.push({ ...old, active: false })
-    else places.push(old)
+    if (seedIds.has(old.id) || old.source === 'seed' || addedRefs.has(old.source_ref)) continue
+    places.push({ ...old, active: false })
   }
 
   return places
 }
 
-function fromStb(item, area) {
-  const profile = PROFILES[item.kind] || PROFILES.landmark
-  const parsed = parseStbHours(item.hoursText)
-  return baseFields(item, area, profile, {
-    source: 'stb',
-    blurb: item.blurb || `${profile.label} in ${area}.`,
-    hours: parsed ? parsed.hours : profile.hours,
-    closed_days: parsed ? parsed.closed_days : [],
-    hours_verified: false, // STB text dates from 2015, so even parsed hours need checking
-    coords_approx: decimals(item.lat) <= 2
-  })
-}
-
-const decimals = (n) => (String(n).split('.')[1] || '').length
+const OSM_TYPE_RANK = { relation: 0, way: 1, node: 2 }
+const osmType = (item) => item.ref.split(':')[1].split('/')[0]
 
 function fromOsm(item, area) {
   const profile = PROFILES[item.kind] || PROFILES.landmark
@@ -102,21 +73,6 @@ function fromOsm(item, area) {
     closed_days: parsed ? parsed.closed_days : [],
     hours_verified: Boolean(parsed)
   })
-}
-
-// OSM has precise coordinates and current hours; STB has rounded coordinates and 2015 hours
-function improveStbPlace(place, item) {
-  place.lat = round(item.lat)
-  place.lng = round(item.lng)
-  place.coords_approx = false
-  place.website ||= item.website
-
-  const parsed = parseOsmHours(item.hoursText)
-  if (parsed) {
-    place.hours = parsed.hours
-    place.closed_days = parsed.closed_days
-    place.hours_verified = true
-  }
 }
 
 function baseFields(item, area, profile, extra) {

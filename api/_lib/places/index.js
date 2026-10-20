@@ -1,21 +1,11 @@
-import { fetchStbAttractions } from './stb.js'
 import { fetchOsmPlaces, addWikipediaBlurbs } from './osm.js'
 import { mergePlaces } from './merge.js'
 
 /**
- * Pull both sources and merge them with the seed. A source that fails is skipped
- * (its places from last time are kept); if both fail, nothing should be written.
+ * Pull OpenStreetMap and merge it with the seed. If OSM fails, nothing should be written.
  */
 export async function syncPlaces({ seed, previous = [], log = console.log }) {
-  const report = { stb: null, osm: null, errors: [] }
-
-  let stb = null
-  try {
-    stb = await fetchStbAttractions()
-    report.stb = stb.length
-  } catch (err) {
-    report.errors.push(`STB: ${err.message}`)
-  }
+  const report = { osm: null, errors: [] }
 
   let osm = null
   try {
@@ -29,9 +19,9 @@ export async function syncPlaces({ seed, previous = [], log = console.log }) {
   }
 
   report.errors.forEach((e) => log(`[sync-places] ${e}`))
-  if (!stb && !osm) return { ok: false, report, places: null }
+  if (!osm) return { ok: false, report, places: null }
 
-  const places = mergePlaces({ seed, stb, osm, previous })
+  const places = mergePlaces({ seed, osm, previous })
   report.total = places.length
   report.active = places.filter((p) => p.active !== false).length
   report.bySource = countBy(places, (p) => p.source)

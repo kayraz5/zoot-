@@ -6,7 +6,7 @@ import { nearestHub } from './travel.js'
 
 /**
  * Place catalog. Supabase `places` is the source of truth when connected.
- * Offline it uses places.synced.json (seed + STB + OpenStreetMap, from `pnpm sync:places`),
+ * Offline it uses places.synced.json (seed + OpenStreetMap, from `pnpm sync:places`),
  * or the curated seed if no sync has been run.
  * Inactive places are hidden from the catalog but kept in placeById so old stamps still resolve.
  */

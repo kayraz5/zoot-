@@ -60,7 +60,7 @@ function toPlace(element) {
   if (!name || lat == null || lng == null) return null
 
   const kind = kindFromTags(tags, name)
-  if (!kind) return null
+  if (!kind || GENERIC_NAME.test(name) || !worthAdding(kind, tags)) return null
 
   return {
     ref: `osm:${element.type}/${element.id}`,
@@ -71,13 +71,11 @@ function toPlace(element) {
     website: tags.website || tags['contact:website'] || null,
     wikipedia: tags.wikipedia || null,
     wikidata: tags.wikidata || null,
-    hoursText: tags.opening_hours || '',
-    preciseCoords: true,
-    enrichOnly: GENERIC_NAME.test(name) || !worthAdding(kind, tags)
+    hoursText: tags.opening_hours || ''
   }
 }
 
-// Is this a place a traveller would visit, not a bench or a suburban church? (Non-notable ones still fix STB coordinates.)
+// Is this a place a traveller would visit, not a bench or a suburban church?
 function worthAdding(kind, tags) {
   if (['museum', 'zoo', 'aquarium', 'themepark', 'hawker'].includes(kind)) return true
   if (kind === 'worship') return Boolean(tags.wikipedia || tags.tourism)
@@ -164,12 +162,11 @@ const fixClose = ([open, close]) => [open, close === '24:00' || close === '00:00
 
 /** Short description from the place's English Wikipedia article (first two sentences). */
 export async function addWikipediaBlurbs(items, cachedBlurbs = new Map()) {
-  const candidates = items.filter((item) => !item.enrichOnly)
-  for (const item of candidates) {
+  for (const item of items) {
     if (cachedBlurbs.has(item.ref)) item.blurb = cachedBlurbs.get(item.ref)
   }
 
-  const todo = candidates.filter((item) => !item.blurb)
+  const todo = items.filter((item) => !item.blurb)
   // Many link to a Malay/Tamil/Chinese article; Wikidata knows the English one
   await addTitlesFromWikidata(todo.filter((item) => !item.wikipedia?.startsWith('en:') && item.wikidata))
 

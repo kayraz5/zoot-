@@ -4,7 +4,7 @@ import { nearestHub } from '../src/model/services/travel.js'
 
 /**
  * GET /api/sync-places — daily Vercel Cron (see vercel.json). Refreshes the Supabase
- * `places` table from STB + OpenStreetMap. Needs CRON_SECRET, SUPABASE_SECRET_KEY
+ * `places` table from the seed + OpenStreetMap. Needs CRON_SECRET, SUPABASE_SECRET_KEY
  * and supabase/places_sync.sql run once.
  */
 // Overpass can take a minute when busy, plus Wikipedia lookups
@@ -13,7 +13,7 @@ export const config = { maxDuration: 300 }
 const COLUMNS = [
   'id', 'name', 'area', 'lat', 'lng', 'tags', 'duration_min', 'cost_band', 'indoor', 'mrt', 'hours',
   'closed_days', 'min_window_h', 'blurb', 'captions', 'safety_notes', 'image_url',
-  'source', 'source_ref', 'active', 'hours_verified', 'coords_approx', 'website', 'blurb_source'
+  'source', 'source_ref', 'active', 'hours_verified', 'website', 'blurb_source'
 ]
 
 export default async function handler(req, res) {
@@ -30,7 +30,7 @@ export default async function handler(req, res) {
     const seed = JSON.parse(readFileSync(new URL('../src/model/data/places.sg.json', import.meta.url), 'utf8'))
     const previous = await db.select('places', 'select=*')
     const { ok, report, places } = await syncPlaces({ seed, previous })
-    if (!ok) return res.status(502).json({ error: 'both sources failed, nothing written', report })
+    if (!ok) return res.status(502).json({ error: 'OpenStreetMap failed, nothing written', report })
 
     const rows = places.map(toRow)
     for (let i = 0; i < rows.length; i += 200) await db.upsert('places', rows.slice(i, i + 200))
@@ -50,7 +50,6 @@ function toRow(place) {
   row.source ??= 'seed'
   row.active ??= true
   row.hours_verified ??= place.source === 'seed' || !place.source
-  row.coords_approx ??= false
   return row
 }
 

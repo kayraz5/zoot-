@@ -1,4 +1,4 @@
-// pnpm sync:places -> refreshes src/model/data/places.synced.json from STB + OpenStreetMap
+// pnpm sync:places -> refreshes src/model/data/places.synced.json from the seed + OpenStreetMap
 import { readFileSync, writeFileSync, existsSync } from 'node:fs'
 import { loadEnv } from 'vite'
 import { syncPlaces } from '../api/_lib/places/index.js'
@@ -13,7 +13,7 @@ const previous = existsSync(OUT_FILE) ? JSON.parse(readFileSync(OUT_FILE, 'utf8'
 
 const { ok, report, places } = await syncPlaces({ seed, previous })
 if (!ok) {
-  console.error('[sync-places] both sources failed, places.synced.json left unchanged')
+  console.error('[sync-places] OpenStreetMap failed, places.synced.json left unchanged')
   process.exit(1)
 }
 
