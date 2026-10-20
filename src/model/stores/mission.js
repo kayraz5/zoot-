@@ -2,7 +2,7 @@ import { defineStore } from 'pinia'
 import { getDb } from '../services/db/index.js'
 import { buildMission } from '../services/groq.js'
 import { catalog, placeById, loadCatalog } from '../services/catalog.js'
-import { keptVisits, slackMinutes, leaveByMs } from '../services/planner.js'
+import { keptVisits, slackMinutes, leaveByMs, retimeMission, stayMinutes, xpFor } from '../services/planner.js'
 import { travel, distanceM } from '../services/travel.js'
 import { rainLookup } from '../services/weather.js'
 import { now } from '../services/clock.js'
@@ -160,6 +160,90 @@ export const useMissionStore = defineStore('mission', {
       return true
     },
 
+    /**
+     * Hand edits to the itinerary. `mutate(legs, mission)` changes a copy of the legs; the copy is
+     * then re-timed from where the traveller is (or from the start, if they have not left yet).
+     * Edits that would land at a closed place or miss arrive_by are refused, never saved.
+     */
+    async editLegs(mutate, message) {
+      const m = this.mission
+      if (!m) return false
+      await loadCatalog()
+      const draft = JSON.parse(JSON.stringify(m))
+      const error = mutate(draft.legs, draft)
+      if (error) {
+        useUiStore().toast(error, 'warning', 4000)
+        return false
+      }
+      const departMs = Date.parse(m.start_iso) + m.buffers.exit_min * 60000
+      const start = now() >= departMs ? { point: this.here(), ms: now() } : { point: m.origin, ms: departMs }
+      const { mission, problems } = retimeMission(draft, { start, catalogById: placeById.value })
+      if (problems.length) {
+        useUiStore().toast(`That doesn't fit: ${problems[0]}.`, 'warning', 5000)
+        return false
+      }
+      mission.edits = (m.edits || 0) + 1
+      await this.persist(mission)
+      if (message) useUiStore().toast(message, 'success')
+      return true
+    },
+
+    // Stops are found by place_id: it is unique in a mission, while seq is renumbered on every edit.
+
+    /** Insert a catalog place after the stop at `afterPlaceId`, or just before the return leg. */
+    addStop(place, afterPlaceId = null) {
+      return this.editLegs((legs, m) => {
+        if (legs.some((l) => l.place_id === place.id)) return `${place.name} is already in this mission.`
+        const at = afterPlaceId == null ? legs.findIndex((l) => l.kind === 'return') : indexOfStop(legs, afterPlaceId) + 1
+        if (at < 1 && afterPlaceId != null) return STALE
+        legs.splice(at, 0, userLeg(place, m, 'You added this stop.'))
+      }, `${place.name} added.`)
+    },
+
+    swapStop(leg, place) {
+      return this.editLegs((legs, m) => {
+        if (legs.some((l) => l.place_id === place.id)) return `${place.name} is already in this mission.`
+        const i = indexOfStop(legs, leg.place_id)
+        if (i < 0) return STALE
+        legs.splice(i, 1, userLeg(place, m, `Swapped in for ${leg.name}.`))
+      }, `${leg.name} swapped for ${place.name}.`)
+    },
+
+    removeStop(leg) {
+      return this.editLegs((legs) => {
+        const i = indexOfStop(legs, leg.place_id)
+        if (i < 0) return STALE
+        if (legs.filter((l) => l.kind === 'visit').length <= 1) return 'A mission needs at least one stop. Swap it instead.'
+        legs.splice(i, 1)
+      }, `${leg.name} removed.`)
+    },
+
+    /** Move a pending stop one place earlier (-1) or later (+1) among the pending stops. */
+    moveStop(leg, dir) {
+      return this.editLegs((legs) => {
+        const pending = legs.filter((l) => l.kind === 'visit' && l.status === 'pending')
+        const i = pending.findIndex((l) => l.place_id === leg.place_id)
+        if (i < 0) return STALE
+        const other = pending[i + dir]
+        if (!other) return null
+        const a = legs.indexOf(pending[i])
+        const b = legs.indexOf(other)
+        ;[legs[a], legs[b]] = [legs[b], legs[a]]
+      })
+    },
+
+    changeStay(leg, deltaMin) {
+      return this.editLegs((legs) => {
+        const l = legs[indexOfStop(legs, leg.place_id)]
+        if (!l) return STALE
+        const next = Math.min(240, Math.max(10, l.stay_min + deltaMin))
+        if (next === l.stay_min) return null
+        l.stay_min = next
+        const place = placeById.value.get(l.place_id)
+        if (place) l.xp = xpFor(place, next)
+      })
+    },
+
     /** Stamp the current leg's place. Server (RPC) or local adapter validates distance. */
     async stamp(leg, { dev = false } = {}) {
       const user = useUserStore()
@@ -275,6 +359,25 @@ export const useMissionStore = defineStore('mission', {
     }
   }
 })
+
+const STALE = 'That stop has changed. Refresh and try again.'
+
+/** Index of a pending visit leg by place id, or -1. Never matches the return leg. */
+function indexOfStop(legs, placeId) {
+  return legs.findIndex((l) => l.kind === 'visit' && l.place_id === placeId)
+}
+
+/** A visit leg for a place the traveller chose by hand. Times are filled in by retimeMission. */
+function userLeg(place, mission, why) {
+  const stay = stayMinutes(place, mission.prefs || {})
+  return {
+    seq: 0, kind: 'visit', place_id: place.id, name: place.name, area: place.area,
+    lat: place.lat, lng: place.lng, indoor: place.indoor,
+    arrive_iso: mission.start_iso, depart_iso: mission.start_iso,
+    travel_mode: 'walk', travel_min: 0, travel_detail: '', stay_min: stay,
+    why, xp: xpFor(place, stay), status: 'pending', user_added: true
+  }
+}
 
 /** Shift every leg after `idx` so times stay consistent after an insertion. */
 function retime(m, idx, fromMs, fromPoint, opts) {

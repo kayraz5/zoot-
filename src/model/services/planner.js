@@ -267,7 +267,7 @@ export function planValue(visits) {
 	return score + 0.8 * anchor - 0.03 * travelMin
 }
 
-function xpFor(p, stay) {
+export function xpFor(p, stay) {
 	return 40 + Math.round(stay / 15) * 10 + (p.indoor ? 0 : 10) + (p.captions?.length ? 15 : 0)
 }
 
