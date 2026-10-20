@@ -14,6 +14,9 @@ const MIN = 60000
 const CLUSTER_RADIUS_M = 1200
 const ZIGZAG_LIMIT_M = 2500
 export const RAIN_LIMIT = 60
+const MAX_FILLED_STOPS = 12 // hard cap once gap-filling adds stops after the main route
+const FILL_CUSHION_MIN = 10 // spare minutes kept before arrive_by when stretching stays
+const STRETCH_MAX = 1.5 // a stay may grow to 1.5× its catalog duration (at least +10 min)
 
 /** Buffers shown in the UI so Sonion can see why the plan is shorter than his layover. */
 export function computeBudget({ origin, startMs, mustReturnMs, cleared = false }) {
@@ -164,11 +167,14 @@ function tryVisit(ctx, budget, cur, t, p) {
  * Greedy nearest-neighbour + time budget. With a seed cluster the first stop must
  * come from it and cluster-mates get a bonus, so the day does not zig-zag.
  */
-export function greedy(ctx, budget, cands, { seed = null, limit = maxStops(ctx, budget), start, variety = true, zigzag = true }) {
-	let cur = start.point
-	let t = start.ms
-	const visits = []
-	const used = new Set()
+export function greedy(ctx, budget, cands, { seed = null, limit = maxStops(ctx, budget), start, variety = true, zigzag = true, prefix = [] }) {
+	// With a prefix, carry on from its last stop (gap-filling after the main route).
+	const last = prefix[prefix.length - 1]
+	let cur = last ? last.p : start.point
+	let t = last ? last.depart : start.ms
+	const visits = [...prefix]
+	const used = new Set(prefix.map((v) => v.p.id))
+	if (prefix.length) seed = null
 	// With a long window, longer immersive stays are worth as much as quick photo stops.
 	const abundance = Math.min(1, Math.max(0, (budget.usable_min - 240) / 480))
 	while (visits.length < limit) {
@@ -192,6 +198,65 @@ export function greedy(ctx, budget, cands, { seed = null, limit = maxStops(ctx, 
 		t = best.depart
 	}
 	return visits
+}
+
+/**
+ * Re-time a chain of visits from `start` with the given stays. Travel is recomputed for each
+ * departure time (MRT hours matter). Returns the timed visits, or null if any stop would be
+ * closed, rained out or too risky, or the traveller would be back later than `latestHomeMs`.
+ */
+function timeChain(ctx, budget, start, visits, stays, latestHomeMs = budget.arriveByMs) {
+	const opts = { maxWalk: ctx.maxWalk, style: ctx.style }
+	let cur = start.point
+	let t = start.ms
+	const out = []
+	for (let i = 0; i < visits.length; i++) {
+		const p = visits[i].p
+		const tr = travel(cur, p, { ...opts, atMs: t })
+		const arrive = t + tr.minutes * MIN
+		const depart = arrive + stays[i] * MIN
+		if (!isOpenDuringVisit(p, arrive, depart)) return null
+		if (!p.indoor && rainRisk(ctx, arrive, depart) > RAIN_LIMIT) return null
+		if (tooRisky(ctx, p)) return null
+		out.push({ ...visits[i], tr, arrive, depart, stay: stays[i] })
+		cur = p
+		t = depart
+	}
+	const back = travel(cur, ctx.origin, { ...opts, atMs: t })
+	if (t + back.minutes * MIN > latestHomeMs) return null
+	if (out.length) out[out.length - 1].back = back
+	return out
+}
+
+/**
+ * Use leftover time instead of sending the traveller home hours early:
+ *  1. fill: keep adding stops that fit after the route (same clock rules as greedy);
+ *  2. stretch: grow stays 5 min at a time, round-robin, up to STRETCH_MAX, re-checking
+ *     hours, rain and the return deadline (minus a small cushion) after every step.
+ */
+export function useLeftoverTime(ctx, budget, cands, visits, start, { zigzag = true } = {}) {
+	if (!visits.length) return visits
+	const filled = greedy(ctx, budget, cands, { start, prefix: visits, limit: MAX_FILLED_STOPS, zigzag })
+
+	const base = filled.map((v) => v.stay)
+	const caps = base.map((s) => Math.max(s + 10, Math.round((s * STRETCH_MAX) / 5) * 5))
+	const latestHome = budget.arriveByMs - FILL_CUSHION_MIN * MIN
+	let stays = [...base]
+	let best = timeChain(ctx, budget, start, filled, stays, latestHome)
+	if (!best) return filled // already within the cushion: nothing to stretch
+	for (let grew = true, pass = 0; grew && pass < 60; pass++) {
+		grew = false
+		for (let i = 0; i < filled.length; i++) {
+			if (stays[i] + 5 > caps[i]) continue
+			const trial = stays.map((s, j) => (j === i ? s + 5 : s))
+			const timed = timeChain(ctx, budget, start, filled, trial, latestHome)
+			if (!timed) continue
+			stays = trial
+			best = timed
+			grew = true
+		}
+	}
+	return best
 }
 
 /** Plan quality: variety-weighted scores, one strong anchor ("the iconic view"), minus time on trains. */
@@ -325,7 +390,8 @@ export function planDeterministic(ctx) {
 	if (!best && !kept.length) {
 		return { ok: false, budget, reason: 'Nothing fits between now and your return time once travel and buffers are counted. The planner refuses rather than risk your flight.' }
 	}
-	const visits = [...kept, ...(best?.visits || [])]
+	const fresh = best ? useLeftoverTime(ctx, budget, cands, best.visits, start) : []
+	const visits = [...kept, ...fresh]
 	return { ok: true, budget, mission: assembleMission({ ...ctx, start }, budget, visits, ctx.meta) }
 }
 
@@ -333,15 +399,19 @@ export function planDeterministic(ctx) {
 export function sequencePicks(ctx, pickIds, meta) {
 	const budget = computeBudget(ctx)
 	const start = startOf(ctx, budget)
-	const byId = new Map(buildCandidates(ctx, budget).map((p) => [p.id, p]))
+	const cands = buildCandidates(ctx, budget)
+	const byId = new Map(cands.map((p) => [p.id, p]))
 	const picks = pickIds.map((id) => byId.get(id)).filter(Boolean)
 	// Nearest-neighbour order: equal scores make value ∝ 1 / travel time.
 	// No zig-zag limit here: Groq already chose the set, so only the clock may drop a pick.
 	const flat = picks.map((p) => ({ ...p, _score: 1 }))
 	const visits = greedy(ctx, budget, flat, { limit: 10, start, variety: false, zigzag: false })
 	if (!visits.length) return { ok: false, budget, reason: 'None of the chosen places fit the clock.' }
+	const dropped = picks.length - visits.length
+	// Groq tends to pick a few places; top up with nearby catalog stops and longer stays.
+	const full = useLeftoverTime(ctx, budget, cands, visits, start)
 	const kept = ctx.keepVisits || []
-	return { ok: true, budget, mission: assembleMission({ ...ctx, start }, budget, [...kept, ...visits], meta), dropped: picks.length - visits.length }
+	return { ok: true, budget, mission: assembleMission({ ...ctx, start }, budget, [...kept, ...full], meta), dropped, added: full.length - visits.length }
 }
 
 /** Candidate slice handed to Groq: individually feasible places, best first. */
