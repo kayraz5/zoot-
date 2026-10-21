@@ -1,5 +1,5 @@
 import { createClient } from '@supabase/supabase-js';
-import { SUPABASE_URL, SUPABASE_ANON_KEY } from "../config.js";
+import { SUPABASE_URL, SUPABASE_ANON_KEY, CITY } from "../config.js";
 
 /* Steven: Supabase adaptor */
 
@@ -17,9 +17,9 @@ export function createRemoteDb() {
         }
     }) 
 
-    const must = ({ data, err }) => {
-        if (err) {
-            throw new Error(err.message);
+    const must = ({ data, error }) => {
+        if (error) {
+            throw new Error(error.message);
         }
         return data;
     }
@@ -57,7 +57,7 @@ export function createRemoteDb() {
             return must(await db.from('profiles').select('*').eq('id', id).maybeSingle());
         },
         async updateProfile(id, updates) {
-            return must(await db.from('profiles').upsert({ id, ...patch }).select().single());
+            return must(await db.from('profiles').upsert({ id, ...updates }).select().single());
         },
         async awardXp(id, amount) {
             return must(await db.rpc('award_return_bonus', { p_amount: amount }));
@@ -92,7 +92,7 @@ export function createRemoteDb() {
                 title: mission.title,
                 payload_json: mission,
                 buffer_min: mission.buffer_min,
-                groq_mode: mission.groq_model,
+                groq_model: mission.groq_model,
                 fallback_used: mission.fallback_used,
             }));
             must(await db.from('mission_legs').delete().eq('mission_id', mission.id));
@@ -119,8 +119,11 @@ export function createRemoteDb() {
             return row?.payload_json || null;
         },
         async listMissions() {
-            const row = must(await db.from('missions').select('payload_json').eq('id', id).maybeSingle())
-            return row?.payload_json || null
+            const rows = must(await db.from('missions').select('payload_json'))
+            return rows
+                .map((r) => r.payload_json)
+                .filter(Boolean)
+                .sort((a, b) => Date.parse(b.created_at) - Date.parse(a.created_at))
         },
 
         async stampPlace({
@@ -144,6 +147,14 @@ export function createRemoteDb() {
         async listStamps(userId) {
             return must(await db.from('stamps').select('*, places(area)').eq('user_id', userId).order('stamped_at'))
                 .map((s) => ({ ...s, area: s.places?.area }));
+        },
+
+        // Passport progress (slammed chops, seen places); null if never saved
+        async getPassportPage(userId) {
+            return must(await db.from('passport_pages').select('*').eq('user_id', userId).eq('city', CITY.name).maybeSingle());
+        },
+        async savePassportPage(userId, updates) {
+            return must(await db.from('passport_pages').upsert({ user_id: userId, city: CITY.name, ...updates }).select().single());
         },
     };
 };

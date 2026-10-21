@@ -1,9 +1,9 @@
-// Generates supabase/seed.sql from src/data (places + sidequests). `npm run seed:sql`
+// Generates supabase/seed.sql from src/model/data (places + sidequests). `node scripts/gen-seed.mjs`
 import { readFileSync, writeFileSync } from 'node:fs'
 import { nearestHub } from '../src/model/services/travel.js'
 import { SIDEQUESTS } from '../src/model/data/sidequests.js'
 
-const places = JSON.parse(readFileSync(new URL('../src/data/places.sg.json', import.meta.url)))
+const places = JSON.parse(readFileSync(new URL('../src/model/data/places.sg.json', import.meta.url)))
 const q = (v) => (v == null ? 'null' : `'${String(v).replace(/'/g, "''")}'`)
 const arr = (a) => (a?.length ? `array[${a.map(q).join(', ')}]::text[]` : `'{}'::text[]`)
 const ints = (a) => (a?.length ? `array[${a.join(', ')}]::int[]` : `'{}'::int[]`)

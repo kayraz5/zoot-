@@ -1,32 +1,45 @@
 <script setup>
 import { computed } from 'vue'
-import { formatDuration } from '../../model/services/hours.js'
+import { formatDuration, formatTime } from '../../model/services/hours.js'
 
-/** The buffers a traveller has to trust, as one proportional bar. */
+/** The buffers a traveller has to trust, as one proportional bar. With startMs, each part gets clock times. */
 const props = defineProps({
-	windowMin: Number, exitMin: Number, outMin: Number, reentryMin: Number, safetyMin: Number
+	windowMin: Number, exitMin: Number, outMin: Number, reentryMin: Number, safetyMin: Number,
+	startMs: { type: Number, default: null }
 })
 const segs = computed(() => {
 	const spare = Math.max(0, props.windowMin - props.exitMin - props.outMin - props.reentryMin - props.safetyMin)
+	let t = props.startMs
 	return [
 		{ key: 'exit', label: 'Exit immigration', min: props.exitMin, cls: 'exit' },
 		{ key: 'out', label: 'Out exploring', min: props.outMin, cls: 'out' },
 		{ key: 'spare', label: 'Spare', min: spare, cls: 'spare' },
 		{ key: 'reentry', label: 'Check-in + security', min: props.reentryMin, cls: 'reentry' },
 		{ key: 'safety', label: 'Safety buffer', min: props.safetyMin, cls: 'safety' }
-	].filter((s) => s.min > 0)
+	]
+		.map((s) => {
+			if (t == null) return s
+			const from = t
+			t += s.min * 60000
+			return { ...s, from, to: t }
+		})
+		.filter((s) => s.min > 0)
 })
+const span = (s) => (s.from == null ? '' : `${formatTime(s.from)}–${formatTime(s.to)}`)
 </script>
 
 <template>
 	<div>
-		<div class="bar" role="img" :aria-label="segs.map((s) => `${s.label} ${formatDuration(s.min)}`).join(', ')">
+		<div class="bar" role="img" :aria-label="segs.map((s) => `${s.label} ${span(s)} ${formatDuration(s.min)}`).join(', ')">
 			<div v-for="s in segs" :key="s.key" class="seg" :class="s.cls" :style="{ flexGrow: s.min }"
-				:title="`${s.label}: ${formatDuration(s.min)}`"></div>
+				:title="`${s.label}: ${span(s) ? span(s) + ', ' : ''}${formatDuration(s.min)}`"></div>
 		</div>
-		<div class="legend">
-			<span v-for="s in segs" :key="s.key"><i :class="s.cls"></i>{{ s.label }} <b class="mono">{{
-				formatDuration(s.min) }}</b></span>
+		<div class="legend" :class="{ timed: startMs != null }">
+			<span v-for="s in segs" :key="s.key">
+				<i :class="s.cls"></i>{{ s.label }}
+				<template v-if="s.from != null"><b class="mono">{{ span(s) }}</b><span class="dur">{{ formatDuration(s.min) }}</span></template>
+				<b v-else class="mono">{{ formatDuration(s.min) }}</b>
+			</span>
 		</div>
 	</div>
 </template>
@@ -87,6 +100,28 @@ const segs = computed(() => {
 	margin-top: 10px;
 	font-size: 0.76rem;
 	color: var(--zt-muted);
+}
+
+/* With clock times, one row per part reads like a schedule. */
+.legend.timed {
+	display: grid;
+	gap: 4px;
+}
+
+.legend.timed > span {
+	display: grid;
+	grid-template-columns: auto 1fr auto auto;
+	align-items: center;
+	gap: 0 8px;
+}
+
+.legend.timed i {
+	margin-right: 0;
+}
+
+.legend .dur {
+	min-width: 5.5em;
+	text-align: right;
 }
 
 .legend i {
