@@ -15,6 +15,7 @@ const state = {
     trips: 'zoot.trips',
     missions: 'zoot.missions',
     stamps: 'zoot.stamps',
+    passport: 'zoot.passport',
 };
 
 // read cookies
@@ -202,5 +203,16 @@ export const localDb = {
     },
     async listStamps(userId) {
         return read(state.stamps, []).filter(s => s.user_id === userId);
+    },
+
+    // Passport progress (slammed chops, seen places), one entry per user
+    async getPassportPage(userId) {
+        return read(state.passport, {})[userId] || null;
+    },
+    async savePassportPage(userId, updates) {
+        const pages = read(state.passport, {});
+        pages[userId] = { ...pages[userId], ...updates, user_id: userId };
+        write(state.passport, pages);
+        return pages[userId];
     }
 }

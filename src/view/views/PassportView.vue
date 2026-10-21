@@ -1,5 +1,5 @@
 <script setup>
-import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { PassportBook } from '../gl/passportScene.js'
 import { drawCover, drawIdentity, drawAreaPage, drawBackPage, PAGE_W, PAGE_H } from '../gl/pageArt.js'
 import { AREAS, STYLES } from '../../model/data/origins.js'
@@ -8,6 +8,7 @@ import { usePassportStore } from '../../model/stores/passport.js'
 import { useUserStore } from '../../model/stores/user.js'
 import { useMissionStore } from '../../model/stores/mission.js'
 import { DEFAULT_COVER } from '../../model/services/brand.js'
+import { getDb } from '../../model/services/db/index.js'
 
 // 3D passport page: flip through pages and play the slam for newly stamped areas
 const passport = usePassportStore()
@@ -18,6 +19,7 @@ const canvas = ref(null)
 const spread = ref(0)
 const failed = ref(false) // no WebGL, show the text fallback
 const busy = ref(false) // animation running, ignore input
+const missions = ref([]) // every saved mission, for the mission badges
 
 let book = null
 let otter = null
@@ -63,14 +65,15 @@ const stampsByPlace = computed(() => {
 const badges = computed(() => {
   const isHawker = (placeId) => catalog.value.find((place) => place.id === placeId)?.tags.includes('hawker')
   const hawkerStamps = passport.stamps.filter((stamp) => isHawker(stamp.place_id)).length
-  const active = mission.mission
+  // Any mission ever, so these stay earned after starting a new one
+  const allMissions = [...missions.value, mission.mission].filter(Boolean)
 
   return [
     { glyph: '✦', title: 'First Chop', text: 'Stamp any place.', earned: passport.stamps.length >= 1 },
     { glyph: '③', title: 'District Hopper', text: 'Chops from 3 areas.', earned: passport.chopCount >= 3 },
     { glyph: '🍜', title: 'Hawker Hero', text: 'Stamp 2 hawker centres.', earned: hawkerStamps >= 2 },
-    { glyph: '☂', title: 'Rain Dancer', text: 'Survive a rain rewrite.', earned: (active?.replans || 0) > 0 },
-    { glyph: '✈', title: 'Back to the Gate', text: 'Finish a quest on time.', earned: Boolean(active?.completed) },
+    { glyph: '☂', title: 'Rain Dancer', text: 'Survive a rain rewrite.', earned: allMissions.some((m) => (m.replans || 0) > 0) },
+    { glyph: '✈', title: 'Back to the Gate', text: 'Finish a quest on time.', earned: allMissions.some((m) => m.completed) },
     { glyph: '◎', title: 'Codex Explorer', text: 'Discover 20 places.', earned: passport.seen.size >= 20 }
   ]
 })
@@ -125,6 +128,7 @@ async function flipTo(targetSpread) {
 // Turn to each newly stamped area and slam its chop onto the page
 async function playSlams() {
   for (const areaId of [...passport.pendingSlams]) {
+    if (!book) return // left the page mid-slam
     const areaIndex = AREAS.findIndex((a) => a.id === areaId)
     if (areaIndex < 0) {
       passport.consumeSlam(areaId)
@@ -150,14 +154,41 @@ async function playSlams() {
   }
 }
 
+async function loadMissions() {
+  try {
+    missions.value = await (await getDb()).listMissions()
+  } catch (err) {
+    console.warn('[passport] could not load missions for badges:', err.message)
+  }
+}
+
+// Stamps, profile or badges can arrive after the pages were first drawn
+watch(
+  () => [passport.stamps.length, passport.seen.size, user.profile, catalog.value, badges.value],
+  () => {
+    if (!book) return
+    book.setCoverColor(user.profile?.cover_color || DEFAULT_COVER)
+    book.repaintAll()
+    if (passport.pendingSlams.length && !busy.value) runSlams()
+  }
+)
+
+async function runSlams() {
+  busy.value = true
+  // Stamps that load mid-slam get their turn too
+  while (book && passport.pendingSlams.length) await playSlams()
+  busy.value = false
+}
+
 onMounted(async () => {
-  await loadCatalog()
+  await Promise.all([loadCatalog(), passport.whenLoaded()])
   try {
     await Promise.all([
       document.fonts.load('700 20px Fredoka'),
       document.fonts.load('800 20px Poppins'),
       document.fonts.load('500 13px Poppins'),
-      loadOtter()
+      loadOtter(),
+      loadMissions()
     ])
   } catch {}
 
@@ -171,9 +202,9 @@ onMounted(async () => {
 
   busy.value = true
   await wait(500)
-  if (passport.pendingSlams.length) await playSlams()
-  else await flipTo(1)
   busy.value = false
+  if (passport.pendingSlams.length) await runSlams()
+  else await flipTo(1)
   window.addEventListener('keydown', onKey)
 })
 

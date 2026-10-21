@@ -57,7 +57,7 @@ async function resetLocal() {
   if (!confirm('Delete all Zoot data stored in this browser (guest profile, missions, stamps)?')) return
   const db = await getDb()
   await db.resetAll?.()
-  ;['zoot.pendingSlams', 'zoot.seen', 'zoot.activeMission', 'zoot.bookmarks', 'zoot.clockOffset', 'zoot.forceRain', 'zoot.fakeGps', 'zoot.guest'].forEach((k) => localStorage.removeItem(k))
+  ;['zoot.passport', 'zoot.pendingSlams', 'zoot.seen', 'zoot.activeMission', 'zoot.bookmarks', 'zoot.clockOffset', 'zoot.forceRain', 'zoot.fakeGps', 'zoot.guest'].forEach((k) => localStorage.removeItem(k))
   Object.keys(localStorage).filter((k) => k.startsWith('zoot.summary.')).forEach((k) => localStorage.removeItem(k))
   location.href = '/'
 }

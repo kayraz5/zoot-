@@ -1,5 +1,5 @@
 import { createClient } from '@supabase/supabase-js';
-import { SUPABASE_URL, SUPABASE_ANON_KEY } from "../config.js";
+import { SUPABASE_URL, SUPABASE_ANON_KEY, CITY } from "../config.js";
 
 /* Steven: Supabase adaptor */
 
@@ -57,7 +57,7 @@ export function createRemoteDb() {
             return must(await db.from('profiles').select('*').eq('id', id).maybeSingle());
         },
         async updateProfile(id, updates) {
-            return must(await db.from('profiles').upsert({ id, ...patch }).select().single());
+            return must(await db.from('profiles').upsert({ id, ...updates }).select().single());
         },
         async awardXp(id, amount) {
             return must(await db.rpc('award_return_bonus', { p_amount: amount }));
@@ -147,6 +147,14 @@ export function createRemoteDb() {
         async listStamps(userId) {
             return must(await db.from('stamps').select('*, places(area)').eq('user_id', userId).order('stamped_at'))
                 .map((s) => ({ ...s, area: s.places?.area }));
+        },
+
+        // Passport progress (slammed chops, seen places); null if never saved
+        async getPassportPage(userId) {
+            return must(await db.from('passport_pages').select('*').eq('user_id', userId).eq('city', CITY.name).maybeSingle());
+        },
+        async savePassportPage(userId, updates) {
+            return must(await db.from('passport_pages').upsert({ user_id: userId, city: CITY.name, ...updates }).select().single());
         },
     };
 };
