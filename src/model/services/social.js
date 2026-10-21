@@ -1,6 +1,7 @@
 import { getDb } from './db/index.js'
 import { travel } from './travel.js'
 import { formatTime } from './hours.js'
+import { resolveJoin } from './joinResolver.js'
 
 /**
  * Social quests (docs/social-quests-spec.md), stored in the "parties" tables of supabase/social.sql.
@@ -177,4 +178,80 @@ export function stopsFit(stops, mission, nowMs = Date.now()) {
       detail: `Starts ${formatTime(stops[0].arrive_iso)}, but you're only out of ${mission.origin.label} around ${formatTime(outAt)}.` }
   }
   return { ...base, ok: true, reason: 'Fits your window', detail: `Back at ${mission.origin.label} by ${formatTime(backAt)}, ${base.spareMin} min to spare.` }
+}
+
+// ── Joining (guest) ──────────────────────────────────────────────────────
+
+/**
+ * Which of a window's stops I can pick: from the first one that starts after I'm out of the airport
+ * (and hasn't started yet) to the last one I can end on and still make my flight.
+ * Returns { minFrom, maxTo } (1-based); minFrom > maxTo means none fit.
+ */
+export function joinableRange(stops, mission, nowMs = Date.now()) {
+  const outAt = Date.parse(mission?.start_iso) + (mission?.buffers?.exit_min || 0) * 60000
+  const earliest = Math.max(nowMs, Number.isFinite(outAt) ? outAt : nowMs)
+  let minFrom = stops.findIndex((s) => Date.parse(s.arrive_iso) >= earliest) + 1
+  if (minFrom === 0) minFrom = stops.length + 1
+  let maxTo = 0
+  stops.forEach((s, i) => {
+    if (stopsFit(stops.slice(0, i + 1), mission, nowMs).code !== 'too_late') maxTo = i + 1
+  })
+  return { minFrom, maxTo }
+}
+
+/**
+ * The guest's plan after joining stops from..to of a quest, without saving anything:
+ * resolveJoin's rules (fixed blocks, removals, flight check) with the real travel estimate home.
+ */
+export function previewJoin(quest, from, to, mission) {
+  const host = quest.roster?.find((m) => m.role === 'host')
+  const joinStops = quest.stops.slice(from - 1, to)
+  const fit = stopsFit(joinStops, mission)
+  const res = resolveJoin({
+    legs: mission.legs, joinStops, hostName: host?.display_name || 'the host', partyId: quest.id,
+    airportByMs: airportBy(mission), backMin: fit.backMin
+  })
+  if (!res.ok && fit.detail) res.reason = `${res.reason}: ${fit.detail}`
+  return { ...res, fit, joinStops, hostName: host?.display_name || 'the host' }
+}
+
+/**
+ * Fill in how to get to each stop (mode, minutes, "MRT … → …") from the one before, WITHOUT moving
+ * any times: after a join or leave the neighbours change, so the old travel notes are wrong.
+ * The return leg's arrival (back at the airport) follows the last stop.
+ */
+export function withTravel(legs, mission) {
+  const opts = { maxWalk: mission.prefs?.maxWalk, style: mission.style }
+  let cur = mission.origin
+  let t = Date.parse(mission.start_iso) + (mission.buffers?.exit_min || 0) * 60000
+  return legs.map((l) => {
+    if (l.kind === 'visit' && l.status === 'skipped') return l
+    const tr = travel(cur, l.kind === 'return' ? mission.origin : l, { ...opts, atMs: t })
+    const next = { ...l, travel_mode: tr.mode, travel_min: tr.minutes }
+    // A joined stop says who you meet there; everything else gets the route.
+    if (!l.fixed) next.travel_detail = tr.detail
+    if (l.kind === 'return') {
+      const home = new Date(t + tr.minutes * 60000).toISOString()
+      Object.assign(next, { arrive_iso: home, depart_iso: home })
+    } else {
+      cur = l
+      t = Date.parse(l.depart_iso)
+    }
+    return next
+  })
+}
+
+/** Join stops from..to. The database re-checks capacity, range and my airport time. */
+export async function joinWindow({ quest, from, to, mission }) {
+  const client = await sb()
+  const fit = stopsFit(quest.stops.slice(from - 1, to), mission)
+  return must(await client.rpc('join_window', {
+    p_party: quest.id, p_from: from, p_to: to,
+    p_airport_by: new Date(airportBy(mission)).toISOString(), p_back_min: fit.backMin ?? 0
+  }))
+}
+
+export async function leaveWindow(id) {
+  const client = await sb()
+  must(await client.rpc('leave_window', { p_party: id }))
 }

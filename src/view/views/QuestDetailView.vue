@@ -5,16 +5,19 @@ import { usePartyStore } from '../../model/stores/party.js'
 import { useMissionStore } from '../../model/stores/mission.js'
 import { useUserStore } from '../../model/stores/user.js'
 import { useUiStore } from '../../model/stores/ui.js'
-import { stopsFit } from '../../model/services/social.js'
+import { stopsFit, joinableRange, previewJoin } from '../../model/services/social.js'
 import { formatTime } from '../../model/services/hours.js'
 import { DEV_PANEL } from '../../model/services/config.js'
 import { STYLES } from '../../model/data/origins.js'
 import MemberAvatarStack from '../components/MemberAvatarStack.vue'
 import ProfilePreviewModal from '../components/ProfilePreviewModal.vue'
+import StopRangePicker from '../components/StopRangePicker.vue'
+import JoinConfirmSheet from '../components/JoinConfirmSheet.vue'
 
 /**
  * One open window: ONLY its stops (the host's other stops, airport and flight time are never sent),
- * who's going and which stops they joined. Phase 4 adds the guest's stop pick + confirm sheet here.
+ * who's going and which stops they joined. A guest picks a run of stops, sees exactly what changes
+ * in their own plan (confirm sheet), and joins.
  */
 const route = useRoute()
 const router = useRouter()
@@ -23,12 +26,14 @@ const mission = useMissionStore()
 const user = useUserStore()
 const ui = useUiStore()
 
-const preview = ref(null)
+const profile = ref(null) // profile preview modal
 const busy = ref(false)
 
 async function load() {
   await mission.loadActive()
   await party.loadQuest(route.params.id)
+  // The host may have closed the quest or changed my stops since I joined.
+  if (mission.mission?.joined) await mission.checkJoined()
 }
 onMounted(load)
 watch(() => route.params.id, (id) => id && load())
@@ -62,6 +67,44 @@ function deleteQuest() {
   act(() => party.deleteQuest(q.value.id), 'Quest deleted.').then(() => router.replace('/quests'))
 }
 const demoJoin = () => act(() => party.simulate(q.value.id, 'guest_joins'), (m) => `Demo: ${m}.`)
+
+// ── Guest: pick stops → confirm → join ──
+const plan = computed(() => mission.mission)
+const hasPlan = computed(() => fit.value && fit.value.code !== 'no_mission')
+const range = computed(() => (q.value && hasPlan.value ? joinableRange(q.value.stops, plan.value) : { minFrom: 1, maxTo: 0 }))
+const canPick = computed(() => range.value.minFrom <= range.value.maxTo)
+const pick = ref({ from: 1, to: 1 })
+// Start with everything that fits; reset when the quest or my plan changes.
+watch([() => q.value?.id, range], () => { pick.value = { from: range.value.minFrom, to: range.value.maxTo } }, { immediate: true })
+const preview = computed(() => (q.value && hasPlan.value && canPick.value ? previewJoin(q.value, pick.value.from, pick.value.to, plan.value) : null))
+/** Already with someone else (one quest at a time). */
+const otherQuest = computed(() => {
+  const joined = plan.value?.joined || {}
+  const id = Object.keys(joined).find((k) => k !== q.value?.id)
+  return id ? { id, ...joined[id] } : null
+})
+const confirmOpen = ref(false)
+async function join() {
+  busy.value = true
+  try {
+    await mission.joinQuest(q.value, pick.value.from, pick.value.to)
+    confirmOpen.value = false
+    ui.toast(`You're in! Meet ${host.value?.display_name || 'the host'} at ${q.value.stops[pick.value.from - 1].name}.`, 'success', 5000)
+    await party.loadQuest(q.value.id)
+  } catch (err) {
+    ui.toast(err.message, 'danger', 6000)
+  } finally {
+    busy.value = false
+  }
+}
+function leave() {
+  if (!confirm('Leave this quest? Your stops with the group are removed and your own stops come back if they still fit.')) return
+  act(async () => {
+    const { restored } = await mission.leaveQuest(q.value.id)
+    await party.loadQuest(q.value.id)
+    return restored
+  }, (restored) => `You're solo again.${restored.length ? ` Back in your plan: ${restored.map((l) => l.name).join(', ')}.` : ''}`)
+}
 </script>
 
 <template>
@@ -108,7 +151,7 @@ const demoJoin = () => act(() => party.simulate(q.value.id, 'guest_joins'), (m) 
       <section class="zt-card p-3 mb-3">
         <div class="d-flex justify-content-between align-items-center mb-2">
           <b class="small">Open stops</b>
-          <MemberAvatarStack :members="q.roster" :capacity="q.capacity" :size="30" @select="preview = $event" />
+          <MemberAvatarStack :members="q.roster" :capacity="q.capacity" :size="30" @select="profile = $event" />
         </div>
         <ol class="stops">
           <li v-for="s in q.stops" :key="s.seq">
@@ -141,17 +184,49 @@ const demoJoin = () => act(() => party.simulate(q.value.id, 'guest_joins'), (m) 
           </div>
         </template>
         <template v-else-if="q.mine">
-          <div class="fw-800 text-success"><i class="bi bi-check-circle-fill"></i> You're joining stops {{ q.mine.from_seq }}–{{ q.mine.to_seq }}</div>
+          <div class="fw-800 text-success mb-1"><i class="bi bi-check-circle-fill"></i>
+            You're joining {{ q.mine.from_seq === q.mine.to_seq ? `stop ${q.mine.from_seq}` : `stops ${q.mine.from_seq}–${q.mine.to_seq}` }}
+          </div>
+          <p class="small text-muted mb-2">They're in your plan at fixed times. Meet at {{ q.stops[q.mine.from_seq - 1]?.name }}, {{ formatTime(q.stops[q.mine.from_seq - 1]?.arrive_iso) }}.</p>
+          <div class="d-flex gap-2">
+            <RouterLink to="/mission" class="btn btn-soft flex-grow-1"><i class="bi bi-list-ol"></i> My plan</RouterLink>
+            <button class="btn btn-outline-danger" :disabled="busy" @click="leave"><i class="bi bi-box-arrow-right"></i> Leave</button>
+          </div>
+        </template>
+        <template v-else-if="!hasPlan">
+          <div class="fw-800 mb-1">Plan your layover first</div>
+          <p class="small text-muted mb-2">We need your airport time to check which stops you can make.</p>
+          <RouterLink to="/plan" class="btn btn-primary w-100">Plan my layover</RouterLink>
+        </template>
+        <template v-else-if="otherQuest">
+          <div class="fw-800 mb-1">You're already with {{ otherQuest.host_name }}</div>
+          <p class="small text-muted mb-2">One quest at a time. Leave "{{ otherQuest.title }}" to join this one.</p>
+          <RouterLink :to="`/quests/${otherQuest.id}`" class="btn btn-soft w-100">Go to that quest</RouterLink>
+        </template>
+        <template v-else-if="q.status === 'full'">
+          <div class="fw-800 mb-1">This quest is full</div>
+          <p class="small text-muted mb-0">Check back later, or open some of your own stops to company.</p>
+        </template>
+        <template v-else-if="!canPick">
+          <div class="fw-800 mb-1"><i class="bi bi-airplane"></i> None of these stops fit your layover</div>
+          <p class="small text-muted mb-0">{{ fit.code === 'too_late' ? fit.detail : 'They start before you are out of the airport, or have already started.' }}</p>
         </template>
         <template v-else>
-          <div class="fw-800 mb-1">Join some of these stops</div>
-          <p class="small text-muted mb-2">Picking stops and joining arrives in the next update (Phase 4).</p>
-          <button class="btn btn-primary w-100" disabled>Pick stops to join</button>
+          <div class="fw-800 mb-2">Pick the stops you'll join</div>
+          <StopRangePicker v-model="pick" :stops="q.stops" :min-from="range.minFrom" :max-to="range.maxTo" inside-label="Join" />
+          <p v-if="preview?.ok" class="small mt-2 mb-2" :class="preview.bigChange ? 'text-danger fw-800' : 'text-muted'">
+            <template v-if="preview.removed.length"><i class="bi bi-arrow-repeat"></i> Replaces {{ preview.removed.length }} of your stops.</template>
+            <template v-else><i class="bi bi-check2-circle"></i> Fits around your plan; none of your stops are removed.</template>
+          </p>
+          <button class="btn btn-primary w-100" :disabled="busy || !preview" @click="confirmOpen = true">
+            <i class="bi bi-people-fill"></i> Join {{ pick.from === pick.to ? `stop ${pick.from}` : `stops ${pick.from}–${pick.to}` }}
+          </button>
         </template>
       </section>
     </template>
 
-    <ProfilePreviewModal :profile="preview" @close="preview = null" />
+    <ProfilePreviewModal :profile="profile" @close="profile = null" />
+    <JoinConfirmSheet :open="confirmOpen" :preview="preview" :busy="busy" @close="confirmOpen = false" @confirm="join" />
   </main>
 </template>
 
