@@ -7,7 +7,7 @@ import { useUserStore } from '../../model/stores/user.js'
 import { useUiStore } from '../../model/stores/ui.js'
 import { ORIGINS, INTERESTS, STYLES } from '../../model/data/origins.js'
 import { computeBudget } from '../../model/services/planner.js'
-import { formatDuration, formatTime } from '../../model/services/hours.js'
+import { formatDuration, formatTime, toSgLocalInput } from '../../model/services/hours.js'
 import { now, tick } from '../../model/services/clock.js'
 import BufferBar from '../components/BufferBar.vue'
 import WeatherChip from '../components/WeatherChip.vue'
@@ -29,9 +29,18 @@ onMounted(() => {
 
 const budget = computed(() => {
 	tick.value // re-evaluate as the clock moves
-	return computeBudget({ origin: trip.origin, startMs: now(), mustReturnMs: trip.mustReturnMs, cleared: d.cleared })
+	return computeBudget({ origin: trip.origin, startMs: trip.startMs, mustReturnMs: trip.mustReturnMs, cleared: d.cleared })
 })
 const tooShort = computed(() => budget.value.usable_min < 60)
+
+// A later start can be picked up to a week ahead (the weather forecast horizon), never in the past.
+const startMinLocal = computed(() => (tick.value, toSgLocalInput(now())))
+const startMaxLocal = computed(() => toSgLocalInput(now() + 7 * 86400e3))
+const startInPast = computed(() => (tick.value, !d.startNow && trip.startMs < now() - 60000))
+
+function onStartChange(e) {
+	trip.setStart(false, e.target.value)
+}
 const styleId = computed(() => (STYLES[user.profile?.style] ? user.profile.style : 'budget'))
 const style = computed(() => STYLES[styleId.value])
 
@@ -44,7 +53,7 @@ async function setStyle(id) {
 }
 
 function onReturnChange() {
-	if (!trip.syncHoursFromReturn()) ui.toast(`Layovers are up to ${MAX_LAYOVER_H} h. Longer than that is a stopover, so the return time was set to ${MAX_LAYOVER_H} h from now.`, 'warning', 5000)
+	if (!trip.syncHoursFromReturn()) ui.toast(`Layovers are up to ${MAX_LAYOVER_H} h. Longer than that is a stopover, so the return time was set to ${MAX_LAYOVER_H} h after your start.`, 'warning', 5000)
 }
 
 function toggleInterest(id) {
@@ -99,8 +108,22 @@ async function submit() {
 			</section>
 
 			<section class="zt-card p-3">
+				<label class="form-label">When do you head out?</label>
+				<div class="btn-group w-100 mb-2" role="group" aria-label="Start time">
+					<input id="start-now" type="radio" class="btn-check" :checked="d.startNow" @change="trip.setStart(true)" />
+					<label class="btn btn-soft" for="start-now"><i class="bi bi-lightning-charge"></i> Now</label>
+					<input id="start-later" type="radio" class="btn-check" :checked="!d.startNow" @change="trip.setStart(false)" />
+					<label class="btn btn-soft" for="start-later"><i class="bi bi-calendar-event"></i> Later</label>
+				</div>
+				<template v-if="!d.startNow">
+					<label class="form-label tiny text-muted mb-1" for="start">{{ trip.origin.kind === 'airport' ? 'Landing / ready to leave at' : 'Leaving the hotel at' }} (Singapore time)</label>
+					<input id="start" type="datetime-local" class="form-control mb-1" :value="d.startLocal"
+						:min="startMinLocal" :max="startMaxLocal" @change="onStartChange" required />
+					<p v-if="startInPast" class="tiny text-danger fw-bold mb-0">That start time has already passed. Pick a later one or choose Now.</p>
+				</template>
+				<hr class="my-3" />
 				<div class="d-flex justify-content-between align-items-baseline">
-					<label class="form-label mb-0" for="hours">Hours until you must be back</label>
+					<label class="form-label mb-0" for="hours">{{ d.startNow ? 'Hours until you must be back' : 'Hours from your start until you must be back' }}</label>
 					<span class="hours-num mono">{{ d.hours }} h</span>
 				</div>
 				<input id="hours" type="range" class="form-range" min="2" :max="MAX_LAYOVER_H" step="0.5"
@@ -116,7 +139,7 @@ async function submit() {
 						<span :class="tooShort ? 'text-danger' : 'text-success'">{{ tooShort ? 'Too tight to leave' :
 							`${formatDuration(budget.usable_min)} to explore` }}</span>
 					</div>
-					<BufferBar :window-min="budget.window_min" :exit-min="budget.exit_min"
+					<BufferBar :start-ms="trip.startMs" :window-min="budget.window_min" :exit-min="budget.exit_min"
 						:out-min="Math.max(0, budget.usable_min)" :reentry-min="budget.reentry_min"
 						:safety-min="budget.safety_min" />
 					<p class="tiny text-muted mt-2 mb-0">
@@ -193,7 +216,7 @@ async function submit() {
 				outside. Zoot won’t plan a trip that risks your flight. Stay airside and explore the terminal.
 			</div>
 
-			<button class="btn btn-primary btn-lg" :disabled="planning || tooShort || !d.interests.length">
+			<button class="btn btn-primary btn-lg" :disabled="planning || tooShort || startInPast || !d.interests.length">
 				<i class="bi bi-magic"></i> Build my quest
 			</button>
 		</form>

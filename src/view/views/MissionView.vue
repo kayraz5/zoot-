@@ -1,5 +1,5 @@
 <script setup>
-import { computed, onMounted, watch } from 'vue'
+import { computed, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useMissionStore } from '../../model/stores/mission.js'
 import { useUiStore } from '../../model/stores/ui.js'
@@ -12,6 +12,7 @@ import TimeToGate from '../components/TimeToGate.vue'
 import BufferBar from '../components/BufferBar.vue'
 import WeatherChip from '../components/WeatherChip.vue'
 import StopGallery from '../components/StopGallery.vue'
+import PlacePicker from '../components/PlacePicker.vue'
 
 const route = useRoute()
 const router = useRouter()
@@ -40,6 +41,46 @@ const wetLegs = computed(() => {
   const rainAt = rainLookup(ui.weather, ui.forceRain)
   return m.value.legs.filter((l) => l.kind === 'visit' && l.status === 'pending' && l.indoor === false && rainAt(Date.parse(l.arrive_iso)) > RAIN_LIMIT)
 })
+
+// Hand edits: one stop's edit panel open at a time, and one place picker (swap / add).
+const editing = ref(null) // place_id of the leg whose edit panel is open (seq changes on every edit)
+const picker = ref(null) // { key, mode: 'swap' | 'add', leg, near, title }
+const busy = ref(false)
+const pendingVisits = computed(() => store.visitLegs.filter((l) => l.status === 'pending'))
+const missionPlaceIds = computed(() => new Set(m.value?.legs.map((l) => l.place_id) || []))
+
+function toggleEdit(leg) {
+  editing.value = editing.value === leg.place_id ? null : leg.place_id
+  picker.value = null
+}
+function openSwap(leg) {
+  picker.value = { key: leg.place_id, mode: 'swap', leg, near: leg, title: `Swap ${leg.name} for…` }
+}
+function openAdd(leg) {
+  const near = leg || pendingVisits.value.at(-1) || m.value.origin
+  picker.value = { key: leg ? leg.place_id : 'end', mode: 'add', leg, near, title: leg ? `Add a stop after ${leg.name}` : 'Add a stop before heading back' }
+}
+async function run(action) {
+  busy.value = true
+  try {
+    const ok = await action()
+    if (ok) { picker.value = null; editing.value = null }
+  } catch (err) {
+    ui.toast(err.message, 'danger')
+  } finally {
+    busy.value = false
+  }
+}
+function onPick(place) {
+  const { mode, leg } = picker.value
+  run(() => (mode === 'swap' ? store.swapStop(leg, place) : store.addStop(place, leg?.place_id ?? null)))
+}
+// Stay and order tweaks keep the panel open so they can be repeated.
+async function tweak(action) {
+  busy.value = true
+  try { await action() } catch (err) { ui.toast(err.message, 'danger') } finally { busy.value = false }
+}
+watch(() => m.value?.id, () => { editing.value = null; picker.value = null })
 
 const replans = [
   { mode: 'behind', label: "I'm behind", icon: 'bi-hourglass-bottom' },
@@ -81,7 +122,9 @@ const replans = [
           <b class="small">Where your {{ formatDuration(Math.round((store.mustReturnMs - Date.parse(m.start_iso)) / 60000)) }} goes</b>
           <WeatherChip />
         </div>
+        <div class="tiny text-muted mono mb-2">{{ formatTime(m.start_iso) }} → {{ formatTime(store.mustReturnMs) }} (Singapore time)</div>
         <BufferBar
+          :start-ms="Date.parse(m.start_iso)"
           :window-min="Math.round((store.mustReturnMs - Date.parse(m.start_iso)) / 60000)"
           :exit-min="m.buffers.exit_min" :out-min="m.total_out_min"
           :reentry-min="m.buffers.reentry_min" :safety-min="m.buffers.safety_min" />
@@ -134,12 +177,45 @@ const replans = [
               </div>
               <p class="small mb-2 why">{{ leg.why }}</p>
               <div v-if="leg.sidequest" class="zt-pill pale mb-2"><i class="bi bi-gem"></i> Sidequest</div>
-              <div class="d-flex gap-2 flex-wrap" v-if="leg.kind === 'visit' && leg.status === 'pending'">
-                <RouterLink :to="`/map?focus=${leg.seq}`" class="btn btn-sm btn-soft"><i class="bi bi-geo"></i> On map</RouterLink>
-                <button class="btn btn-sm btn-link text-muted" @click="store.skip(leg)">Skip</button>
-              </div>
+              <template v-if="leg.kind === 'visit' && leg.status === 'pending'">
+                <div class="d-flex gap-2 flex-wrap">
+                  <RouterLink :to="`/map?focus=${leg.seq}`" class="btn btn-sm btn-soft"><i class="bi bi-geo"></i> On map</RouterLink>
+                  <button class="btn btn-sm btn-soft" :class="{ active: editing === leg.place_id }" :aria-expanded="editing === leg.place_id" @click="toggleEdit(leg)">
+                    <i class="bi bi-pencil"></i> Edit
+                  </button>
+                  <button class="btn btn-sm btn-link text-muted" @click="store.skip(leg)">Skip</button>
+                </div>
+                <div v-if="editing === leg.place_id" class="edit-panel mt-3">
+                  <div class="d-flex align-items-center gap-2 flex-wrap">
+                    <span class="tiny fw-800">Stay</span>
+                    <div class="btn-group btn-group-sm" role="group" aria-label="Stay length">
+                      <button class="btn btn-soft" :disabled="busy || leg.stay_min <= 10" @click="tweak(() => store.changeStay(leg, -15))" aria-label="15 minutes shorter">−15</button>
+                      <span class="btn btn-soft disabled mono stay-now">{{ leg.stay_min }} min</span>
+                      <button class="btn btn-soft" :disabled="busy" @click="tweak(() => store.changeStay(leg, 15))" aria-label="15 minutes longer">+15</button>
+                    </div>
+                    <div class="btn-group btn-group-sm ms-auto" role="group" aria-label="Order">
+                      <button class="btn btn-soft" :disabled="busy || pendingVisits[0] === leg" @click="tweak(() => store.moveStop(leg, -1))" aria-label="Move earlier"><i class="bi bi-arrow-up"></i></button>
+                      <button class="btn btn-soft" :disabled="busy || pendingVisits.at(-1) === leg" @click="tweak(() => store.moveStop(leg, 1))" aria-label="Move later"><i class="bi bi-arrow-down"></i></button>
+                    </div>
+                  </div>
+                  <div class="d-flex gap-2 flex-wrap mt-2">
+                    <button class="btn btn-sm btn-soft" :disabled="busy" @click="openSwap(leg)"><i class="bi bi-arrow-left-right"></i> Swap</button>
+                    <button class="btn btn-sm btn-soft" :disabled="busy" @click="openAdd(leg)"><i class="bi bi-plus-lg"></i> Add after</button>
+                    <button class="btn btn-sm btn-link text-danger ms-auto" :disabled="busy" @click="run(() => store.removeStop(leg))"><i class="bi bi-trash"></i> Remove</button>
+                  </div>
+                  <PlacePicker v-if="picker && picker.key === leg.place_id" :title="picker.title" :near="picker.near"
+                    :exclude="missionPlaceIds" :busy="busy" @pick="onPick" @close="picker = null" />
+                </div>
+              </template>
               <div v-else-if="leg.status === 'stamped'" class="tiny text-success fw-800"><i class="bi bi-check2-circle"></i> Stamped {{ leg.stamped_at ? formatTime(leg.stamped_at) : '' }}</div>
               <div v-else-if="leg.status === 'skipped'" class="tiny text-muted fw-800">Skipped</div>
+              <template v-if="leg.kind === 'return' && leg.status === 'pending'">
+                <button v-if="!(picker && picker.key === 'end')" class="btn btn-sm btn-soft" :disabled="busy" @click="openAdd(null)">
+                  <i class="bi bi-plus-lg"></i> Add a stop before heading back
+                </button>
+                <PlacePicker v-else :title="picker.title" :near="picker.near" :exclude="missionPlaceIds" :busy="busy"
+                  @pick="onPick" @close="picker = null" />
+              </template>
             </div>
           </li>
         </template>
@@ -180,6 +256,8 @@ const replans = [
 .tl-stop.next .stop-card { box-shadow: 5px 5px 0 var(--zt-pink); }
 .stop-card { box-shadow: var(--zt-shadow-sm); }
 .why { color: var(--zt-muted); }
+.edit-panel { border-top: 2px dashed var(--zt-soft-line); padding-top: 12px; }
+.stay-now { min-width: 5.5em; opacity: 1; }
 .rain-alert { background: #111; color: var(--zt-yellow); border: var(--zt-bw) solid #111; border-radius: 18px; box-shadow: 4px 4px 0 var(--zt-yellow); }
 [data-bs-theme='dark'] .rain-alert { border-color: var(--zt-yellow); }
 .rain-alert .btn { --bs-btn-bg: var(--zt-yellow); --bs-btn-color: #111; --bs-btn-border-color: var(--zt-yellow); }
