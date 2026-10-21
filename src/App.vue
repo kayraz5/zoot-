@@ -12,7 +12,7 @@ const user = useUserStore()
 const passport = usePassportStore()
 const showNav = computed(() => route.meta.nav && user.isAuthed)
 
-watch(() => user.userId, (id) => id && passport.load(id), { immediate: true })
+watch(() => user.userId, (id) => passport.load(id), { immediate: true })
 </script>
 
 <template>

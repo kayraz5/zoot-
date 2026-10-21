@@ -207,6 +207,14 @@ export class PassportBook {
     page.texture.needsUpdate = true
   }
 
+  repaintAll() {
+    this.pages.forEach((_, i) => this.repaint(i))
+  }
+
+  setCoverColor(color) {
+    this.backCover.material.color.set(color)
+  }
+
   // Turn to spread k (0 = closed cover, leafCount = closed on the back). Resolves when the pages settle.
   flipTo(k) {
     k = Math.max(0, Math.min(this.leafCount, k))
