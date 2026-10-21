@@ -174,7 +174,7 @@ export const useMissionStore = defineStore('mission', {
         fake: geo.fake || dev, dev, missionId: this.mission?.id, xp: leg.xp
       })
       user.setProfile(profile)
-      const firstInArea = passport.addStamp({ ...stamp, area: place.area })
+      const chopEarned = passport.addStamp({ ...stamp, area: place.area })
       if (this.mission) {
         const l = this.mission.legs.find((x) => x.seq === leg.seq)
         if (l) {
@@ -183,7 +183,7 @@ export const useMissionStore = defineStore('mission', {
         }
         await this.persist(this.mission)
       }
-      ui.celebrate({ place, xp: leg.xp, firstInArea, area: place.area })
+      ui.celebrate({ place, xp: leg.xp, chopEarned, area: place.area })
       return stamp
     },
 

@@ -3,17 +3,21 @@ import { computed } from 'vue'
 import { useRouter } from 'vue-router'
 import { useUiStore } from '../../model/stores/ui.js'
 import { useUserStore } from '../../model/stores/user.js'
+import { usePassportStore, CHOP_TARGET } from '../../model/stores/passport.js'
 import { AREAS } from '../../model/data/origins.js'
 
 // Pop-up after a stamp, or after returning to the airport/hotel.
 const ui = useUiStore()
 const user = useUserStore()
+const passport = usePassportStore()
 const router = useRouter()
 
 const celebration = computed(() => ui.celebration)
 const area = computed(() => AREAS.find((a) => a.id === celebration.value?.area))
 const ink = computed(() => area.value?.ink || '#111111')
 const glyph = computed(() => area.value?.glyph || '✦')
+// Different places stamped in this area, toward its chop
+const areaCount = computed(() => passport.byArea[celebration.value?.area]?.length || 0)
 
 function close() {
   ui.celebrate(null)
@@ -46,10 +50,11 @@ function goToPassport() {
           <h2 class="zt-display title mb-1">{{ celebration.place?.name }}</h2>
           <p class="text-muted small mb-2">Stamped · Level {{ user.level.level }} · {{ user.title }}</p>
           <div class="xp-burst mb-3">+{{ celebration.xp }} XP</div>
-          <p v-if="celebration.firstInArea" class="mb-3"><span class="zt-pill pale"><i class="bi bi-journal-plus"></i> New passport page: {{ celebration.area }}</span></p>
+          <p v-if="celebration.chopEarned" class="mb-3"><span class="zt-pill pale"><i class="bi bi-award"></i> {{ celebration.area }} chop earned!</span></p>
+          <p v-else-if="celebration.area && areaCount < CHOP_TARGET" class="small text-muted mb-3">{{ areaCount }} / {{ CHOP_TARGET }} places toward the {{ celebration.area }} chop</p>
         </template>
         <div class="d-flex gap-2 justify-content-center">
-          <button v-if="celebration.firstInArea" class="btn btn-soft" @click="goToPassport"><i class="bi bi-journal-bookmark-fill"></i> See chop</button>
+          <button v-if="celebration.chopEarned" class="btn btn-soft" @click="goToPassport"><i class="bi bi-journal-bookmark-fill"></i> See chop</button>
           <button class="btn btn-primary px-4" @click="close" autofocus>Nice!</button>
         </div>
       </div>

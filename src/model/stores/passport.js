@@ -1,8 +1,11 @@
 import { defineStore } from 'pinia'
 import { getDb } from '../services/db/index.js'
 
-// Stamps, area chops and seen places (passport + Codex).
+// Stamps, area chops and seen places (passport + Codex). An area's chop is earned at CHOP_TARGET places.
 // Slammed chops and seen places are saved per user in passport_pages (localStorage for guests).
+
+// Different places to stamp in an area to earn its chop
+export const CHOP_TARGET = 6
 
 let loading = Promise.resolve()
 let saving = Promise.resolve()
@@ -20,24 +23,34 @@ export const usePassportStore = defineStore('passport', {
       return new Set(state.stamps.map((stamp) => stamp.place_id))
     },
 
+    // First stamp of each place, grouped by area, oldest first (a place stamped again another day counts once)
     byArea(state) {
       const groups = {}
-      for (const stamp of state.stamps) {
-        if (!stamp.area) continue
+      const counted = new Set()
+      for (const stamp of [...state.stamps].sort((a, b) => String(a.stamped_at).localeCompare(String(b.stamped_at)))) {
+        if (!stamp.area || counted.has(stamp.place_id)) continue
+        counted.add(stamp.place_id)
         if (!groups[stamp.area]) groups[stamp.area] = []
         groups[stamp.area].push(stamp)
       }
       return groups
     },
 
-    // Areas with at least one stamp
-    chopCount() {
-      return Object.keys(this.byArea).length
+    // Areas with CHOP_TARGET different places stamped, in the order they were earned
+    choppedAreas() {
+      return Object.entries(this.byArea)
+        .filter(([, stamps]) => stamps.length >= CHOP_TARGET)
+        .sort(([, a], [, b]) => String(a[CHOP_TARGET - 1].stamped_at).localeCompare(String(b[CHOP_TARGET - 1].stamped_at)))
+        .map(([area]) => area)
     },
 
-    // Chops earned but not yet slammed onto the passport, in the order they were first stamped
+    chopCount() {
+      return this.choppedAreas.length
+    },
+
+    // Chops earned but not yet slammed onto the passport
     pendingSlams() {
-      return Object.keys(this.byArea).filter((area) => !this.slammed.has(area))
+      return this.choppedAreas.filter((area) => !this.slammed.has(area))
     }
   },
 
@@ -74,20 +87,24 @@ export const usePassportStore = defineStore('passport', {
       this.stamps = stamps
       this.seen = new Set([...(page?.seen_places || []), ...this.seen])
       if (page) {
-        this.slammed = new Set(page.slammed_areas)
+        // Drop areas whose chop isn't earned (e.g. slammed under the old one-stamp rule), so they slam at 6
+        const chopped = new Set(this.choppedAreas)
+        this.slammed = new Set(page.slammed_areas.filter((area) => chopped.has(area)))
+        if (this.slammed.size !== page.slammed_areas.length) this.save()
       } else {
         // No saved progress yet: chops already earned count as slammed, so they don't all replay
-        this.slammed = new Set(Object.keys(this.byArea))
+        this.slammed = new Set(this.choppedAreas)
         if (!pageFailed) this.save()
       }
     },
 
-    // Returns true for the first stamp in an area
+    // Returns true when this stamp earns its area's chop
     addStamp(stamp) {
-      const firstInArea = Boolean(stamp.area) && !this.stamps.some((s) => s.area === stamp.area)
+      const before = this.byArea[stamp.area]?.length || 0
       this.stamps.push(stamp)
       this.markSeen([stamp.place_id])
-      return firstInArea
+      const after = this.byArea[stamp.area]?.length || 0
+      return before < CHOP_TARGET && after >= CHOP_TARGET
     },
 
     consumeSlam(area) {

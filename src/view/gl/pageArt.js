@@ -247,8 +247,9 @@ export function drawIdentity(ctx, { name, style, level, title, xp, stamps, chops
   pageNumber(ctx, 1, true)
 }
 
-// One page per area: title, area chop (hidden until the slam reveals it) and up to 8 place slots
-export function drawAreaPage(ctx, { area, places, stampsByPlace, pageNo, left, revealed = true, inkProgress = 1 }) {
+// One page per area: title, area chop (earned at `target` places, hidden until the slam reveals it)
+// and `target` place slots. `places` is every place in the area, already in display order.
+export function drawAreaPage(ctx, { area, places, stampsByPlace, target, pageNo, left, revealed = true, inkProgress = 1 }) {
   paper(ctx, '#fffbea', left)
   ctx.fillStyle = MUTED
   ctx.textAlign = 'left'
@@ -259,12 +260,13 @@ export function drawAreaPage(ctx, { area, places, stampsByPlace, pageNo, left, r
   ctx.fillText(area.id.toUpperCase(), 44, 104)
 
   const stampedCount = places.filter((place) => stampsByPlace[place.id]).length
+  const earned = stampedCount >= target
   ctx.fillStyle = MUTED
   ctx.font = '700 15px Poppins, sans-serif'
-  ctx.fillText(`${stampedCount} / ${places.length} stamped`, 44, 132)
+  ctx.fillText(earned ? `${stampedCount} / ${places.length} places stamped` : `${stampedCount} / ${target} toward the area chop`, 44, 132)
 
-  // Area chop in the top right, or a dashed placeholder
-  if (stampedCount > 0 && revealed) {
+  // Area chop in the top right, or a dashed placeholder with a faint glyph
+  if (earned && revealed) {
     drawChop(ctx, {
       x: 392, y: 104, r: 64 * (0.85 + 0.15 * inkProgress),
       ink: area.ink, glyph: area.glyph, label: area.id, sub: 'SINGAPORE', seed: area.id, alpha: 0.88 * inkProgress
@@ -277,21 +279,26 @@ export function drawAreaPage(ctx, { area, places, stampsByPlace, pageNo, left, r
     ctx.beginPath()
     ctx.arc(392, 104, 60, 0, Math.PI * 2)
     ctx.stroke()
+    ctx.fillStyle = '#e6d48a'
+    ctx.textAlign = 'center'
+    ctx.textBaseline = 'middle'
+    ctx.font = '700 40px Fredoka, serif'
+    ctx.fillText(area.glyph, 392, 92)
+    ctx.fillStyle = '#c9b25a'
+    ctx.font = '800 10px Poppins, sans-serif'
+    ctx.fillText('AREA CHOP', 392, 128)
     ctx.restore()
   }
 
-  // 2 × 4 grid of place slots, stamped places first
-  const isStamped = (place) => Boolean(stampsByPlace[place.id])
-  const shown = [...places].sort((a, b) => isStamped(b) - isStamped(a)).slice(0, 8)
-
-  shown.forEach((place, i) => {
+  // 2 × 3 grid of place slots
+  places.slice(0, target).forEach((place, i) => {
     const x = 136 + (i % 2) * 240
-    const y = 250 + Math.floor(i / 2) * 112
+    const y = 262 + Math.floor(i / 2) * 140
     const stamp = stampsByPlace[place.id]
 
     if (stamp) {
       drawChop(ctx, {
-        x, y, r: 44, ink: area.ink, glyph: area.glyph, label: place.name.split(/[ ,(&]/)[0],
+        x, y, r: 52, ink: area.ink, glyph: area.glyph, label: place.name.split(/[ ,(&]/)[0],
         sub: stamp.date, seed: place.id, alpha: 0.85, square: i % 3 === 1
       })
       return
@@ -302,20 +309,23 @@ export function drawAreaPage(ctx, { area, places, stampsByPlace, pageNo, left, r
     ctx.strokeStyle = '#e0cd7e'
     ctx.lineWidth = 2
     ctx.beginPath()
-    ctx.arc(x, y, 40, 0, Math.PI * 2)
+    ctx.arc(x, y, 48, 0, Math.PI * 2)
     ctx.stroke()
     ctx.restore()
     ctx.fillStyle = '#a89a66'
     ctx.textAlign = 'center'
-    ctx.font = '600 12px Poppins, sans-serif'
-    wrapText(ctx, place.name, x, y - 6, 88, 14)
+    ctx.font = '600 13px Poppins, sans-serif'
+    wrapText(ctx, place.name, x, y - 8, 96, 15)
   })
 
-  if (places.length > 8) {
+  const moreStamped = Math.max(0, stampedCount - target)
+  const moreToFind = places.length - Math.max(stampedCount, target)
+  const more = [moreStamped && `+${moreStamped} more stamped`, moreToFind > 0 && `${moreToFind} more to find`].filter(Boolean)
+  if (more.length) {
     ctx.fillStyle = MUTED
     ctx.textAlign = 'right'
     ctx.font = '700 13px Poppins, sans-serif'
-    ctx.fillText(`+${places.length - 8} more in the Codex`, PAGE_W - 40, PAGE_H - 56)
+    ctx.fillText(more.join(' · '), PAGE_W - 40, PAGE_H - 56)
   }
   pageNumber(ctx, pageNo, left)
 }

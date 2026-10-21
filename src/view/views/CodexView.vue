@@ -1,11 +1,14 @@
 <script setup>
 import { computed, onMounted, ref } from 'vue'
+import { useRoute } from 'vue-router'
 import { catalog, loadCatalog } from '../../model/services/catalog.js'
 import { usePassportStore } from '../../model/stores/passport.js'
 import { AREAS } from '../../model/data/origins.js'
 
-// City Codex: every place by area, shown as stamped, seen or undiscovered
+// City Codex: every place by area, shown as stamped, seen or undiscovered. ?area=X shows one area.
 const passport = usePassportStore()
+const route = useRoute()
+const onlyArea = computed(() => AREAS.find((area) => area.id === route.query.area)?.id || null)
 const filter = ref('all')
 const FILTERS = ['all', 'stamped', 'seen', 'unknown']
 
@@ -24,6 +27,7 @@ const isVisible = (place) => filter.value === 'all' || placeState(place) === fil
 
 const areaGroups = computed(() =>
   AREAS
+    .filter((area) => !onlyArea.value || area.id === onlyArea.value)
     .map((area) => {
       const places = catalog.value.filter((place) => place.area === area.id)
       return { ...area, places, stampedCount: places.filter(isStamped).length }
@@ -31,21 +35,23 @@ const areaGroups = computed(() =>
     .filter((group) => group.places.length > 0)
 )
 
-const total = computed(() => catalog.value.length)
-const stampedTotal = computed(() => catalog.value.filter(isStamped).length)
-const seenTotal = computed(() => catalog.value.filter(isSeen).length)
+const shownPlaces = computed(() => catalog.value.filter((place) => !onlyArea.value || place.area === onlyArea.value))
+const total = computed(() => shownPlaces.value.length)
+const stampedTotal = computed(() => shownPlaces.value.filter(isStamped).length)
+const seenTotal = computed(() => shownPlaces.value.filter(isSeen).length)
 </script>
 
 <template>
   <main class="zt-page">
     <h1 class="title mb-1">City Codex</h1>
-    <p class="text-muted small">Singapore · {{ stampedTotal }} stamped · {{ seenTotal }} seen · {{ total }} total</p>
+    <p class="text-muted small">{{ onlyArea || 'Singapore' }} · {{ stampedTotal }} stamped · {{ seenTotal }} seen · {{ total }} total</p>
     <div class="progress mb-3" style="height: 12px" role="progressbar" :aria-valuenow="stampedTotal" aria-valuemin="0" :aria-valuemax="total">
       <div class="progress-bar bar-stamped" :style="{ width: (stampedTotal / total) * 100 + '%' }"></div>
       <div class="progress-bar bar-seen" :style="{ width: ((seenTotal - stampedTotal) / total) * 100 + '%' }"></div>
     </div>
-    <div class="d-flex gap-2 mb-3">
+    <div class="d-flex flex-wrap gap-2 mb-3">
       <button v-for="f in FILTERS" :key="f" class="zt-chip text-capitalize" :class="{ active: filter === f }" @click="filter = f">{{ f === 'unknown' ? 'undiscovered' : f }}</button>
+      <RouterLink v-if="onlyArea" to="/codex" class="zt-chip active ms-auto">{{ onlyArea }} <i class="bi bi-x-lg"></i></RouterLink>
     </div>
 
     <section v-for="group in areaGroups" :key="group.id" class="mb-3">

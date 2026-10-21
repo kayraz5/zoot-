@@ -3,8 +3,9 @@ import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { PassportBook } from '../gl/passportScene.js'
 import { drawCover, drawIdentity, drawAreaPage, drawBackPage, PAGE_W, PAGE_H } from '../gl/pageArt.js'
 import { AREAS, STYLES } from '../../model/data/origins.js'
-import { catalog, loadCatalog } from '../../model/services/catalog.js'
-import { usePassportStore } from '../../model/stores/passport.js'
+import { catalog, placeById, loadCatalog } from '../../model/services/catalog.js'
+import seedPlaces from '../../model/data/places.sg.json'
+import { usePassportStore, CHOP_TARGET } from '../../model/stores/passport.js'
 import { useUserStore } from '../../model/stores/user.js'
 import { useMissionStore } from '../../model/stores/mission.js'
 import { DEFAULT_COVER } from '../../model/services/brand.js'
@@ -54,17 +55,39 @@ function formatStampDate(iso) {
     .toUpperCase()
 }
 
+// Date of each place's first stamp
 const stampsByPlace = computed(() => {
   const result = {}
-  for (const stamp of passport.stamps) {
-    result[stamp.place_id] = { date: formatStampDate(stamp.stamped_at) }
+  for (const stamps of Object.values(passport.byArea)) {
+    for (const stamp of stamps) result[stamp.place_id] = { date: formatStampDate(stamp.stamped_at) }
   }
   return result
 })
 
+// Unstamped places: hand-picked seed places first (in file order), then ones with a Wikipedia article
+const seedOrder = new Map(seedPlaces.map((place, i) => [place.id, i]))
+const placeRank = (place) => seedOrder.get(place.id) ?? seedPlaces.length + (place.blurb_source === 'wikipedia' ? 0 : 1000)
+
+// An area page's places: stamped ones first (oldest first), then the best-known unstamped ones
+function areaPlaces(areaId) {
+  const stamped = (passport.byArea[areaId] || []).map((stamp) => placeById.value.get(stamp.place_id)).filter(Boolean)
+  const rest = catalog.value
+    .filter((place) => place.area === areaId && !passport.stampedIds.has(place.id))
+    .sort((a, b) => placeRank(a) - placeRank(b) || a.name.localeCompare(b.name))
+  return [...stamped, ...rest]
+}
+
+// Area pages on the open spread, for the "All N places" buttons
+const openAreas = computed(() =>
+  [spread.value * 2 - 1, spread.value * 2]
+    .map((page) => AREAS[page - FIRST_AREA_PAGE])
+    .filter(Boolean)
+    .map((area) => ({ ...area, total: catalog.value.filter((place) => place.area === area.id).length }))
+)
+
 const badges = computed(() => {
-  const isHawker = (placeId) => catalog.value.find((place) => place.id === placeId)?.tags.includes('hawker')
-  const hawkerStamps = passport.stamps.filter((stamp) => isHawker(stamp.place_id)).length
+  const isHawker = (placeId) => placeById.value.get(placeId)?.tags.includes('hawker')
+  const hawkerStamps = [...passport.stampedIds].filter(isHawker).length
   // Any mission ever, so these stay earned after starting a new one
   const allMissions = [...missions.value, mission.mission].filter(Boolean)
 
@@ -74,7 +97,7 @@ const badges = computed(() => {
     { glyph: '🍜', title: 'Hawker Hero', text: 'Stamp 2 hawker centres.', earned: hawkerStamps >= 2 },
     { glyph: '☂', title: 'Rain Dancer', text: 'Survive a rain rewrite.', earned: allMissions.some((m) => (m.replans || 0) > 0) },
     { glyph: '✈', title: 'Back to the Gate', text: 'Finish a quest on time.', earned: allMissions.some((m) => m.completed) },
-    { glyph: '◎', title: 'Codex Explorer', text: 'Discover 20 places.', earned: passport.seen.size >= 20 }
+    { glyph: '◎', title: 'Scout', text: 'Discover 20 places.', earned: passport.seen.size >= 20 }
   ]
 })
 
@@ -95,7 +118,7 @@ function paint(i, ctx) {
       level: user.level.level,
       title: user.title,
       xp: profile.xp || 0,
-      stamps: passport.stamps.length,
+      stamps: passport.stampedIds.size,
       chops: passport.chopCount,
       color: profile.cover_color
     })
@@ -106,8 +129,9 @@ function paint(i, ctx) {
     const waitingForSlam = passport.pendingSlams.includes(area.id)
     return drawAreaPage(ctx, {
       area,
-      places: catalog.value.filter((place) => place.area === area.id),
+      places: areaPlaces(area.id),
       stampsByPlace: stampsByPlace.value,
+      target: CHOP_TARGET,
       pageNo: i,
       left,
       revealed: !waitingForSlam || revealedAreas.has(area.id),
@@ -275,7 +299,7 @@ const stampedAreas = computed(() =>
     <div class="d-flex justify-content-between align-items-end mb-2">
       <div>
         <h1 class="title mb-0">Passport</h1>
-        <p class="text-muted small mb-0">{{ passport.stamps.length }} {{ passport.stamps.length === 1 ? 'stamp' : 'stamps' }} · {{ passport.chopCount }} area {{ passport.chopCount === 1 ? 'chop' : 'chops' }}</p>
+        <p class="text-muted small mb-0">{{ passport.stampedIds.size }} {{ passport.stampedIds.size === 1 ? 'place' : 'places' }} stamped · {{ passport.chopCount }} area {{ passport.chopCount === 1 ? 'chop' : 'chops' }}</p>
       </div>
       <button class="btn btn-soft btn-sm" @click="savePage"><i class="bi bi-download"></i> Save page</button>
     </div>
@@ -283,8 +307,8 @@ const stampedAreas = computed(() =>
     <div class="stage" :class="{ busy }">
       <canvas v-if="!failed" ref="canvas" @pointerdown="onPointerDown" @pointerup="onPointerUp" aria-label="3D passport. Tap right side for next page, left for previous." role="img"></canvas>
       <div v-else class="fallback p-3">
-        <p class="small text-muted">3D is unavailable on this device. Your chops:</p>
-        <div v-for="area in stampedAreas" :key="area.id" class="zt-pill me-1 mb-1" :style="{ color: area.ink }">{{ area.glyph }} {{ area.id }} ×{{ area.count }}</div>
+        <p class="small text-muted">3D is unavailable on this device. Places stamped per area ({{ CHOP_TARGET }} earns the chop):</p>
+        <div v-for="area in stampedAreas" :key="area.id" class="zt-pill me-1 mb-1" :style="{ color: area.ink }">{{ area.glyph }} {{ area.id }} {{ Math.min(area.count, CHOP_TARGET) }}/{{ CHOP_TARGET }}<template v-if="area.count >= CHOP_TARGET"> ✓</template></div>
         <p v-if="!stampedAreas.length" class="small">No stamps yet.</p>
       </div>
     </div>
@@ -293,6 +317,11 @@ const stampedAreas = computed(() =>
       <button class="btn btn-soft" :disabled="busy || spread === 0" @click="flipTo(spread - 1)" aria-label="Previous page"><i class="bi bi-chevron-left"></i></button>
       <span class="small fw-800 mono">{{ spread === 0 ? 'Cover' : `Spread ${spread} / ${spreadCount}` }}</span>
       <button class="btn btn-soft" :disabled="busy || spread >= spreadCount" @click="flipTo(spread + 1)" aria-label="Next page"><i class="bi bi-chevron-right"></i></button>
+    </div>
+    <div v-if="!failed && openAreas.length" class="d-flex flex-wrap justify-content-center gap-2 mt-2">
+      <RouterLink v-for="a in openAreas" :key="a.id" :to="{ path: '/codex', query: { area: a.id } }" class="btn btn-soft btn-sm">
+        <span :style="{ color: a.ink }">{{ a.glyph }}</span> All {{ a.total }} {{ a.id }} places
+      </RouterLink>
     </div>
 
     <div class="zt-section-title"><i class="bi bi-bookmark-star"></i> Jump to a page</div>
@@ -303,7 +332,7 @@ const stampedAreas = computed(() =>
       </button>
     </div>
     <p v-if="!passport.stamps.length" class="small text-muted mt-3">
-      No chops yet. Walk into a stop’s ring on the <RouterLink to="/map">map</RouterLink> and tap Stamp.
+      No stamps yet. Walk into a stop’s ring on the <RouterLink to="/map">map</RouterLink> and tap Stamp. Stamp {{ CHOP_TARGET }} places in an area to earn its chop.
     </p>
   </main>
 </template>
