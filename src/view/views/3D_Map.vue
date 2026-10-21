@@ -15,7 +15,7 @@ import { PinLayer } from '../gl/pinPoint.js'
 const ORS_API_KEY = "eyJvcmciOiI1YjNjZTM1OTc4NTExMTAwMDFjZjYyNDgiLCJpZCI6IjdiZWU2YWY0OGY3NDQ4NjA5MGJiNjUwZTVkZjg5NTAwIiwiaCI6Im11cm11cjY0In0="
 const el = ref(null)
 let map = null
-let markers = []
+let placeMarkers = []
 const weather_data = ref(null)
 const MapStyle = ref(false)
 const speed = ref(20)
@@ -553,7 +553,7 @@ onMounted(() => {
 
   
   onUnmounted(() => {
-  markers.forEach(removePlaceMarker)
+  placeMarkers.forEach(removePlaceMarker)
   map?.remove()
 })
 
