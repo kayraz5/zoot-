@@ -3,7 +3,7 @@ import { joinableRange, previewJoin, withTravel } from '../model/services/social
 import { restoreOnLeave } from '../model/services/joinResolver.js'
 import { retimeMission } from '../model/services/planner.js'
 
-const at = (hhmm) => `2026-10-21T${hhmm}:00+08:00`
+const at = (hhmm) => `2030-01-15T${hhmm}:00+08:00` // a future day: stopsFit ignores plans whose airport time has passed
 const T = (hhmm) => Date.parse(at(hhmm))
 // Chinatown-ish coordinates so travel() gives short walks.
 const pt = { lat: 1.2805, lng: 103.8448 }

@@ -14,9 +14,27 @@ export const usePartyStore = defineStore('party', {
     questStatus: { loading: false, error: null, guest: false },
     hosted: null, // my open window for the active mission (+ roster), or null
     hostedFor: null, // mission id `hosted` was loaded for
-    demoIds: new Set()
+    demoIds: new Set(),
+    dialog: null // centred prompt (CenterDialog.vue): { title, body, icon, confirmText, cancelText, tone, resolve }
   }),
   actions: {
+    /** Centred prompt that blurs the page. Resolves true (confirm) or false (cancel). */
+    ask({ title, body = '', icon = 'bi-people-fill', confirmText = 'OK', cancelText = 'Cancel', tone = 'primary' }) {
+      this.dialog?.resolve(false)
+      return new Promise((resolve) => {
+        this.dialog = { title, body, icon, confirmText, cancelText, tone, resolve }
+      })
+    },
+    /** Same, with a single acknowledge button. */
+    notice({ confirmText = 'Got it', ...opts }) {
+      return this.ask({ ...opts, confirmText, cancelText: null })
+    },
+    answer(value) {
+      const d = this.dialog
+      this.dialog = null
+      d?.resolve(value)
+    },
+
     async run(statusKey, fn) {
       const status = this[statusKey]
       status.loading = true
@@ -60,8 +78,8 @@ export const usePartyStore = defineStore('party', {
     },
 
     // Mutations throw so the calling button can toast the database's own message.
-    async publish({ mission, stops, capacity, note }) {
-      await social.publishWindow({ mission, stops, capacity, note })
+    async publish({ mission, stops, capacity, note, title }) {
+      await social.publishWindow({ mission, stops, capacity, note, title })
       await this.loadHosted(mission)
       this.loadOpen()
       return this.hosted

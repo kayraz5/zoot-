@@ -239,6 +239,12 @@ a { text-underline-offset: 3px; }
   background-image: repeating-conic-gradient(from 0deg at 50% 62%, rgba(255, 255, 255, 0.34) 0deg 9deg, rgba(255, 255, 255, 0) 9deg 18deg);
 }
 
+/* Live location of other quest members on the map (view/map/memberMarkers.js) */
+.zt-member-marker { display: flex; flex-direction: column; align-items: center; gap: 2px; pointer-events: auto; }
+.zt-member-marker .face { width: 34px; height: 34px; border-radius: 32%; display: grid; place-items: center; font-family: var(--zt-font-head); font-weight: 700; font-size: 1rem; border: 3px solid #111; box-shadow: 0 3px 0 #111; }
+.zt-member-marker .name { font-size: 0.7rem; font-weight: 800; padding: 1px 6px; border-radius: 99px; background: #111; color: #ffcc00; white-space: nowrap; }
+.zt-member-marker.stale { opacity: 0.5; filter: grayscale(0.6); }
+
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation-duration: 0.01ms !important; animation-iteration-count: 1 !important; transition-duration: 0.01ms !important; }
 }

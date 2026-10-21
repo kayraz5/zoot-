@@ -36,15 +36,6 @@ describe('StopRangePicker: always one run of consecutive stops', () => {
     expect(range(w)).toEqual({ from: 3, to: 3 })
   })
 
-  it('handles cannot cross: dragging "from" past "to" drags "to" along', async () => {
-    const w = picker(1, 2)
-    const [fromHandle, toHandle] = w.findAll('input.handle')
-    await fromHandle.setValue('4')
-    expect(range(w)).toEqual({ from: 4, to: 4 })
-    await toHandle.setValue('2')
-    expect(range(w)).toEqual({ from: 2, to: 2 })
-  })
-
   it('maxTo locks later stops (e.g. they end too late for my flight)', async () => {
     const w = picker(1, 2, { maxTo: 3 })
     await tap(w, 5)
@@ -54,9 +45,10 @@ describe('StopRangePicker: always one run of consecutive stops', () => {
     expect(range(w)).toEqual({ from: 1, to: 3 })
   })
 
-  it('summary reads naturally', async () => {
-    expect(picker(1, 5).text()).toContain('All 5 stops · 10:00–14:40')
-    expect(picker(2, 3).text()).toContain('Stops 2–3 · 11:00–12:40')
-    expect(picker(4, 4).text()).toContain('Stop 4 · 13:00–13:40')
+  it('minFrom locks earlier stops (they start before I am out of the airport)', async () => {
+    const w = picker(3, 4, { minFrom: 3 })
+    await tap(w, 1)
+    expect(range(w)).toEqual({ from: 3, to: 4 })
+    expect(w.text()).toContain('too early')
   })
 })

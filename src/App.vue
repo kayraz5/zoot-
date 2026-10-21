@@ -8,6 +8,7 @@ import RainOverlay from './view/components/RainOverlay.vue'
 import { useUserStore } from './model/stores/user.js'
 import { usePassportStore } from './model/stores/passport.js'
 import SkyEffects from './view/components/SkyEffects.vue'
+import CenterDialog from './view/components/CenterDialog.vue'
 
 const route = useRoute()
 const user = useUserStore()
@@ -26,4 +27,5 @@ watch(() => user.userId, (id) => passport.load(id), { immediate: true })
   <RainOverlay />  
   <ToastHost />
   <StampCelebration />
+  <CenterDialog />
 </template>

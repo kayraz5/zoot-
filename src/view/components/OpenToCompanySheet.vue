@@ -3,7 +3,8 @@ import { computed, ref, watch } from 'vue'
 import { RouterLink } from 'vue-router'
 import { usePartyStore } from '../../model/stores/party.js'
 import { useUiStore } from '../../model/stores/ui.js'
-import { openableStops, GuestModeError } from '../../model/services/social.js'
+import { useUserStore } from '../../model/stores/user.js'
+import { openableStops, GuestModeError, defaultQuestTitle } from '../../model/services/social.js'
 import { formatTime } from '../../model/services/hours.js'
 import { DEV_PANEL } from '../../model/services/config.js'
 import StopRangePicker from './StopRangePicker.vue'
@@ -17,6 +18,7 @@ const props = defineProps({ mission: { type: Object, required: true }, open: { t
 const emit = defineEmits(['close'])
 const party = usePartyStore()
 const ui = useUiStore()
+const user = useUserStore()
 
 const loading = ref(false)
 const error = ref(null)
@@ -25,6 +27,8 @@ const busy = ref(false)
 const range = ref({ from: 1, to: 1 })
 const capacity = ref(4)
 const note = ref('')
+const title = ref('')
+const titleFallback = computed(() => defaultQuestTitle(user.profile?.display_name))
 
 const stops = computed(() => openableStops(props.mission))
 const picked = computed(() => stops.value.slice(range.value.from - 1, range.value.to))
@@ -58,7 +62,7 @@ async function act(fn, okMsg) {
     busy.value = false
   }
 }
-const publish = () => act(() => party.publish({ mission: props.mission, stops: picked.value, capacity: capacity.value, note: note.value }),
+const publish = () => act(() => party.publish({ mission: props.mission, stops: picked.value, capacity: capacity.value, note: note.value, title: title.value.trim() || titleFallback.value }),
   'Open to company! Travellers can now join these stops.')
 function closeWindow() {
   const who = guests.value.length ? ` ${guests.value.map((g) => g.display_name).join(', ')} will go back to their own plan.` : ''
@@ -125,6 +129,9 @@ const rangeOf = (m) => (m.from_seq === m.to_seq ? `stop ${m.from_seq}` : `stops 
             No upcoming stops to open (they need to start at least 15 min from now). Add a stop to your mission first.
           </div>
           <template v-else>
+            <label class="form-label small fw-800 mb-1" for="otc-title">Name your quest</label>
+            <input id="otc-title" v-model="title" class="form-control mb-3" maxlength="60" :placeholder="titleFallback" autocomplete="off" />
+
             <label class="form-label small fw-800 mb-1">Which stops can people join?</label>
             <StopRangePicker v-model="range" :stops="stops" inside-label="Open" outside-label="Private" class="mb-2" />
             <p class="tiny text-muted mb-3">

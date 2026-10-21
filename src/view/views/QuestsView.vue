@@ -93,9 +93,8 @@ const visible = computed(() => rows.value
 </template>
 
 <style scoped>
-.filters { display: flex; gap: 8px; overflow-x: auto; padding: 0 16px 4px; margin: 0 -16px; scrollbar-width: none; }
-.filters::-webkit-scrollbar { display: none; }
-.filters .zt-chip { flex: none; white-space: nowrap; }
+.filters { display: flex; flex-wrap: wrap; gap: 8px; }
+.filters .zt-chip { white-space: nowrap; }
 .skeleton { height: 150px; background: linear-gradient(100deg, var(--zt-card) 30%, var(--zt-yellow-pale) 50%, var(--zt-card) 70%); background-size: 300% 100%; animation: shimmer 1.2s linear infinite; }
 @keyframes shimmer { from { background-position: 100% 0; } to { background-position: 0 0; } }
 </style>

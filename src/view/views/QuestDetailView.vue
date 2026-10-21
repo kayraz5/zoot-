@@ -5,7 +5,7 @@ import { usePartyStore } from '../../model/stores/party.js'
 import { useMissionStore } from '../../model/stores/mission.js'
 import { useUserStore } from '../../model/stores/user.js'
 import { useUiStore } from '../../model/stores/ui.js'
-import { stopsFit, joinableRange, previewJoin } from '../../model/services/social.js'
+import { stopsFit, joinableRange, previewJoin, defaultQuestTitle } from '../../model/services/social.js'
 import { formatTime } from '../../model/services/hours.js'
 import { DEV_PANEL } from '../../model/services/config.js'
 import { STYLES } from '../../model/data/origins.js'
@@ -97,18 +97,21 @@ async function join() {
     busy.value = false
   }
 }
-function leave() {
-  if (!confirm('Leave this quest? Your stops with the group are removed and your own stops come back if they still fit.')) return
+async function leave() {
+  const ok = await party.ask({
+    title: 'Go solo?', icon: 'bi-person-walking', confirmText: 'Go solo', cancelText: 'Stay',
+    body: `You'll leave ${host.value?.display_name || 'the host'}'s quest and carry on with your own plan.`
+  })
+  if (!ok) return
   act(async () => {
-    const { restored } = await mission.leaveQuest(q.value.id)
+    await mission.leaveQuest(q.value.id)
     await party.loadQuest(q.value.id)
-    return restored
-  }, (restored) => `You're solo again.${restored.length ? ` Back in your plan: ${restored.map((l) => l.name).join(', ')}.` : ''}`)
+  })
 }
 </script>
 
 <template>
-  <main class="zt-page pb-5">
+  <main class="zt-page">
     <button type="button" class="btn btn-link btn-sm px-0 mb-2" @click="router.back()"><i class="bi bi-arrow-left"></i> Back</button>
 
     <div v-if="party.questStatus.loading && !q" class="text-center py-5"><div class="spinner-border text-primary" role="status"><span class="visually-hidden">Loading…</span></div></div>
@@ -130,7 +133,7 @@ function leave() {
             <i class="bi" :class="fit.ok ? 'bi-check-circle-fill' : 'bi-airplane'"></i> {{ fit.reason }}
           </span>
         </div>
-        <h1 class="title mb-1">{{ q.title }}</h1>
+        <h1 class="title mb-1">{{ q.title?.trim() || defaultQuestTitle(host?.display_name) }}</h1>
         <p class="small text-muted mb-0">With <b>{{ host?.display_name || 'a traveller' }}</b> · {{ formatTime(q.starts_at) }}–{{ formatTime(q.ends_at) }}</p>
       </header>
 
@@ -190,7 +193,7 @@ function leave() {
           <p class="small text-muted mb-2">They're in your plan at fixed times. Meet at {{ q.stops[q.mine.from_seq - 1]?.name }}, {{ formatTime(q.stops[q.mine.from_seq - 1]?.arrive_iso) }}.</p>
           <div class="d-flex gap-2">
             <RouterLink to="/mission" class="btn btn-soft flex-grow-1"><i class="bi bi-list-ol"></i> My plan</RouterLink>
-            <button class="btn btn-outline-danger" :disabled="busy" @click="leave"><i class="bi bi-box-arrow-right"></i> Leave</button>
+            <button class="btn btn-outline-danger" :disabled="busy" @click="leave"><i class="bi bi-box-arrow-right"></i> Go solo</button>
           </div>
         </template>
         <template v-else-if="!hasPlan">
@@ -238,7 +241,7 @@ function leave() {
 .stops li { display: flex; gap: 10px; align-items: flex-start; }
 .stops .dot { width: 28px; height: 28px; border-radius: 50%; display: grid; place-items: center; background: var(--zt-yellow); color: #111; border: 2px solid #111; font-weight: 800; font-size: 0.8rem; flex: none; }
 .min-w-0 { min-width: 0; }
-.action { position: sticky; bottom: calc(var(--zt-nav-h) + 20px); z-index: 5; box-shadow: var(--zt-shadow); }
+.action { box-shadow: var(--zt-shadow); }
 .fit-ok { background: #5fd38d; color: #111; }
 .fit-no { background: var(--zt-card); color: var(--zt-muted); }
 </style>
