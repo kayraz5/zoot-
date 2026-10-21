@@ -1,8 +1,13 @@
 <script setup>
 import { ref, computed, onMounted, onUnmounted, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { Map as MapLibreMap } from 'maplibre-gl'
+import { Map as MapLibreMap, setWorkerUrl } from 'maplibre-gl'
 import 'maplibre-gl/dist/maplibre-gl.css'
+// MapLibre resolves its worker next to its own module, which Vite never copies into the build.
+// Importing it with ?url makes Vite emit it as an asset and gives us the real URL.
+import maplibreWorkerUrl from 'maplibre-gl/dist/maplibre-gl-worker.mjs?url'
+
+setWorkerUrl(maplibreWorkerUrl)
 import axios from 'axios'
 import destination from '@turf/destination'
 import { point } from '@turf/helpers'
