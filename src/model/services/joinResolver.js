@@ -112,7 +112,7 @@ function refuse(reason, extra = {}) {
 
 /**
  * Rule 7: leaving a window ("Go solo", the window ending, or the host changing my stops).
- * Drops that party's fixed blocks, then brings back each removed own stop only if:
+ * Drops that party's fixed blocks (except stamped ones), then brings back each removed own stop only if:
  *   - it hasn't started yet (nowMs),
  *   - it doesn't overlap anything still in the plan,
  *   - it's at least 15 min from any remaining fixed block, and starts 15+ min after now
@@ -120,7 +120,8 @@ function refuse(reason, extra = {}) {
  * @returns {{ legs: object[], restored: object[], dropped: { leg: object, why: string }[] }}
  */
 export function restoreOnLeave({ legs, removed, partyId, nowMs }) {
-  let plan = legs.filter((l) => !(l.fixed && l.party_id === partyId))
+  // Stops already stamped with the group stay (they happened); the rest of the group's blocks go.
+  let plan = legs.filter((l) => !(l.fixed && l.party_id === partyId && l.status !== 'stamped'))
   const restored = []
   const dropped = []
   const candidates = [...(removed || [])].map((r) => r.leg || r).sort((a, b) => ms(a.arrive_iso) - ms(b.arrive_iso))

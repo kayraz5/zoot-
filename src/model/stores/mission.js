@@ -12,6 +12,8 @@ import { useUiStore } from './ui.js'
 import { useUserStore } from './user.js'
 import { usePassportStore } from './passport.js'
 import { usePartyStore } from './party.js'
+import { previewJoin, withTravel, joinWindow, leaveWindow, getQuest, GuestModeError } from '../services/social.js'
+import { restoreOnLeave } from '../services/joinResolver.js'
 
 const ACTIVE_KEY = 'zoot.activeMission'
 const SIDEQUEST_RADIUS_M = 400
@@ -127,6 +129,11 @@ export const useMissionStore = defineStore('mission', {
     async replan(mode) {
       const m = this.mission
       if (!m) return
+      const joined = upcomingJoined(m.legs)
+      if (joined) {
+        useUiStore().toast(`A rewrite would drop your stops with ${joined.with_host}. Leave that quest first.`, 'warning', 5000)
+        return false
+      }
       await loadCatalog()
       const exclude = new Set(m.legs.filter((l) => l.kind === 'visit' && l.status !== 'pending').map((l) => l.place_id))
       const prefs = { ...m.prefs }
@@ -205,6 +212,7 @@ export const useMissionStore = defineStore('mission', {
 
     swapStop(leg, place) {
       return this.editLegs((legs, m) => {
+        if (leg.fixed) return lockedMessage(leg)
         if (legs.some((l) => l.place_id === place.id)) return `${place.name} is already in this mission.`
         const i = indexOfStop(legs, leg.place_id)
         if (i < 0) return STALE
@@ -214,6 +222,7 @@ export const useMissionStore = defineStore('mission', {
 
     removeStop(leg) {
       return this.editLegs((legs) => {
+        if (leg.fixed) return lockedMessage(leg)
         const i = indexOfStop(legs, leg.place_id)
         if (i < 0) return STALE
         if (legs.filter((l) => l.kind === 'visit').length <= 1) return 'A mission needs at least one stop. Swap it instead.'
@@ -224,6 +233,7 @@ export const useMissionStore = defineStore('mission', {
     /** Move a pending stop one place earlier (-1) or later (+1) among the pending stops. */
     moveStop(leg, dir) {
       return this.editLegs((legs) => {
+        if (leg.fixed) return lockedMessage(leg)
         const pending = legs.filter((l) => l.kind === 'visit' && l.status === 'pending')
         const i = pending.findIndex((l) => l.place_id === leg.place_id)
         if (i < 0) return STALE
@@ -239,6 +249,7 @@ export const useMissionStore = defineStore('mission', {
       return this.editLegs((legs) => {
         const l = legs[indexOfStop(legs, leg.place_id)]
         if (!l) return STALE
+        if (l.fixed) return lockedMessage(l)
         const next = Math.min(240, Math.max(10, l.stay_min + deltaMin))
         if (next === l.stay_min) return null
         l.stay_min = next
@@ -302,6 +313,80 @@ export const useMissionStore = defineStore('mission', {
       useUiStore().celebrate({ returned: true, onTime, xp: onTime ? ret.xp : 0 })
     },
 
+    // ── Social quests: joining part of someone's open window (docs/social-quests-spec.md) ──
+
+    /**
+     * Join stops from..to of a quest. Server first (capacity, range, airport time), then my plan
+     * changes exactly as previewJoin showed: joined stops become fixed blocks, overlapping or too-close
+     * own stops are removed (and remembered, to bring back if I leave). Nothing else moves.
+     * Throws with a message for the confirm sheet.
+     */
+    async joinQuest(quest, from, to) {
+      const m = this.mission
+      if (!m) throw new Error('Plan your layover first.')
+      const other = upcomingJoined(m.legs)
+      if (other && other.party_id !== quest.id) throw new Error(`You're already with ${other.with_host}. Leave that quest first.`)
+      const res = previewJoin(quest, from, to, m)
+      if (!res.ok) throw new Error(res.reason)
+      await joinWindow({ quest, from, to, mission: m })
+      const next = JSON.parse(JSON.stringify(m))
+      next.legs = withTravel(res.legs, m)
+      next.joined = {
+        ...(m.joined || {}),
+        [quest.id]: { title: quest.title, host_name: res.hostName, from, to, removed: res.removed.map((r) => ({ ...r.leg, removed_why: r.why })) }
+      }
+      setTotals(next)
+      try {
+        await this.persist(next)
+      } catch (err) {
+        // Saving my plan failed: undo the join so the server and my plan agree.
+        await leaveWindow(quest.id).catch(() => {})
+        throw err
+      }
+      return res
+    },
+
+    /**
+     * Leave a quest ("Go solo", or the host changed/closed it): drop its fixed blocks and bring back
+     * removed own stops that still pass the overlap and gap checks. `server: false` when the
+     * database already removed me. Returns { restored, dropped }.
+     */
+    async leaveQuest(partyId, { server = true } = {}) {
+      const m = this.mission
+      if (!m) return { restored: [], dropped: [] }
+      if (server) await leaveWindow(partyId)
+      const info = m.joined?.[partyId]
+      const res = restoreOnLeave({ legs: m.legs, removed: info?.removed || [], partyId, nowMs: now() })
+      const next = JSON.parse(JSON.stringify(m))
+      next.legs = withTravel(res.legs, m)
+      next.joined = { ...(m.joined || {}) }
+      delete next.joined[partyId]
+      setTotals(next)
+      await this.persist(next)
+      return res
+    },
+
+    /**
+     * Am I still in the quests my plan says I joined? The host can close the quest or change my
+     * stops (update_window removes me). If not, go back to my own plan and say why.
+     */
+    async checkJoined() {
+      const ids = Object.keys(this.mission?.joined || {})
+      for (const id of ids) {
+        let q
+        try { q = await getQuest(id) } catch (err) {
+          if (err instanceof GuestModeError) return
+          continue // offline: check again next time
+        }
+        if (q && q.mine && q.status !== 'closed') continue
+        const host = this.mission.joined[id].host_name
+        const { restored } = await this.leaveQuest(id, { server: false })
+        useUiStore().toast(
+          `${host} changed their plan, so you're back on your own.${restored.length ? ` ${restored.map((l) => l.name).join(', ')} ${restored.length === 1 ? 'is' : 'are'} back.` : ''}`,
+          'warning', 6000)
+      }
+    },
+
     slack() {
       if (!this.mission) return null
       return slackMinutes(this.mission, this.here(), now(), placeById.value)
@@ -339,6 +424,11 @@ export const useMissionStore = defineStore('mission', {
     /** Insert an accepted sidequest before the next leg and re-time the future. */
     async acceptSidequest(sq) {
       const m = this.mission
+      const joined = upcomingJoined(m.legs)
+      if (joined) {
+        useUiStore().toast(`Sidequests are paused while you have stops with ${joined.with_host}: they'd push your meet-up later.`, 'warning', 5000)
+        return
+      }
       const next = this.nextLeg
       const place = placeById.value.get(sq.place_id)
       const opts = { maxWalk: m.prefs?.maxWalk, style: m.style }
@@ -364,6 +454,20 @@ export const useMissionStore = defineStore('mission', {
 })
 
 const STALE = 'That stop has changed. Refresh and try again.'
+
+/** A joined stop (fixed time, with someone) still ahead of me, if any. */
+function upcomingJoined(legs) {
+  return legs.find((l) => l.fixed && l.status === 'pending') || null
+}
+function lockedMessage(leg) {
+  return `${leg.name} is with ${leg.with_host} at a fixed time. Leave the quest to change it.`
+}
+/** Keep the summary numbers in step after a join/leave changed which stops are in the plan. */
+function setTotals(m) {
+  const home = Date.parse(m.legs.find((l) => l.kind === 'return').arrive_iso)
+  m.total_out_min = Math.round((home - Date.parse(m.start_iso)) / 60000) - m.buffers.exit_min
+  m.buffer_min = Math.round((Date.parse(m.must_return_iso) - home) / 60000)
+}
 
 /** Index of a pending visit leg by place id, or -1. Never matches the return leg. */
 function indexOfStop(legs, placeId) {

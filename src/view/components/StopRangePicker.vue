@@ -12,6 +12,7 @@ import { formatTime } from '../../model/services/hours.js'
 const props = defineProps({
   stops: { type: Array, required: true }, // [{ name, area?, arrive_iso, depart_iso }]
   modelValue: { type: Object, required: true },
+  minFrom: { type: Number, default: null }, // first position that may be picked (earlier ones start before I'm out)
   maxTo: { type: Number, default: null }, // last position that may be picked (e.g. later ones end too late)
   insideLabel: { type: String, default: '' },
   outsideLabel: { type: String, default: '' }
@@ -19,12 +20,14 @@ const props = defineProps({
 const emit = defineEmits(['update:modelValue'])
 
 const n = computed(() => props.stops.length)
+const low = computed(() => Math.max(1, props.minFrom ?? 1))
 const limit = computed(() => Math.min(n.value, props.maxTo ?? n.value))
+const locked = (i) => i < low.value || i > limit.value
 const from = computed(() => props.modelValue.from)
 const to = computed(() => props.modelValue.to)
 
 function set(f, t) {
-  f = Math.max(1, Math.min(f, limit.value))
+  f = Math.max(low.value, Math.min(f, limit.value))
   t = Math.max(f, Math.min(t, limit.value))
   emit('update:modelValue', { from: f, to: t })
 }
@@ -39,7 +42,7 @@ function onTo(e) {
 }
 /** Tap outside the range to extend it; tap an end to shrink it; tap the middle to keep just that stop. */
 function tap(i) {
-  if (i > limit.value) return
+  if (locked(i)) return
   if (i < from.value) return set(i, to.value)
   if (i > to.value) return set(from.value, i)
   if (from.value === to.value) return
@@ -62,14 +65,14 @@ const summary = computed(() => {
   <div class="srp">
     <div class="d-flex justify-content-between align-items-center mb-2 gap-2">
       <b class="small">{{ summary }}</b>
-      <button v-if="from !== 1 || to !== limit" type="button" class="btn btn-link btn-sm p-0 text-nowrap" @click="set(1, limit)">
-        {{ limit === n ? 'All stops' : 'All that fit' }}
+      <button v-if="from !== low || to !== limit" type="button" class="btn btn-link btn-sm p-0 text-nowrap" @click="set(low, limit)">
+        {{ low === 1 && limit === n ? 'All stops' : 'All that fit' }}
       </button>
     </div>
 
     <!-- Two handles on one track (hidden when there's only one stop). -->
-    <div v-if="n > 1" class="track-wrap" :style="{ '--a': pct(from) + '%', '--b': pct(to) + '%', '--lim': pct(limit) + '%' }">
-      <div class="track"><div class="fill"></div><div v-if="limit < n" class="blocked"></div></div>
+    <div v-if="n > 1" class="track-wrap" :style="{ '--a': pct(from) + '%', '--b': pct(to) + '%', '--lim': pct(limit) + '%', '--low': pct(low) + '%' }">
+      <div class="track"><div class="fill"></div><div v-if="low > 1" class="blocked early"></div><div v-if="limit < n" class="blocked"></div></div>
       <span v-for="i in n" :key="i" class="tick" :class="{ on: i >= from && i <= to }" :style="{ left: pct(i) + '%' }"></span>
       <input type="range" class="handle" min="1" :max="n" step="1" :value="from" @input="onFrom" aria-label="From stop"
         :aria-valuetext="`From stop ${from}: ${stops[from - 1]?.name}`" />
@@ -79,8 +82,8 @@ const summary = computed(() => {
 
     <ol class="stop-list">
       <li v-for="(s, idx) in stops" :key="s.place_id || idx">
-        <button type="button" class="stop" :class="{ in: idx + 1 >= from && idx + 1 <= to, locked: idx + 1 > limit }"
-          :aria-pressed="idx + 1 >= from && idx + 1 <= to" :disabled="idx + 1 > limit" @click="tap(idx + 1)">
+        <button type="button" class="stop" :class="{ in: idx + 1 >= from && idx + 1 <= to, locked: locked(idx + 1) }"
+          :aria-pressed="idx + 1 >= from && idx + 1 <= to" :disabled="locked(idx + 1)" @click="tap(idx + 1)">
           <span class="num">{{ idx + 1 }}</span>
           <span class="flex-grow-1 text-start min-w-0">
             <span class="d-block fw-800 text-truncate">{{ s.name }}</span>
@@ -88,6 +91,7 @@ const summary = computed(() => {
           </span>
           <span class="tag tiny">
             <template v-if="idx + 1 > limit"><i class="bi bi-airplane"></i> too late</template>
+            <template v-else-if="idx + 1 < low"><i class="bi bi-clock"></i> too early</template>
             <template v-else-if="idx + 1 >= from && idx + 1 <= to">{{ insideLabel }}</template>
             <template v-else>{{ outsideLabel }}</template>
           </span>
@@ -102,6 +106,7 @@ const summary = computed(() => {
 .track { position: absolute; left: 0; right: 0; top: 15px; height: 6px; border-radius: 99px; background: var(--zt-soft-line); }
 .fill { position: absolute; top: 0; bottom: 0; left: var(--a); right: calc(100% - var(--b)); background: var(--zt-pink); border-radius: 99px; }
 .blocked { position: absolute; top: 0; bottom: 0; left: var(--lim); right: 0; background: repeating-linear-gradient(45deg, transparent 0 4px, var(--zt-muted) 4px 6px); opacity: 0.5; }
+.blocked.early { left: 0; right: calc(100% - var(--low)); }
 .tick { position: absolute; top: 13px; width: 10px; height: 10px; margin-left: -5px; border-radius: 50%; background: var(--zt-card); border: 2px solid var(--zt-muted); pointer-events: none; }
 .tick.on { background: var(--zt-pink); border-color: var(--zt-line); }
 /* Two native range inputs stacked; only their thumbs take pointer events, so both are draggable. */
