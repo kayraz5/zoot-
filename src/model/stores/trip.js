@@ -25,11 +25,23 @@ export const useTripStore = defineStore('trip', {
 			this.draft.hours = h
 			this.draft.mustReturnLocal = toSgLocalInput(roundTo5(this.startMs + h * 3600e3))
 		},
-		/** Switch between leaving now and a later start; the layover length is kept. */
+		/** Flight (gate) time picked first; it becomes the must-return time. */
+		setFlight(local) {
+			this.draft.mustReturnLocal = local
+			this.draft.flightSet = true
+			return this.syncHoursFromReturn()
+		},
+		/** Switch between leaving now and a later start. The flight time stays put once it is set. */
 		setStart(startNow, startLocal = this.draft.startLocal) {
 			this.draft.startNow = startNow
 			this.draft.startLocal = startLocal
-			this.setHours(this.draft.hours)
+			if (this.draft.flightSet) this.syncHoursFromReturn()
+			else this.setHours(this.draft.hours)
+		},
+		/** Interests shown as pre-picked until the traveller changes them. */
+		setInterests(ids, { touched = true } = {}) {
+			this.draft.interests = [...new Set(ids)]
+			if (touched) this.draft.interestsTouched = true
 		},
 		/** Typed return time → hours. Returns false when it was over the layover cap and got clamped. */
 		syncHoursFromReturn() {
@@ -56,6 +68,7 @@ export const useTripStore = defineStore('trip', {
 				indoorPref: d.indoorPref,
 				maxWalk: d.maxWalk,
 				partySize: d.partySize,
+				foodNeeds: d.foodNeeds,
 				cleared: d.cleared
 			})
 			return this.current
@@ -74,11 +87,14 @@ function defaultDraft() {
 		startLocal: toSgLocalInput(roundTo5(now() + 3600e3)),
 		hours: 8,
 		mustReturnLocal: toSgLocalInput(roundTo5(now() + 8 * 3600e3)),
+		flightSet: false, // the plan page asks for the flight time first
 		interests: ['hawker', 'gardens', 'photo'],
+		interestsTouched: false,
 		energy: 'med',
 		indoorPref: 'any',
-		maxWalk: 18,
+		maxWalk: 15,
 		partySize: 1,
+		foodNeeds: 'none', // none | halal | vegetarian | vegan
 		cleared: false
 	}
 }

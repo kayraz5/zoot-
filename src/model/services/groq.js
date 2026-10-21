@@ -54,7 +54,8 @@ function buildPlanRequest(ctx, slice, budget, startMs) {
 			interests: ctx.interests,
 			indoor_pref: ctx.indoorPref,
 			max_walk_min_per_leg: ctx.maxWalk,
-			party_size: ctx.partySize
+			party_size: ctx.partySize,
+			food_needs: ctx.foodNeeds || 'none'
 		},
 		leftover_min: Math.round((budget.arriveByMs - startMs) / MS_PER_MINUTE),
 		rain_risk: Boolean(ctx.forceRain || ctx.forceIndoor || (ctx.cityRisk?.severity ?? 0) >= RAIN_SEVERITY_THRESHOLD),

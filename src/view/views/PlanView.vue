@@ -1,19 +1,22 @@
 <script setup>
-import { computed, onMounted, ref } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { useTripStore, MAX_LAYOVER_H } from '../../model/stores/trip.js'
 import { useMissionStore } from '../../model/stores/mission.js'
 import { useUserStore } from '../../model/stores/user.js'
 import { useUiStore } from '../../model/stores/ui.js'
-import { ORIGINS, INTERESTS, STYLES } from '../../model/data/origins.js'
+import { ORIGINS, STYLES } from '../../model/data/origins.js'
 import { computeBudget } from '../../model/services/planner.js'
-import { formatDuration, formatTime, toSgLocalInput } from '../../model/services/hours.js'
+import { formatTime, toSgLocalInput, fromSgLocalInput } from '../../model/services/hours.js'
+import { distanceM } from '../../model/services/travel.js'
 import { now, tick } from '../../model/services/clock.js'
 import BufferBar from '../components/BufferBar.vue'
-import WeatherChip from '../components/WeatherChip.vue'
-import AdvisoryChips from '../components/AdvisoryChips.vue'
 
-/** Clock form (Kayra: itinerary engine, lib/planner.js). */
+/**
+ * Plan a layover, flight time first (Kayra: itinerary engine, planner.js).
+ * Phones get three short steps; from 992px wide the same sections sit on one page
+ * with a sticky summary card.
+ */
 const trip = useTripStore()
 const mission = useMissionStore()
 const user = useUserStore()
@@ -22,27 +25,160 @@ const router = useRouter()
 const d = trip.draft
 const planning = ref(false)
 
-onMounted(() => {
+// ── Layout: wizard on phones, one page on wide screens ─────────────────
+const wideQuery = typeof window !== 'undefined' ? window.matchMedia('(min-width: 992px)') : null
+const wide = ref(wideQuery?.matches ?? false)
+const onWide = (e) => (wide.value = e.matches)
+const step = ref(1)
+const STEPS = ['Where & when', 'What you like', 'Your style']
+const showStep = (n) => wide.value || step.value === n
+
+// First-time planning (no mission yet) is a focused flow: hide the bottom nav, offer Exit instead.
+const firstTime = ref(false)
+
+onMounted(async () => {
+	wideQuery?.addEventListener('change', onWide)
 	if (!ui.weather) ui.loadWeather()
 	ui.loadAdvisories?.()
+	prePickInterests()
+	try {
+		firstTime.value = !(await mission.loadActive())
+	} catch {
+		firstTime.value = false
+	}
+	ui.navHidden = firstTime.value
+})
+onBeforeUnmount(() => {
+	wideQuery?.removeEventListener('change', onWide)
+	ui.navHidden = false
 })
 
+// ── Time budget ────────────────────────────────────────────────────────
 const budget = computed(() => {
 	tick.value // re-evaluate as the clock moves
 	return computeBudget({ origin: trip.origin, startMs: trip.startMs, mustReturnMs: trip.mustReturnMs, cleared: d.cleared })
 })
 const tooShort = computed(() => budget.value.usable_min < 60)
+const bufferMin = computed(() => budget.value.reentry_min + budget.value.safety_min + budget.value.exit_min)
+const showBuffers = ref(false)
 
-// A later start can be picked up to a week ahead (the weather forecast horizon), never in the past.
+/** 362 → "6H 02M" for the big number, "6h 02m" for the pill. */
+function hm(min, upper = true) {
+	const m = Math.max(0, Math.round(min))
+	const s = `${Math.floor(m / 60)}h ${String(m % 60).padStart(2, '0')}m`
+	return upper ? s.toUpperCase() : s
+}
+
+const sgDate = new Intl.DateTimeFormat('en-SG', { timeZone: 'Asia/Singapore', weekday: 'short', day: 'numeric', month: 'short' })
+const sgClock = new Intl.DateTimeFormat('en-SG', { timeZone: 'Asia/Singapore', hour: '2-digit', minute: '2-digit', hour12: true })
+const flightDay = computed(() => sgDate.format(trip.mustReturnMs).replace(',', ''))
+const flightClock = computed(() => sgClock.format(trip.mustReturnMs).toUpperCase())
+
+// ── Flight time (step 0, also reopened from the flight card) ───────────
+// Typed into a visible field and confirmed with Continue: some browsers never fire
+// `change` from their native picker, so the form cannot rely on it alone.
+const editingFlight = ref(false)
+const flightDraft = ref('')
+const showFlightCard = computed(() => !d.flightSet || editingFlight.value)
+const flightMinLocal = computed(() => (tick.value, toSgLocalInput(trip.startMs + 60 * 60000)))
+const flightMaxLocal = computed(() => toSgLocalInput(now() + 8 * 86400e3))
+
+const flightDraftMs = computed(() => (flightDraft.value ? fromSgLocalInput(flightDraft.value) : null))
+const flightDraftBudget = computed(() =>
+	flightDraftMs.value == null ? null : computeBudget({ origin: trip.origin, startMs: trip.startMs, mustReturnMs: flightDraftMs.value, cleared: d.cleared })
+)
+const flightError = computed(() => {
+	const ms = flightDraftMs.value
+	if (ms == null) return ''
+	if (Number.isNaN(ms)) return 'Enter a date and time.'
+	if (ms <= trip.startMs) return 'That time has already passed.'
+	if (ms - trip.startMs > MAX_LAYOVER_H * 3600e3) return `Layovers are up to ${MAX_LAYOVER_H} h. Longer than that is a stopover.`
+	return ''
+})
+const canConfirmFlight = computed(() => flightDraftMs.value != null && !flightError.value)
+
+function openFlight() {
+	flightDraft.value = d.flightSet ? d.mustReturnLocal : ''
+	editingFlight.value = true
+}
+function confirmFlight() {
+	if (!canConfirmFlight.value) return
+	trip.setFlight(flightDraft.value)
+	editingFlight.value = false
+}
+
+// ── Start time (More options) ──────────────────────────────────────────
 const startMinLocal = computed(() => (tick.value, toSgLocalInput(now())))
 const startMaxLocal = computed(() => toSgLocalInput(now() + 7 * 86400e3))
 const startInPast = computed(() => (tick.value, !d.startNow && trip.startMs < now() - 60000))
 
-function onStartChange(e) {
-	trip.setStart(false, e.target.value)
+// ── Starting from ──────────────────────────────────────────────────────
+const TERMINAL_ORDER = ['changi-t1', 'changi-t2', 'changi-t3', 'changi-t4', 'jewel']
+const terminals = computed(() =>
+	TERMINAL_ORDER.map((id) => ORIGINS.find((o) => o.id === id)).filter(Boolean)
+		.map((o) => ({ ...o, tile: o.id === 'jewel' ? 'Jewel' : o.short.replace('Changi ', '') }))
+)
+function pickOrigin(id) {
+	d.originId = id
+	if (id === 'jewel') d.cleared = true // Jewel is landside: immigration is already done
 }
+
+const locating = ref(false)
+function useMyLocation() {
+	if (!navigator.geolocation) return ui.toast('Location is not available on this device. Pick your terminal instead.', 'warning')
+	locating.value = true
+	navigator.geolocation.getCurrentPosition(
+		(pos) => {
+			locating.value = false
+			const here = { lat: pos.coords.latitude, lng: pos.coords.longitude }
+			const nearest = terminals.value.map((o) => ({ o, dist: distanceM(here, o) })).sort((a, b) => a.dist - b.dist)[0]
+			if (!nearest || nearest.dist > 3000) {
+				ui.toast(`You're about ${Math.round((nearest?.dist ?? 0) / 1000)} km from Changi. Pick the terminal your flight leaves from.`, 'warning', 5000)
+				return
+			}
+			pickOrigin(nearest.o.id)
+			ui.toast(`Starting from ${nearest.o.label}.`, 'success')
+		},
+		() => {
+			locating.value = false
+			ui.toast('Could not get your location. Pick your terminal instead.', 'warning')
+		},
+		{ enableHighAccuracy: true, timeout: 10000, maximumAge: 60000 }
+	)
+}
+
+// ── Interests ──────────────────────────────────────────────────────────
+/** Six tiles, each covering one or more catalog tags the planner scores on. */
+const TILES = [
+	{ id: 'food', label: 'Food & hawker', icon: 'bi-egg-fried', tags: ['hawker', 'food'] },
+	{ id: 'nature', label: 'Nature & gardens', icon: 'bi-flower1', tags: ['gardens', 'nature', 'beach'] },
+	{ id: 'culture', label: 'Culture & heritage', icon: 'bi-bank', tags: ['culture', 'heritage', 'museum'] },
+	{ id: 'views', label: 'Views & photos', icon: 'bi-camera', tags: ['views', 'photo'] },
+	{ id: 'shopping', label: 'Shopping', icon: 'bi-bag', tags: ['shopping'] },
+	{ id: 'nightlife', label: 'Nightlife', icon: 'bi-moon-stars', tags: ['nightlife'] }
+]
+/** What each travel style pre-picks until the traveller taps a tile. */
+const STYLE_TILES = {
+	budget: ['food', 'nature', 'views'],
+	adventurous: ['nature', 'views', 'food'],
+	party: ['nightlife', 'food', 'views'],
+	conservative: ['culture', 'shopping', 'food']
+}
+const tileOn = (t) => t.tags.some((tag) => d.interests.includes(tag))
+function toggleTile(t) {
+	const next = tileOn(t) ? d.interests.filter((i) => !t.tags.includes(i)) : [...d.interests, ...t.tags]
+	trip.setInterests(next)
+}
+function prePickInterests() {
+	if (d.interestsTouched) return
+	const tiles = STYLE_TILES[styleId.value] || STYLE_TILES.budget
+	trip.setInterests(TILES.filter((t) => tiles.includes(t.id)).flatMap((t) => t.tags), { touched: false })
+}
+
+// ── Travel style ───────────────────────────────────────────────────────
+const STYLE_SUB = { budget: 'Free & cheap', adventurous: 'More stops', party: 'Late & lively', conservative: 'Few stops, indoors' }
 const styleId = computed(() => (STYLES[user.profile?.style] ? user.profile.style : 'budget'))
-const style = computed(() => STYLES[styleId.value])
+watch(styleId, prePickInterests)
 
 async function setStyle(id) {
 	try {
@@ -52,16 +188,39 @@ async function setStyle(id) {
 	}
 }
 
-function onReturnChange() {
-	if (!trip.syncHoursFromReturn()) ui.toast(`Layovers are up to ${MAX_LAYOVER_H} h. Longer than that is a stopover, so the return time was set to ${MAX_LAYOVER_H} h after your start.`, 'warning', 5000)
-}
+// ── More options ───────────────────────────────────────────────────────
+const optionsOpen = ref(false)
+const WALKS = [10, 15, 20, 30]
+const FOOD = [
+	{ id: 'none', label: 'None' },
+	{ id: 'halal', label: 'Halal' },
+	{ id: 'vegetarian', label: 'Vegetarian' },
+	{ id: 'vegan', label: 'Vegan' }
+]
+const optionsSummary = computed(() => {
+	const parts = [`Walk ≤ ${d.maxWalk} min`, `${d.partySize} ${d.partySize === 1 ? 'person' : 'people'}`]
+	if (d.foodNeeds !== 'none') parts.push(FOOD.find((f) => f.id === d.foodNeeds)?.label)
+	if (!d.startNow) parts.push(`from ${formatTime(trip.startMs)}`)
+	return parts.join(' · ')
+})
+const setParty = (n) => (d.partySize = Math.min(8, Math.max(1, n)))
 
-function toggleInterest(id) {
-	const i = d.interests.indexOf(id)
-	i >= 0 ? d.interests.splice(i, 1) : d.interests.push(id)
+// ── Steps and submit ───────────────────────────────────────────────────
+const canLeaveStep1 = computed(() => d.flightSet && !tooShort.value && !startInPast.value)
+const canBuild = computed(() => canLeaveStep1.value && d.interests.length > 0 && !planning.value)
+
+function next() {
+	if (step.value === 1 && !canLeaveStep1.value) return
+	if (step.value === 2 && !d.interests.length) return ui.toast('Pick at least one thing you are into.', 'warning')
+	step.value = Math.min(3, step.value + 1)
+	window.scrollTo?.({ top: 0 })
+}
+function back() {
+	step.value = Math.max(1, step.value - 1)
 }
 
 async function submit() {
+	if (!canBuild.value) return
 	planning.value = true
 	try {
 		const saved = await trip.saveTrip()
@@ -76,150 +235,250 @@ async function submit() {
 </script>
 
 <template>
-	<main class="zt-page">
-		<div class="d-flex align-items-center justify-content-between mb-2">
-			<div>
-				<h1 class="mb-0" style="font-size: 2.4rem">Plan a layover</h1>
-				<p class="text-muted mb-0 small">Clock first, then the fun.</p>
+	<main class="zt-page plan" :class="{ 'zt-page-wide': wide, 'is-wide': wide }">
+		<!-- Header: title, step progress on phones -->
+		<header class="mb-3">
+			<div class="d-flex align-items-center gap-2">
+				<button v-if="!wide && step > 1" type="button" class="icon-btn" aria-label="Back" @click="back"><i class="bi bi-chevron-left"></i></button>
+				<h1 class="zt-display mb-0 flex-grow-1 plan-title">Plan a layover</h1>
+				<span v-if="!wide && step > 1 && d.flightSet" class="zt-pill left-pill"><i class="bi bi-clock"></i> {{ hm(budget.usable_min, false) }} left</span>
+				<RouterLink v-if="firstTime" to="/" class="exit-link tiny fw-800" aria-label="Exit planning"><i class="bi bi-x-lg"></i> Exit</RouterLink>
 			</div>
-			<div class="d-flex flex-wrap gap-2 justify-content-end">
-				<WeatherChip />
-				<AdvisoryChips :interactive="false" />
+			<template v-if="!wide">
+				<div class="steps mt-2" role="progressbar" :aria-valuenow="step" aria-valuemin="1" aria-valuemax="3">
+					<span v-for="n in 3" :key="n" :class="{ on: n <= step }"></span>
+				</div>
+				<div class="tiny text-muted text-end fw-800 mt-1">{{ step }} / 3 · {{ STEPS[step - 1] }}</div>
+			</template>
+		</header>
+
+		<div class="plan-grid">
+			<div class="plan-main d-grid gap-3">
+				<!-- Step 1: flight, time budget, starting point -->
+				<template v-if="showStep(1)">
+					<section class="zt-card p-3">
+						<div class="label">Flight leaves</div>
+						<button type="button" class="field-btn" @click="openFlight">
+							<i class="bi bi-clock"></i>
+							<span class="flex-grow-1 text-start fw-800">{{ d.flightSet ? flightDay : 'Pick date & time' }}</span>
+							<span v-if="d.flightSet" class="fw-800 mono">{{ flightClock }} <span class="sgt">SGT</span></span>
+							<i class="bi bi-chevron-right"></i>
+						</button>
+					</section>
+
+					<section v-if="!wide" class="have-card" :class="{ tight: d.flightSet && tooShort }">
+						<template v-if="d.flightSet">
+							<div class="label">You have</div>
+							<div class="d-flex align-items-baseline gap-2 flex-wrap">
+								<span class="big">{{ hm(budget.usable_min) }}</span><b class="small">to explore</b>
+							</div>
+							<p class="small fw-800 mb-1">Be back at {{ trip.origin.short }} by {{ formatTime(budget.arriveByMs) }}</p>
+							<button type="button" class="link-btn" @click="showBuffers = !showBuffers">
+								<i class="bi bi-info-circle"></i> Includes {{ bufferMin }} min airport buffer
+							</button>
+							<BufferBar v-if="showBuffers" class="mt-2" :start-ms="trip.startMs" :window-min="budget.window_min" :exit-min="budget.exit_min"
+								:out-min="Math.max(0, budget.usable_min)" :reentry-min="budget.reentry_min" :safety-min="budget.safety_min" />
+							<p v-if="tooShort" class="small fw-800 mb-0 mt-2">Too tight to leave the airport safely. Stay airside and explore the terminal.</p>
+						</template>
+						<p v-else class="small fw-800 mb-0">Pick your flight time to see how long you have.</p>
+					</section>
+
+					<section class="zt-card p-3">
+						<div class="label">Starting from</div>
+						<button type="button" class="field-btn mb-2" :disabled="locating" @click="useMyLocation">
+							<i class="bi" :class="locating ? 'bi-hourglass-split' : 'bi-crosshair'"></i>
+							<span class="flex-grow-1 text-start fw-800">{{ locating ? 'Finding you…' : 'Use my location' }}</span>
+							<span class="tiny text-muted">Not sure? Start here</span>
+						</button>
+						<div class="terminal-grid">
+							<button v-for="o in terminals" :key="o.id" type="button" class="terminal" :class="{ active: d.originId === o.id, jewel: o.id === 'jewel' }"
+								:aria-pressed="d.originId === o.id" @click="pickOrigin(o.id)">
+								<i class="bi" :class="o.id === 'jewel' ? 'bi-gem' : 'bi-airplane-engines'"></i>
+								<span>{{ o.tile }}</span>
+							</button>
+						</div>
+					</section>
+				</template>
+
+				<!-- Step 2: interests -->
+				<section v-if="showStep(2)" :class="{ 'zt-card p-3': wide }">
+					<div class="d-flex justify-content-between align-items-baseline flex-wrap gap-1">
+						<component :is="wide ? 'div' : 'h2'" :class="wide ? 'label' : 'zt-display step-h'">What are you into?</component>
+						<span class="tiny text-muted">{{ d.interestsTouched ? 'Tap to change.' : 'Pre-picked from your style quiz. Tap to change.' }}</span>
+					</div>
+					<div class="tile-grid mt-2">
+						<button v-for="t in TILES" :key="t.id" type="button" class="tile" :class="{ active: tileOn(t) }" :aria-pressed="tileOn(t)" @click="toggleTile(t)">
+							<i class="bi" :class="t.icon"></i>
+							<span>{{ t.label }}</span>
+							<i v-if="tileOn(t)" class="bi bi-check-circle-fill check"></i>
+						</button>
+					</div>
+				</section>
+
+				<!-- Step 3: travel style + more options -->
+				<template v-if="showStep(3)">
+					<section :class="{ 'zt-card p-3': wide }">
+						<div class="d-flex justify-content-between align-items-baseline">
+							<component :is="wide ? 'div' : 'h2'" :class="wide ? 'label' : 'zt-display step-h'">How do you travel?</component>
+							<RouterLink v-if="wide" class="tiny fw-800" :to="{ path: '/onboard', query: { next: '/plan' } }">Retake the quiz</RouterLink>
+						</div>
+						<div class="style-grid mt-2">
+							<button v-for="(s, id) in STYLES" :key="id" type="button" class="style-card" :class="{ active: styleId === id }"
+								:aria-pressed="styleId === id" @click="setStyle(id)">
+								<i class="bi" :class="s.icon"></i>
+								<b>{{ s.label }}</b>
+								<span class="tiny">{{ STYLE_SUB[id] }}</span>
+								<i v-if="styleId === id" class="bi bi-check-circle-fill check"></i>
+							</button>
+						</div>
+						<RouterLink v-if="!wide" class="tiny fw-800 d-inline-block mt-2" :to="{ path: '/onboard', query: { next: '/plan' } }">Not you? Retake the quiz</RouterLink>
+					</section>
+
+					<section class="zt-card options">
+						<button type="button" class="options-row" :aria-expanded="optionsOpen" @click="optionsOpen = !optionsOpen">
+							<span class="label mb-0">More options</span>
+							<span class="tiny flex-grow-1 text-start ms-2">{{ optionsSummary }}</span>
+							<i class="bi" :class="wide ? (optionsOpen ? 'bi-chevron-up' : 'bi-chevron-down') : 'bi-chevron-right'"></i>
+						</button>
+						<!-- Wide: inline panel. Phones: bottom sheet (below). -->
+						<div v-if="wide && optionsOpen" class="px-3 pb-3">
+							<div id="plan-options-inline"></div>
+						</div>
+					</section>
+				</template>
+
+				<!-- Phones: one primary action per step, above the bottom nav -->
+				<div v-if="!wide" class="step-action" :class="{ 'no-nav': ui.navHidden }">
+					<button v-if="step < 3" type="button" class="btn btn-primary btn-lg w-100" :disabled="step === 1 && !canLeaveStep1" @click="next">
+						Next <i class="bi bi-chevron-right"></i>
+					</button>
+					<button v-else type="button" class="btn btn-primary btn-lg w-100" :disabled="!canBuild" @click="submit">
+						<i class="bi bi-magic"></i> Build my quest
+					</button>
+				</div>
+
+				<div v-if="startInPast" class="alert alert-warning mb-0">That start time has already passed. Pick a later one in More options, or choose Now.</div>
+				<div v-if="mission.refusal && !planning" class="alert alert-danger mb-0"><b>Planner refused:</b> {{ mission.refusal }}</div>
+			</div>
+
+			<!-- Wide: sticky summary -->
+			<aside v-if="wide" class="plan-side">
+				<div class="have-card" :class="{ tight: d.flightSet && tooShort }">
+					<template v-if="d.flightSet">
+						<div class="label">You have</div>
+						<div class="big">{{ hm(budget.usable_min) }}</div>
+						<b class="small d-block">to explore</b>
+						<p class="small fw-800 mb-2 mt-2">Be back at {{ trip.origin.short }} by {{ formatTime(budget.arriveByMs) }}</p>
+						<div class="share" :title="`${budget.usable_min} of ${budget.window_min} min outside`">
+							<span :style="{ width: Math.max(0, Math.min(100, (100 * budget.usable_min) / Math.max(1, budget.window_min))) + '%' }"></span>
+						</div>
+						<button type="button" class="link-btn mt-2" @click="showBuffers = !showBuffers">
+							<i class="bi bi-info-circle"></i> Includes {{ bufferMin }} min airport buffer
+						</button>
+						<BufferBar v-if="showBuffers" class="mt-2" :start-ms="trip.startMs" :window-min="budget.window_min" :exit-min="budget.exit_min"
+							:out-min="Math.max(0, budget.usable_min)" :reentry-min="budget.reentry_min" :safety-min="budget.safety_min" />
+						<p v-if="tooShort" class="small fw-800 mb-0 mt-2">Too tight to leave the airport safely.</p>
+					</template>
+					<p v-else class="small fw-800 mb-0">Pick your flight time to see how long you have.</p>
+				</div>
+				<button type="button" class="btn btn-dark-pop btn-lg w-100 mt-3" :disabled="!canBuild" @click="submit">
+					<i class="bi bi-magic"></i> Build my quest
+				</button>
+			</aside>
+		</div>
+
+		<!-- Step 0: flight time first (and editing it later from the flight card) -->
+		<div v-if="showFlightCard" class="scrim flight-scrim" role="dialog" aria-modal="true" aria-labelledby="flight-q"
+			@keydown.esc="d.flightSet && (editingFlight = false)">
+			<form class="zt-card p-3 flight-card" @submit.prevent="confirmFlight">
+				<div class="d-flex justify-content-between align-items-start">
+					<span class="badge-icon"><i class="bi bi-airplane-fill"></i></span>
+					<button v-if="d.flightSet" type="button" class="btn-close" aria-label="Cancel" @click="editingFlight = false"></button>
+				</div>
+				<h2 id="flight-q" class="zt-display mt-2 mb-1">When does your flight leave?</h2>
+				<p class="tiny text-muted mb-3">We'll work out how long you have.</p>
+				<label class="field-btn picker-field" for="flight-time">
+					<i class="bi bi-calendar-event"></i>
+					<input id="flight-time" v-model="flightDraft" type="datetime-local" class="flex-grow-1"
+						:min="flightMinLocal" :max="flightMaxLocal" required aria-describedby="flight-help" />
+					<span class="sgt">SGT</span>
+				</label>
+				<p id="flight-help" class="tiny mt-2 mb-0" :class="flightError ? 'text-danger fw-800' : 'text-muted'">
+					<template v-if="flightError">{{ flightError }}</template>
+					<template v-else-if="flightDraftBudget">
+						You'd have about <b>{{ hm(flightDraftBudget.usable_min, false) }}</b> to explore, back at {{ trip.origin.short }} by {{ formatTime(flightDraftBudget.arriveByMs) }}.
+					</template>
+					<template v-else>Singapore time, as on your boarding pass.</template>
+				</p>
+				<button type="submit" class="btn btn-primary btn-lg w-100 mt-3" :disabled="!canConfirmFlight">
+					Continue <i class="bi bi-chevron-right"></i>
+				</button>
+			</form>
+		</div>
+
+		<!-- Phones: More options bottom sheet -->
+		<div v-if="!wide && optionsOpen" class="scrim" @click.self="optionsOpen = false">
+			<div class="sheet zt-card" role="dialog" aria-modal="true" aria-labelledby="opts-h">
+				<div class="grabber"></div>
+				<div class="d-flex justify-content-between align-items-center mb-2">
+					<h2 id="opts-h" class="zt-display mb-0 sheet-h">More options</h2>
+					<button type="button" class="btn-close" aria-label="Close" @click="optionsOpen = false"></button>
+				</div>
+				<div id="plan-options-sheet"></div>
+				<button type="button" class="btn btn-primary btn-lg w-100 mt-3" @click="optionsOpen = false">Done</button>
 			</div>
 		</div>
 
-		<form class="d-grid gap-3 mt-3" @submit.prevent="submit">
-			<section class="zt-card p-3">
-				<label class="form-label">Where are you starting?</label>
-				<div class="origin-grid">
-					<button v-for="o in ORIGINS" :key="o.id" type="button" class="origin"
-						:class="{ active: d.originId === o.id }" @click="d.originId = o.id"
-						:aria-pressed="d.originId === o.id">
-						<i class="bi" :class="o.kind === 'airport' ? 'bi-airplane-engines' : 'bi-building'"></i>
-						<span>{{ o.short }}</span>
-					</button>
-				</div>
-				<div v-if="trip.origin.kind === 'airport'" class="form-check form-switch mt-3">
-					<input id="cleared" v-model="d.cleared" class="form-check-input" type="checkbox" role="switch" />
-					<label class="form-check-label small fw-bold" for="cleared">I’m already landside (skip the 30 min
-						arrival
-						buffer)</label>
-				</div>
-			</section>
-
-			<section class="zt-card p-3">
-				<label class="form-label">When do you head out?</label>
-				<div class="btn-group w-100 mb-2" role="group" aria-label="Start time">
-					<input id="start-now" type="radio" class="btn-check" :checked="d.startNow" @change="trip.setStart(true)" />
-					<label class="btn btn-soft" for="start-now"><i class="bi bi-lightning-charge"></i> Now</label>
-					<input id="start-later" type="radio" class="btn-check" :checked="!d.startNow" @change="trip.setStart(false)" />
-					<label class="btn btn-soft" for="start-later"><i class="bi bi-calendar-event"></i> Later</label>
-				</div>
-				<template v-if="!d.startNow">
-					<label class="form-label tiny text-muted mb-1" for="start">{{ trip.origin.kind === 'airport' ? 'Landing / ready to leave at' : 'Leaving the hotel at' }} (Singapore time)</label>
-					<input id="start" type="datetime-local" class="form-control mb-1" :value="d.startLocal"
-						:min="startMinLocal" :max="startMaxLocal" @change="onStartChange" required />
-					<p v-if="startInPast" class="tiny text-danger fw-bold mb-0">That start time has already passed. Pick a later one or choose Now.</p>
-				</template>
-				<hr class="my-3" />
-				<div class="d-flex justify-content-between align-items-baseline">
-					<label class="form-label mb-0" for="hours">{{ d.startNow ? 'Hours until you must be back' : 'Hours from your start until you must be back' }}</label>
-					<span class="hours-num mono">{{ d.hours }} h</span>
-				</div>
-				<input id="hours" type="range" class="form-range" min="2" :max="MAX_LAYOVER_H" step="0.5"
-					:value="d.hours" @input="trip.setHours(Number($event.target.value))" />
-				<label class="form-label mt-2" for="ret">{{ trip.origin.kind === 'airport' ? 'Gate / boarding time' :
-					'Must be back at the hotel by' }} <span class="text-muted fw-normal">(Singapore time)</span></label>
-				<input id="ret" v-model="d.mustReturnLocal" type="datetime-local" class="form-control"
-					@change="onReturnChange" required />
-
-				<div class="mt-3">
-					<div class="d-flex justify-content-between small fw-bold mb-2">
-						<span>Your window: {{ formatDuration(budget.window_min) }}</span>
-						<span :class="tooShort ? 'text-danger' : 'text-success'">{{ tooShort ? 'Too tight to leave' :
-							`${formatDuration(budget.usable_min)} to explore` }}</span>
-					</div>
-					<BufferBar :start-ms="trip.startMs" :window-min="budget.window_min" :exit-min="budget.exit_min"
-						:out-min="Math.max(0, budget.usable_min)" :reentry-min="budget.reentry_min"
-						:safety-min="budget.safety_min" />
-					<p class="tiny text-muted mt-2 mb-0">
-						You must be back at {{ trip.origin.short }} by <b>{{ formatTime(budget.arriveByMs) }}</b>.
-						<template v-if="budget.airport">Airport buffer: {{ budget.reentry_min + budget.safety_min }} min
-							(check-in,
-							immigration and security {{ budget.reentry_min }} + safety {{ budget.safety_min
-							}}).</template>
-					</p>
-				</div>
-			</section>
-
-			<section class="zt-card p-3">
-				<label class="form-label">What are you into?</label>
-				<div class="d-flex flex-wrap gap-2">
-					<button v-for="i in INTERESTS" :key="i.id" type="button" class="zt-chip"
-						:class="{ active: d.interests.includes(i.id) }" :aria-pressed="d.interests.includes(i.id)"
-						@click="toggleInterest(i.id)">
-						<i class="bi" :class="i.icon"></i>{{ i.label }}
-					</button>
-				</div>
-			</section>
-
-			<section class="zt-card p-3">
-				<div class="row g-3">
-					<div class="col-sm-6">
-						<label class="form-label">Energy</label>
-						<div class="btn-group w-100" role="group" aria-label="Energy">
-							<template v-for="e in ['low', 'med', 'high']" :key="e">
-								<input :id="'en-' + e" v-model="d.energy" type="radio" class="btn-check" :value="e" />
-								<label class="btn btn-soft text-capitalize" :for="'en-' + e">{{ e === 'med' ? 'Medium' :
-									e }}</label>
-							</template>
-						</div>
-					</div>
-					<div class="col-sm-6">
-						<label class="form-label" for="indoor">Indoors</label>
-						<select id="indoor" v-model="d.indoorPref" class="form-select">
-							<option value="any">No preference</option>
-							<option value="prefer">Prefer air-con</option>
-							<option value="only">Indoor only</option>
-						</select>
-					</div>
-					<div class="col-sm-6">
-						<label class="form-label" for="walk">Longest walk per leg: <span class="mono">{{ d.maxWalk }}
-								min</span></label>
-						<input id="walk" v-model.number="d.maxWalk" type="range" class="form-range" min="5" max="18"
-							step="1" />
-					</div>
-					<div class="col-sm-6">
-						<label class="form-label" for="party">Party size</label>
-						<input id="party" v-model.number="d.partySize" type="number" min="1" max="8"
-							class="form-control" />
-					</div>
-				</div>
-				<label class="form-label mt-3">Travel style</label>
-				<div class="d-flex flex-wrap gap-2">
-					<button v-for="(s, id) in STYLES" :key="id" type="button" class="zt-chip"
-						:class="{ active: styleId === id }" :aria-pressed="styleId === id" @click="setStyle(id)">
-						<i class="bi" :class="s.icon"></i>{{ s.label }}
-					</button>
-				</div>
-				<p class="tiny text-muted mt-2 mb-1">{{ style.blurb }}</p>
-				<p class="tiny text-muted mb-0">
-					Still unsure? <RouterLink :to="{ path: '/onboard', query: { next: '/plan' } }">Retake the style quiz
-					</RouterLink>.
-				</p>
-			</section>
-
-			<div v-if="tooShort" class="alert alert-warning mb-0">
-				<i class="bi bi-exclamation-triangle"></i> With these buffers you’d have {{ Math.max(0,
-					budget.usable_min) }}
-				minutes
-				outside. Zoot won’t plan a trip that risks your flight. Stay airside and explore the terminal.
+		<!-- More options content, written once and teleported into the inline panel (wide) or the sheet (phones) -->
+		<Teleport v-if="optionsOpen" defer :to="wide ? '#plan-options-inline' : '#plan-options-sheet'">
+			<div class="label">Longest walk between stops</div>
+			<div class="d-flex flex-wrap gap-2 mb-3">
+				<button v-for="w in WALKS" :key="w" type="button" class="zt-chip" :class="{ active: d.maxWalk === w }" :aria-pressed="d.maxWalk === w" @click="d.maxWalk = w">{{ w }} min</button>
 			</div>
 
-			<button class="btn btn-primary btn-lg" :disabled="planning || tooShort || startInPast || !d.interests.length">
-				<i class="bi bi-magic"></i> Build my quest
-			</button>
-		</form>
+			<div class="label">Travellers</div>
+			<div class="stepper mb-3">
+				<span class="fw-800 flex-grow-1">{{ d.partySize }} {{ d.partySize === 1 ? 'person' : 'people' }}</span>
+				<button type="button" class="round" :disabled="d.partySize <= 1" aria-label="One fewer" @click="setParty(d.partySize - 1)"><i class="bi bi-dash"></i></button>
+				<button type="button" class="round on" :disabled="d.partySize >= 8" aria-label="One more" @click="setParty(d.partySize + 1)"><i class="bi bi-plus"></i></button>
+			</div>
+
+			<div class="label">Food needs</div>
+			<div class="d-flex flex-wrap gap-2 mb-3">
+				<button v-for="f in FOOD" :key="f.id" type="button" class="zt-chip" :class="{ active: d.foodNeeds === f.id }" :aria-pressed="d.foodNeeds === f.id" @click="d.foodNeeds = f.id">{{ f.label }}</button>
+			</div>
+
+			<div class="label">Heading out</div>
+			<div class="d-flex flex-wrap gap-2 mb-2">
+				<button type="button" class="zt-chip" :class="{ active: d.startNow }" @click="trip.setStart(true)">Now</button>
+				<button type="button" class="zt-chip" :class="{ active: !d.startNow }" @click="trip.setStart(false)">Later</button>
+			</div>
+			<input v-if="!d.startNow" type="datetime-local" class="form-control mb-3" aria-label="Start time (Singapore time)" :value="d.startLocal"
+				:min="startMinLocal" :max="startMaxLocal" @change="trip.setStart(false, $event.target.value)" />
+
+			<div class="row g-3">
+				<div class="col-6">
+					<div class="label">Pace</div>
+					<select v-model="d.energy" class="form-select form-select-sm" aria-label="Pace">
+						<option value="low">Relaxed</option>
+						<option value="med">Medium</option>
+						<option value="high">Packed</option>
+					</select>
+				</div>
+				<div class="col-6">
+					<div class="label">Indoors</div>
+					<select v-model="d.indoorPref" class="form-select form-select-sm" aria-label="Indoors">
+						<option value="any">No preference</option>
+						<option value="prefer">Prefer air-con</option>
+						<option value="only">Indoor only</option>
+					</select>
+				</div>
+			</div>
+			<div class="form-check form-switch mt-3 mb-0">
+				<input id="cleared" v-model="d.cleared" class="form-check-input" type="checkbox" role="switch" />
+				<label class="form-check-label small fw-bold" for="cleared">Already through immigration (skip the 30 min exit buffer)</label>
+			</div>
+		</Teleport>
 
 		<div v-if="planning" class="planning-overlay" role="alert" aria-live="assertive">
 			<div class="zt-card p-4 text-center">
@@ -228,65 +487,124 @@ async function submit() {
 				<div class="tiny text-muted mt-1">Turf clusters · MRT matrix · Open-Meteo · Groq</div>
 			</div>
 		</div>
-		<div v-if="mission.refusal && !planning" class="alert alert-danger mt-3"><b>Planner refused:</b> {{
-			mission.refusal
-		}}
-		</div>
 	</main>
 </template>
 
 <style scoped>
-.origin-grid {
-	display: grid;
-	grid-template-columns: repeat(auto-fill, minmax(96px, 1fr));
-	gap: 10px;
-}
-
-.origin {
-	border: var(--zt-bw) solid var(--zt-line);
-	background: var(--zt-card);
-	border-radius: 16px;
-	padding: 12px 6px;
-	display: flex;
-	flex-direction: column;
-	align-items: center;
-	gap: 4px;
+.plan-title { font-size: 2.2rem; }
+.is-wide .plan-title { font-size: 2.8rem; }
+.step-h { font-size: 2rem; margin: 0; }
+.label {
 	font-weight: 800;
-	font-size: 0.74rem;
+	font-size: 0.68rem;
 	text-transform: uppercase;
-	letter-spacing: 0.02em;
-	color: var(--zt-ink);
-	transition: transform 0.08s, box-shadow 0.08s;
+	letter-spacing: 0.05em;
+	margin-bottom: 8px;
 }
 
-.origin i {
-	font-size: 1.5rem;
-}
+/* Step progress */
+.steps { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; }
+.steps span { height: 6px; border-radius: 999px; background: var(--zt-yellow-pale); border: 1.5px solid var(--zt-soft-line); }
+.steps span.on { background: var(--zt-yellow); border-color: var(--zt-line); }
+.left-pill { background: var(--zt-yellow); color: #111; white-space: nowrap; }
+.icon-btn { border: 0; background: none; color: var(--zt-ink); font-size: 1.2rem; padding: 0 4px; }
 
-.origin.active {
-	background: var(--zt-yellow);
-	color: #111;
-	box-shadow: 0 4px 0 var(--zt-shadow-color);
-	transform: translateY(-3px);
-}
+/* Layout */
+.plan-grid { display: grid; gap: 16px; }
+.is-wide .plan-grid { grid-template-columns: minmax(0, 1fr) 300px; align-items: start; gap: 24px; }
+.plan-side { position: sticky; top: 16px; }
 
-.hours-num {
-	font-family: var(--zt-font-display);
-	font-size: 2.4rem;
-	line-height: 1;
+/* Field-style buttons (flight time, use my location) */
+.field-btn {
+	display: flex; align-items: center; gap: 10px; width: 100%;
+	padding: 10px 14px; border: var(--zt-bw) solid var(--zt-line); border-radius: 14px;
+	background: var(--zt-card); color: var(--zt-ink); font-size: 0.85rem;
 }
+.field-btn:hover:not(:disabled) { background: var(--zt-yellow-pale); }
+.sgt { font-size: 0.62rem; font-weight: 800; color: var(--zt-muted); }
+.picker-field { cursor: text; }
+.picker-field input { border: 0; background: transparent; color: var(--zt-ink); font-weight: 800; min-width: 0; outline: none; }
+.picker-field:focus-within { box-shadow: 0 0 0 4px var(--zt-yellow); }
+.exit-link { color: var(--zt-ink); text-decoration: none; white-space: nowrap; }
+.exit-link:hover { color: var(--zt-pink); }
+
+/* "You have" card */
+.have-card {
+	background: var(--zt-yellow); color: #111; border: var(--zt-bw) solid var(--zt-line);
+	border-radius: var(--zt-radius); padding: 16px; box-shadow: var(--zt-shadow);
+}
+.have-card .label { color: #111; }
+.have-card.tight { background: #ffd9c9; }
+.have-card .big { font-family: var(--zt-font-display); font-size: 3.2rem; line-height: 0.9; }
+.is-wide .have-card .big { font-size: 4rem; }
+.link-btn { border: 0; background: none; padding: 0; color: #111; font-size: 0.72rem; font-weight: 800; text-decoration: underline; }
+.share { height: 8px; border-radius: 999px; background: rgba(0, 0, 0, 0.12); overflow: hidden; }
+.share span { display: block; height: 100%; background: #111; border-radius: 999px; }
+
+/* Terminals */
+.terminal-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; }
+.is-wide .terminal-grid { grid-template-columns: repeat(5, 1fr); }
+.terminal {
+	display: flex; flex-direction: column; align-items: center; gap: 2px; padding: 10px 4px;
+	border: 2px solid var(--zt-line); border-radius: 14px; background: var(--zt-card); color: var(--zt-ink);
+	font-weight: 800; font-size: 0.72rem; text-transform: uppercase;
+}
+.terminal i { font-size: 1.1rem; }
+.terminal.jewel { grid-column: 1 / -1; flex-direction: row; justify-content: center; gap: 6px; }
+.is-wide .terminal.jewel { grid-column: auto; flex-direction: column; gap: 2px; }
+.terminal.active { background: var(--zt-yellow); color: #111; box-shadow: 0 3px 0 var(--zt-shadow-color); transform: translateY(-2px); }
+
+/* Interest tiles and style cards */
+.tile-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px; }
+.is-wide .tile-grid { grid-template-columns: repeat(3, 1fr); }
+.tile, .style-card {
+	position: relative; display: flex; flex-direction: column; align-items: flex-start; gap: 6px; text-align: left;
+	padding: 12px; min-height: 88px; border: 2px solid var(--zt-line); border-radius: 16px;
+	background: var(--zt-card); color: var(--zt-ink); font-weight: 800; font-size: 0.8rem;
+}
+.is-wide .tile { flex-direction: row; align-items: center; min-height: 0; padding: 10px 12px; }
+.tile i:first-child, .style-card i:first-child { font-size: 1.2rem; }
+.tile.active, .style-card.active { background: var(--zt-yellow-pale); box-shadow: 0 4px 0 var(--zt-shadow-color); }
+.check { position: absolute; top: 8px; right: 8px; font-size: 1rem; color: #111; }
+[data-bs-theme='dark'] .tile.active, [data-bs-theme='dark'] .style-card.active { color: #111; }
+.style-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px; }
+.is-wide .style-grid { grid-template-columns: repeat(4, 1fr); }
+.style-card b { text-transform: uppercase; font-size: 0.78rem; }
+.style-card .tiny { font-weight: 600; color: inherit; opacity: 0.8; }
+
+/* More options */
+.options { padding: 0; overflow: hidden; }
+.options-row { display: flex; align-items: center; width: 100%; padding: 14px 16px; border: 0; background: none; color: var(--zt-ink); }
+.stepper { display: flex; align-items: center; gap: 8px; padding: 6px 6px 6px 14px; border: 2px solid var(--zt-line); border-radius: 14px; }
+.round { width: 32px; height: 32px; border-radius: 50%; border: 2px solid var(--zt-line); background: var(--zt-card); color: var(--zt-ink); display: grid; place-items: center; }
+.round.on { background: var(--zt-yellow); color: #111; }
+.round:disabled { opacity: 0.4; }
+
+/* Phone primary action, kept above the bottom nav */
+.step-action { position: sticky; bottom: calc(var(--zt-nav-h) + 24px); z-index: 5; }
+.step-action.no-nav { bottom: max(16px, env(safe-area-inset-bottom)); }
+
+/* Overlays */
+.scrim {
+	position: fixed; inset: 0; z-index: 1400; display: grid; place-items: end center;
+	background: rgba(17, 17, 17, 0.45); padding: 16px;
+}
+.flight-scrim { place-items: center; background: rgba(255, 251, 234, 0.6); backdrop-filter: blur(6px); }
+[data-bs-theme='dark'] .flight-scrim { background: rgba(17, 17, 17, 0.6); }
+.flight-card { width: min(420px, 100%); box-shadow: 8px 8px 0 var(--zt-shadow-color); }
+.flight-card h2 { font-size: 2rem; }
+.badge-icon { display: inline-grid; place-items: center; width: 32px; height: 32px; border-radius: 50%; background: var(--zt-yellow); color: #111; border: 2px solid var(--zt-line); }
+.sheet { width: min(560px, 100%); padding: 12px 16px 16px; border-radius: 24px 24px 18px 18px; max-height: 85vh; overflow-y: auto; }
+.sheet-h { font-size: 1.6rem; }
+.grabber { width: 44px; height: 5px; border-radius: 999px; background: var(--zt-soft-line); margin: 0 auto 10px; }
+
+.btn-dark-pop { background: #111; color: var(--zt-yellow); border: var(--zt-bw) solid #111; box-shadow: 0 4px 0 var(--zt-yellow-soft); }
+.btn-dark-pop:hover { background: #222; color: var(--zt-yellow); }
+.btn-dark-pop:disabled { opacity: 0.45; }
 
 .planning-overlay {
-	position: fixed;
-	inset: 0;
-	z-index: 1500;
-	display: grid;
-	place-items: center;
-	background: rgba(17, 17, 17, 0.55);
-	padding: 16px;
+	position: fixed; inset: 0; z-index: 1500; display: grid; place-items: center;
+	background: rgba(17, 17, 17, 0.55); padding: 16px;
 }
-
-.planning-overlay .zt-card {
-	box-shadow: 8px 8px 0 var(--zt-shadow-color);
-}
+.planning-overlay .zt-card { box-shadow: 8px 8px 0 var(--zt-shadow-color); }
 </style>

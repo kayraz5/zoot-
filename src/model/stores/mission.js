@@ -66,7 +66,8 @@ export const useMissionStore = defineStore('mission', {
         energy: trip.energy,
         indoorPref: trip.indoorPref,
         maxWalk: trip.maxWalk,
-        partySize: trip.partySize
+        partySize: trip.partySize,
+        foodNeeds: trip.foodNeeds
       })
       const r = await buildMission(ctx, { onStatus: (t) => (this.statusText = t) })
       if (!r.ok) {

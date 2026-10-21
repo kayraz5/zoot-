@@ -9,7 +9,8 @@ export const useUiStore = defineStore('ui', {
     toasts: [],
     celebration: null,
     weather: null,
-    weatherError: null
+    weatherError: null,
+    navHidden: false // set by focused flows (first-time planning) to hide the bottom nav
   }),
   actions: {
     toggleTheme() {
