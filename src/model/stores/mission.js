@@ -11,6 +11,7 @@ import { SIDEQUESTS } from '../data/sidequests.js'
 import { useUiStore } from './ui.js'
 import { useUserStore } from './user.js'
 import { usePassportStore } from './passport.js'
+import { usePartyStore } from './party.js'
 
 const ACTIVE_KEY = 'zoot.activeMission'
 const SIDEQUEST_RADIUS_M = 400
@@ -86,6 +87,8 @@ export const useMissionStore = defineStore('mission', {
       this.mission = mission
       try { localStorage.setItem(ACTIVE_KEY, mission.id) } catch {}
       usePassportStore().markSeen(mission.legs.filter((l) => l.kind === 'visit').map((l) => l.place_id))
+      // If I've opened part of this mission to company, keep what guests see in step (no-op otherwise).
+      usePartyStore().syncHostedWindow(mission)
     },
 
     async load(id) {

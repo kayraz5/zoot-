@@ -13,6 +13,7 @@ import BufferBar from '../components/BufferBar.vue'
 import WeatherChip from '../components/WeatherChip.vue'
 import StopGallery from '../components/StopGallery.vue'
 import PlacePicker from '../components/PlacePicker.vue'
+import OpenToCompanySheet from '../components/OpenToCompanySheet.vue'
 
 const route = useRoute()
 const router = useRouter()
@@ -29,6 +30,7 @@ onMounted(load)
 watch(() => route.params.id, load)
 
 const m = computed(() => store.mission)
+const companyOpen = ref(false) // "Open to company" sheet (group quests)
 const style = computed(() => STYLES[m.value?.style] || STYLES.budget)
 const leaveBy = computed(() => (m.value ? store.leaveBy() : null))
 
@@ -231,9 +233,13 @@ const replans = [
         <p class="tiny text-muted mb-0 mt-2">Stamped stops stay. Only future legs are replaced, from where you are now.</p>
       </section>
 
-      <div class="play-bar">
-        <button class="btn btn-pop btn-lg w-100" @click="router.push('/map')"><i class="bi bi-controller"></i> Play on map</button>
+      <div class="play-bar d-flex gap-2">
+        <button class="btn btn-soft btn-lg company-btn" @click="companyOpen = true" aria-label="Open to company">
+          <i class="bi bi-people-fill"></i><span class="d-none d-sm-inline"> Open to company</span>
+        </button>
+        <button class="btn btn-pop btn-lg flex-grow-1" @click="router.push('/map')"><i class="bi bi-controller"></i> Play on map</button>
       </div>
+      <OpenToCompanySheet :mission="m" :open="companyOpen" @close="companyOpen = false" />
     </template>
   </main>
 </template>

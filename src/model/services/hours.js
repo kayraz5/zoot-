@@ -81,6 +81,21 @@ export function isOpenDuringVisit(place, arriveMs, departMs) {
     });
 }
 
+// Arriving before a place opens: the earliest later arrival (same day) that is open for the
+// whole stay, e.g. waiting for a 19:40 show. Returns arriveMs if already fine, null if none.
+export function waitUntilOpen(place, arriveMs, stayMin) {
+    const stayMs = stayMin * MS_PER_MINUTE;
+    if (isOpenDuringVisit(place, arriveMs, arriveMs + stayMs)) return arriveMs;
+    if (isAlwaysOpen(place)) return null;
+    const now = getSgTimeParts(arriveMs).minutes;
+    const opens = place.hours.map(([openText]) => timeToMinutes(openText)).filter((m) => m > now).sort((a, b) => a - b);
+    for (const open of opens) {
+        const ms = arriveMs + (open - now) * MS_PER_MINUTE;
+        if (isOpenDuringVisit(place, ms, ms + stayMs)) return ms;
+    }
+    return null;
+}
+
 // Text for display, e.g. "07:00-12:00, 18:00-21:00 · Closed Mon"
 export function formatOpeningHours(place) {
     if (isAlwaysOpen(place)) return 'Open 24 hours';
