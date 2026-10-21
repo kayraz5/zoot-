@@ -5181,6 +5181,36 @@
     "hours_verified": false
   },
   {
+    "id": "night-safari",
+    "name": "Night Safari",
+    "area": "North",
+    "lat": 1.4014,
+    "lng": 103.78735,
+    "tags": [
+      "nature",
+      "family"
+    ],
+    "duration_min": 150,
+    "cost_band": 3,
+    "indoor": false,
+    "captions": [],
+    "website": "https://www.wrs.com.sg/en/night-safari.html",
+    "source_ref": "osm:way/262885924",
+    "active": true,
+    "source": "osm",
+    "blurb": "Night Safari is the world's first nocturnal zoo, located in Mandai, Singapore. One of the country's most popular tourist attractions, it is one of five Mandai Wildlife Reserve parks, including Singapore Zoo, Bird Paradise, River Wonders, and Rainforest Wild ASIA.",
+    "blurb_source": "wikipedia",
+    "hours": [
+      [
+        "19:15",
+        "23:59"
+      ]
+    ],
+    "closed_days": [],
+    "hours_verified": true,
+    "min_window_h": 10
+  },
+  {
     "id": "leng-ern-jee-temple",
     "name": "Leng Ern Jee Temple",
     "area": "Little India",
@@ -5869,6 +5899,36 @@
     ],
     "closed_days": [],
     "hours_verified": false
+  },
+  {
+    "id": "skyline-luge-sentosa",
+    "name": "Skyline Luge Sentosa",
+    "area": "Sentosa",
+    "lat": 1.25505,
+    "lng": 103.81735,
+    "tags": [
+      "family",
+      "rides"
+    ],
+    "duration_min": 180,
+    "cost_band": 3,
+    "indoor": false,
+    "captions": [],
+    "website": "http://www.skylineluge.sg",
+    "source_ref": "osm:way/478355767",
+    "active": true,
+    "source": "osm",
+    "blurb": "Skyline Luge Singapore is a Luge and Skyride Chairlift system located in Sentosa, Singapore. The attraction opened on 26 August 2005. The luge, situated on the Imbiah Lookout cluster opposite the Tiger Sky Tower, has four tracks.",
+    "blurb_source": "wikipedia",
+    "hours": [
+      [
+        "10:00",
+        "21:30"
+      ]
+    ],
+    "closed_days": [],
+    "hours_verified": true,
+    "min_window_h": 12
   },
   {
     "id": "upper-peirce-reservoir-park",
@@ -8584,6 +8644,35 @@
     "hours_verified": false
   },
   {
+    "id": "albert-centre-food-centre",
+    "name": "Albert Centre Food Centre",
+    "area": "Kampong Glam",
+    "lat": 1.30115,
+    "lng": 103.8541,
+    "tags": [
+      "hawker",
+      "food"
+    ],
+    "duration_min": 45,
+    "cost_band": 0,
+    "indoor": true,
+    "captions": [],
+    "website": null,
+    "source_ref": "osm:node/610864835",
+    "active": true,
+    "source": "osm",
+    "blurb": "A hawker centre in Kampong Glam.",
+    "blurb_source": null,
+    "hours": [
+      [
+        "08:00",
+        "21:00"
+      ]
+    ],
+    "closed_days": [],
+    "hours_verified": false
+  },
+  {
     "id": "redhill-food-centre",
     "name": "Redhill Food Centre",
     "area": "Tiong Bahru",
@@ -10829,95 +10918,6 @@
       [
         "10:00",
         "18:00"
-      ]
-    ],
-    "closed_days": [],
-    "hours_verified": false
-  },
-  {
-    "id": "night-safari",
-    "name": "Night Safari",
-    "area": "North",
-    "lat": 1.4014,
-    "lng": 103.78735,
-    "tags": [
-      "nature",
-      "family"
-    ],
-    "duration_min": 150,
-    "cost_band": 3,
-    "indoor": false,
-    "captions": [],
-    "website": "https://www.wrs.com.sg/en/night-safari.html",
-    "source_ref": "osm:way/262885924",
-    "active": true,
-    "source": "osm",
-    "blurb": "Night Safari is the world's first nocturnal zoo, located in Mandai, Singapore. One of the country's most popular tourist attractions, it is one of five Mandai Wildlife Reserve parks, including Singapore Zoo, Bird Paradise, River Wonders, and Rainforest Wild ASIA.",
-    "blurb_source": "wikipedia",
-    "hours": [
-      [
-        "19:15",
-        "23:59"
-      ]
-    ],
-    "closed_days": [],
-    "hours_verified": true,
-    "min_window_h": 10
-  },
-  {
-    "id": "skyline-luge-sentosa",
-    "name": "Skyline Luge Sentosa",
-    "area": "Sentosa",
-    "lat": 1.25505,
-    "lng": 103.81735,
-    "tags": [
-      "family",
-      "rides"
-    ],
-    "duration_min": 180,
-    "cost_band": 3,
-    "indoor": false,
-    "captions": [],
-    "website": "http://www.skylineluge.sg",
-    "source_ref": "osm:way/478355767",
-    "active": true,
-    "source": "osm",
-    "blurb": "Skyline Luge Singapore is a Luge and Skyride Chairlift system located in Sentosa, Singapore. The attraction opened on 26 August 2005. The luge, situated on the Imbiah Lookout cluster opposite the Tiger Sky Tower, has four tracks.",
-    "blurb_source": "wikipedia",
-    "hours": [
-      [
-        "10:00",
-        "21:30"
-      ]
-    ],
-    "closed_days": [],
-    "hours_verified": true,
-    "min_window_h": 12
-  },
-  {
-    "id": "albert-centre-food-centre",
-    "name": "Albert Centre Food Centre",
-    "area": "Kampong Glam",
-    "lat": 1.30115,
-    "lng": 103.8541,
-    "tags": [
-      "hawker",
-      "food"
-    ],
-    "duration_min": 45,
-    "cost_band": 0,
-    "indoor": true,
-    "captions": [],
-    "website": null,
-    "source_ref": "osm:node/610864835",
-    "active": true,
-    "source": "osm",
-    "blurb": "A hawker centre in Kampong Glam.",
-    "blurb_source": null,
-    "hours": [
-      [
-        "08:00",
-        "21:00"
       ]
     ],
     "closed_days": [],
