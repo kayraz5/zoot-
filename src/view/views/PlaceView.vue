@@ -4,7 +4,7 @@ import { useRoute } from 'vue-router'
 import PlaceArt from '../components/PlaceArt.vue'
 import { loadCatalog, placeById } from '../../model/services/catalog.js'
 import { summarizePlace } from '../../model/services/groq.js'
-import { hoursLabel } from '../../model/services/hours.js'
+import { formatOpeningHours } from '../../model/services/hours.js'
 import { checkInStatus } from '../../model/services/checkin.js'
 import { geo, hasFix, startGps } from '../../model/services/geo.js'
 import { tick } from '../../model/services/clock.js'
@@ -91,7 +91,7 @@ function readBookmarks() {
       </div>
 
       <div class="facts zt-card p-3 mt-3">
-        <div><i class="bi bi-clock"></i><span>{{ hoursLabel(place) }}</span></div>
+        <div><i class="bi bi-clock"></i><span>{{ formatOpeningHours(place) }}</span></div>
         <div><i class="bi bi-hourglass"></i><span>Plan ~{{ place.duration_min }} min</span></div>
         <div><i class="bi bi-cash-coin"></i><span>{{ cost }}</span></div>
         <div><i class="bi" :class="place.indoor ? 'bi-house' : 'bi-sun'"></i><span>{{ place.indoor ? 'Indoor / sheltered' : 'Outdoor, weather matters' }}</span></div>

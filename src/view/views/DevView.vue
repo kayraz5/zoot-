@@ -5,7 +5,7 @@ import destination from '@turf/destination'
 import { point } from '@turf/helpers'
 import { geo, setFake, teleport, hasFix } from '../../model/services/geo.js'
 import { skipMinutes, resetClock, clockOffsetMin, tick } from '../../model/services/clock.js'
-import { fmtTime } from '../../model/services/hours.js'
+import { formatTime } from '../../model/services/hours.js'
 import { HAS_SUPABASE } from '../../model/services/config.js'
 import { getDb } from '../../model/services/db/index.js'
 import { useMissionStore } from '../../model/stores/mission.js'
@@ -30,7 +30,7 @@ onMounted(async () => {
 })
 
 const next = computed(() => store.nextLeg)
-const clock = computed(() => (tick.value, fmtTime(tick.value)))
+const clock = computed(() => (tick.value, formatTime(tick.value)))
 
 function near(meters) {
   const n = next.value

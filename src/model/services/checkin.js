@@ -1,6 +1,6 @@
 import { CHECKIN } from './config.js'
 import { distanceM } from './travel.js'
-import { sgParts } from './hours.js'
+import { getSgTimeParts } from './hours.js'
 
 /**
  * Client mirror of the stamp_place() SQL rules (Kayra's RPC is the source of truth):
@@ -30,4 +30,4 @@ export function sameSgDay(aMs, bMs) {
   return a === b
 }
 
-export { sgParts }
+export { getSgTimeParts }
