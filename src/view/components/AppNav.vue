@@ -2,6 +2,7 @@
 const items = [
   { to: '/map', icon: 'bi-geo-alt-fill', label: 'Map' },
   { to: '/mission', icon: 'bi-signpost-split-fill', label: 'Mission' },
+  { to: '/quests', icon: 'bi-people-fill', label: 'Quests' },
   { to: '/passport', icon: 'bi-journal-bookmark-fill', label: 'Passport' },
   { to: '/me', icon: 'bi-person-circle', label: 'Me' }
 ]

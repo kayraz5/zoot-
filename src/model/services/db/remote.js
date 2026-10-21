@@ -57,7 +57,7 @@ export function createRemoteDb() {
             return must(await db.from('profiles').select('*').eq('id', id).maybeSingle());
         },
         async updateProfile(id, updates) {
-            return must(await db.from('profiles').upsert({ id, ...patch }).select().single());
+            return must(await db.from('profiles').upsert({ id, ...updates }).select().single());
         },
         async awardXp(id, amount) {
             return must(await db.rpc('award_return_bonus', { p_amount: amount }));

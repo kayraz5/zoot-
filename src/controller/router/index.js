@@ -19,7 +19,10 @@ const routes = [
   { path: '/codex', name: 'codex', component: () => import('../../view/views/CodexView.vue'), meta: { auth: true, nav: true } },
   { path: '/me', name: 'me', component: () => import('../../view/views/ProfileView.vue'), meta: { auth: true, nav: true } },
   { path: '/swipe', name: 'swipe', component: () => import('../../view/views/SwipeView.vue'), meta: { auth: true, nav: true } },
-  { path: '/party/:id?', name: 'party', component: () => import('../../view/views/PartyView.vue'), meta: { auth: true, nav: true } },
+  // Social quests: hosts open a window of stops, guests join part of it (docs/social-quests-spec.md).
+  { path: '/quests', name: 'quests', component: () => import('../../view/views/QuestsView.vue'), meta: { auth: true, nav: true } },
+  { path: '/quests/:id', name: 'quest', component: () => import('../../view/views/QuestDetailView.vue'), meta: { auth: true, nav: true } },
+  { path: '/party/:id?', redirect: (to) => (to.params.id ? `/quests/${to.params.id}` : '/quests') },
   ...(DEV_PANEL ? [{ path: '/dev', name: 'dev', component: () => import('../../view/views/DevView.vue'), meta: { auth: true, nav: true } }] : []),
   { path: '/:pathMatch(.*)*', redirect: '/' },
   { path: '/3d-map', name: '3d-map', component: () => 

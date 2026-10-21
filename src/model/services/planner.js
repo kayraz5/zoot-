@@ -1,5 +1,5 @@
 import { travel, distanceM, nearestHub } from './travel.js'
-import { isOpenDuringVisit, formatTime } from './hours.js'
+import { isOpenDuringVisit, formatTime, waitUntilOpen } from './hours.js'
 
 /**
  * Deterministic layover planner (Kayra + Hulbert lanes).
@@ -486,7 +486,9 @@ export function retimeMission(mission, { start, catalogById }) {
 	for (const l of pending) {
 		const p = catalogById.get(l.place_id) || l
 		const tr = travel(cur, p, { ...opts, atMs: t })
-		const arrive = t + tr.minutes * MIN
+		// Early for a place that opens later (e.g. a 19:40 show)? Wait for it instead of refusing.
+		const reach = t + tr.minutes * MIN
+		const arrive = waitUntilOpen(p, reach, l.stay_min) ?? reach
 		const depart = arrive + l.stay_min * MIN
 		Object.assign(l, { travel_mode: tr.mode, travel_min: tr.minutes, travel_detail: tr.detail, arrive_iso: iso(arrive), depart_iso: iso(depart) })
 		if (!isOpenDuringVisit(p, arrive, depart)) problems.push(`${l.name} would be closed when you get there`)

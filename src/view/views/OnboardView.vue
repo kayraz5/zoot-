@@ -2,11 +2,13 @@
 import {computed, ref} from 'vue';
 import {useRoute, useRouter} from 'vue-router';
 import {useUserStore} from '../../model/stores/user.js';
+import {useUiStore} from '../../model/stores/ui.js';
 import {STYLES} from '../../model/data/origins.js';
 
 /* Steven: Four question quiz after user authentication */
 
 const user = useUserStore();
+const ui = useUiStore();
 const router = useRouter();
 const route = useRoute();
 
@@ -71,9 +73,15 @@ function answer(style) {
 
 async function save() {
     saving.value = true;
-    await user.updateProfile({style: chosen.value});
-    saving.value = false;
-    router.replace(typeof route.query.next === 'string' ? route.query.next : '/plan');
+    try {
+        await user.updateProfile({style: chosen.value});
+        router.replace(typeof route.query.next === 'string' ? route.query.next : '/plan');
+    } catch (err) {
+        // Without this the button stays greyed out and nothing explains why.
+        ui.toast(`Couldn't save your travel style: ${err.message}`, 'danger', 5000);
+    } finally {
+        saving.value = false;
+    }
 }
 </script>
 
