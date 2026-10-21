@@ -25,6 +25,7 @@ import { addQuestLayers, setQuestColors, setRoute, setFence, syncStopMarkers, cr
 import { describePsi } from '../../model/services/weather.js'
 import { removePlaceMarker } from '../components/placeMarker.js'
 import { PinLayer } from '../gl/pinPoint.js'
+import QuestCoopChip from '../components/QuestCoopChip.vue'
 
 const ORS_API_KEY = "eyJvcmciOiI1YjNjZTM1OTc4NTExMTAwMDFjZjYyNDgiLCJpZCI6IjdiZWU2YWY0OGY3NDQ4NjA5MGJiNjUwZTVkZjg5NTAwIiwiaCI6Im11cm11cjY0In0="
 const el = ref(null)
@@ -110,10 +111,6 @@ const opts = computed(() => ({ maxWalk: m.value?.prefs?.maxWalk, style: m.value?
 
 const liveTravel = computed(() => (next.value && here.value ? travel(here.value, next.value, opts.value) : null))
 const distance = computed(() => (next.value && here.value ? distanceM(here.value, next.value) : null))
-const stopNumber = computed(() => {
-	const visits = store.visitLegs
-	return next.value?.kind === 'visit' ? `${visits.indexOf(next.value) + 1}/${visits.length}` : ''
-})
 
 /** Can you stamp right now? Visits use the real check-in rules; the trip home uses a wider radius. */
 const check = computed(() => {
@@ -654,6 +651,8 @@ onUnmounted(() => {
 	</div>
 
 	<div id="CenterInfo" class="rounded-4">
+		<!-- Social quest: "With Mei until 15:40", Go solo, members' live locations -->
+		<QuestCoopChip :get-map="() => (mapReady ? map : null)" />
 		<!-- No quest yet -->
 		<div v-if="!m" class="row align-items-center">
 			<div class="col-12">
@@ -681,8 +680,7 @@ onUnmounted(() => {
 		<div v-else class="row align-items-center">
 			<div class="col-7 col-sm-8">
 				<div class="stop-meta">
-					<template v-if="next.kind === 'visit'">Next stop {{ stopNumber }} &middot; </template><template
-						v-else>Head home &middot; </template>
+					<template v-if="next.kind !== 'visit'">Head home &middot; </template>
 					<span class="bi" :class="modeIcon[liveTravel?.mode || next.travel_mode]"></span> {{
 						liveTravel?.minutes ??
 						next.travel_min }} min

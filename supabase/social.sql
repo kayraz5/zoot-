@@ -285,6 +285,17 @@ drop trigger if exists parties_after_insert on public.parties;
 create trigger parties_after_insert after insert on public.parties
   for each row execute function public.parties_after_insert();
 
+-- Leaving (Go solo, removed by the host, quest closed) stops sharing your location at once.
+create or replace function public.party_members_after_delete()
+returns trigger language plpgsql security definer set search_path = public as $$
+begin
+  delete from party_locations where party_id = old.party_id and user_id = old.user_id;
+  return null;
+end $$;
+drop trigger if exists party_members_after_delete on public.party_members;
+create trigger party_members_after_delete after delete on public.party_members
+  for each row execute function public.party_members_after_delete();
+
 -- ════════════════════════════════════════════════════════════════════════
 -- RPCs (what the app calls)
 -- ════════════════════════════════════════════════════════════════════════
@@ -351,14 +362,20 @@ begin
   end if;
 end $$;
 
--- "Go solo": a guest leaves (their app restores their own stops). The host leaving closes the window.
+-- "Go solo": a guest leaves (their app restores their own stops), or their joined stops are over.
+-- The host leaving closes the window.
 create or replace function public.leave_window(p_party uuid)
 returns void language plpgsql security definer set search_path = public as $$
+declare
+  v_m party_members;
+  v_done boolean;
 begin
   if is_party_host(p_party) then perform close_window(p_party); return; end if;
-  delete from party_members where party_id = p_party and user_id = auth.uid() and role = 'member';
+  delete from party_members where party_id = p_party and user_id = auth.uid() and role = 'member' returning * into v_m;
   if found then
-    perform post_system(p_party, display_name_of(auth.uid()) || ' went solo', jsonb_build_object('kind', 'left', 'user_id', auth.uid()));
+    select coalesce((p.stops -> (v_m.to_seq - 1) ->> 'depart_iso')::timestamptz <= now(), false) into v_done from parties p where p.id = p_party;
+    perform post_system(p_party, display_name_of(auth.uid()) || case when v_done then ' finished their stops' else ' went solo' end,
+      jsonb_build_object('kind', case when v_done then 'finished' else 'left' end, 'user_id', auth.uid()));
     perform refresh_party(p_party);
   end if;
 end $$;
@@ -544,6 +561,7 @@ declare
   v_to int;
   v_body text;
   v_m party_members;
+  v_stop jsonb;
 begin
   if coalesce((select value from app_config where key = 'dev_social'), '0') <> '1' then
     raise exception 'The multiplayer simulator is switched off (app_config.dev_social)';
@@ -579,6 +597,21 @@ begin
     perform post_system(p_party, display_name_of(v_bot) || ' went solo', jsonb_build_object('kind', 'left', 'user_id', v_bot));
     perform refresh_party(p_party);
     return display_name_of(v_bot) || ' went solo';
+
+  elsif p_action = 'locate' then
+    -- Put every demo traveller in this quest on the map, a short walk from the stop they're at now.
+    v_n := 0;
+    for v_m in select * from party_members m where m.party_id = p_party and m.user_id in (select user_id from demo_users) loop
+      select e into v_stop from jsonb_array_elements(v_party.stops) with ordinality as t(e, i)
+       where i between v_m.from_seq and v_m.to_seq
+       order by ((e ->> 'depart_iso')::timestamptz <= now()), i limit 1;
+      insert into party_locations (party_id, user_id, lat, lng, accuracy_m)
+      values (p_party, v_m.user_id, (v_stop ->> 'lat')::float8 + (random() - 0.5) * 0.0012, (v_stop ->> 'lng')::float8 + (random() - 0.5) * 0.0012, 15)
+      on conflict (party_id, user_id) do update set lat = excluded.lat, lng = excluded.lng, accuracy_m = excluded.accuracy_m, updated_at = now();
+      v_n := v_n + 1;
+    end loop;
+    if v_n = 0 then raise exception 'No demo travellers in this quest yet'; end if;
+    return v_n || ' demo traveller' || case when v_n = 1 then '' else 's' end || ' placed on the map';
 
   elsif p_action in ('chat', 'checkin') then
     select * into v_m from party_members m

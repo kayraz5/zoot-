@@ -5,7 +5,7 @@ import { usePartyStore } from '../../model/stores/party.js'
 import { useMissionStore } from '../../model/stores/mission.js'
 import { useUserStore } from '../../model/stores/user.js'
 import { useUiStore } from '../../model/stores/ui.js'
-import { stopsFit, joinableRange, previewJoin } from '../../model/services/social.js'
+import { stopsFit, joinableRange, previewJoin, defaultQuestTitle } from '../../model/services/social.js'
 import { formatTime } from '../../model/services/hours.js'
 import { DEV_PANEL } from '../../model/services/config.js'
 import { STYLES } from '../../model/data/origins.js'
@@ -97,12 +97,16 @@ async function join() {
     busy.value = false
   }
 }
-function leave() {
-  if (!confirm('Leave this quest?')) return
+async function leave() {
+  const ok = await party.ask({
+    title: 'Go solo?', icon: 'bi-person-walking', confirmText: 'Go solo', cancelText: 'Stay',
+    body: `You'll leave ${host.value?.display_name || 'the host'}'s quest and carry on with your own plan.`
+  })
+  if (!ok) return
   act(async () => {
     await mission.leaveQuest(q.value.id)
     await party.loadQuest(q.value.id)
-  }, "You're solo again.")
+  })
 }
 </script>
 
@@ -129,7 +133,7 @@ function leave() {
             <i class="bi" :class="fit.ok ? 'bi-check-circle-fill' : 'bi-airplane'"></i> {{ fit.reason }}
           </span>
         </div>
-        <h1 class="title mb-1">{{ q.title }}</h1>
+        <h1 class="title mb-1">{{ q.title?.trim() || defaultQuestTitle(host?.display_name) }}</h1>
         <p class="small text-muted mb-0">With <b>{{ host?.display_name || 'a traveller' }}</b> · {{ formatTime(q.starts_at) }}–{{ formatTime(q.ends_at) }}</p>
       </header>
 
@@ -189,7 +193,7 @@ function leave() {
           <p class="small text-muted mb-2">They're in your plan at fixed times. Meet at {{ q.stops[q.mine.from_seq - 1]?.name }}, {{ formatTime(q.stops[q.mine.from_seq - 1]?.arrive_iso) }}.</p>
           <div class="d-flex gap-2">
             <RouterLink to="/mission" class="btn btn-soft flex-grow-1"><i class="bi bi-list-ol"></i> My plan</RouterLink>
-            <button class="btn btn-outline-danger" :disabled="busy" @click="leave"><i class="bi bi-box-arrow-right"></i> Leave</button>
+            <button class="btn btn-outline-danger" :disabled="busy" @click="leave"><i class="bi bi-box-arrow-right"></i> Go solo</button>
           </div>
         </template>
         <template v-else-if="!hasPlan">

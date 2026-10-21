@@ -38,7 +38,21 @@ export const useMissionStore = defineStore('mission', {
     stampedCount() { return this.visitLegs.filter((l) => l.status === 'stamped').length },
     arriveByMs() { return this.returnLeg ? Date.parse(this.returnLeg.arrive_by) : null },
     mustReturnMs: (s) => (s.mission ? Date.parse(s.mission.must_return_iso) : null),
-    missionPlaceIds() { return new Set(this.visitLegs.map((l) => l.place_id)) }
+    missionPlaceIds() { return new Set(this.visitLegs.map((l) => l.place_id)) },
+    /** The quest I've joined (as a guest): { id, title, host_name, from, to, blocks, startMs, endMs } or null. */
+    joinedQuest() {
+      for (const [id, info] of Object.entries(this.mission?.joined || {})) {
+        const blocks = this.legs.filter((l) => l.fixed && l.party_id === id)
+        if (blocks.length) return { id, ...info, blocks, startMs: Date.parse(blocks[0].arrive_iso), endMs: Date.parse(blocks.at(-1).depart_iso) }
+      }
+      return null
+    },
+    /** Where my own plan picks up after the joined stops: my next own stop, or heading back. */
+    resumeLeg() {
+      const q = this.joinedQuest
+      if (!q) return null
+      return this.legs.find((l) => l.kind === 'visit' && !l.fixed && l.status === 'pending' && Date.parse(l.arrive_iso) >= q.endMs) || this.returnLeg
+    }
   },
   actions: {
     baseCtx(overrides = {}) {
@@ -371,6 +385,7 @@ export const useMissionStore = defineStore('mission', {
      * stops (update_window removes me). If not, go back to my own plan and say why.
      */
     async checkJoined() {
+      await this.finishEndedQuests()
       const ids = Object.keys(this.mission?.joined || {})
       for (const id of ids) {
         let q
@@ -382,6 +397,28 @@ export const useMissionStore = defineStore('mission', {
         const host = this.mission.joined[id].host_name
         await this.leaveQuest(id, { server: false })
         useUiStore().toast(`${host} changed their plan, so you're back on your own.`, 'warning', 6000)
+      }
+    },
+
+    /** My joined stops are over: back to my own plan automatically (called on load and by the map chip). */
+    async finishEndedQuests() {
+      if (finishing) return
+      finishing = true
+      try {
+        for (const [id, info] of Object.entries(this.mission?.joined || {})) {
+          const blocks = this.legs.filter((l) => l.fixed && l.party_id === id)
+          if (blocks.length && Date.parse(blocks.at(-1).depart_iso) > now()) continue
+          // Free me on the server too (one quest at a time); fine if the quest is already gone.
+          try { await leaveWindow(id) } catch {}
+          await this.leaveQuest(id, { server: false })
+          const next = this.nextLeg
+          await usePartyStore().notice({
+            title: `Your stops with ${info.host_name} are done`, icon: 'bi-flag-fill', tone: 'success',
+            body: `You'll carry on with your own plan${next?.kind === 'visit' ? `. Next up: ${next.name}` : ', heading back'}.`
+          })
+        }
+      } finally {
+        finishing = false
       }
     },
 
@@ -452,6 +489,7 @@ export const useMissionStore = defineStore('mission', {
 })
 
 const STALE = 'That stop has changed. Refresh and try again.'
+let finishing = false // finishEndedQuests is running (the map chip calls it every few seconds)
 
 /** A joined stop (fixed time, with someone) still ahead of me, if any. */
 function upcomingJoined(legs) {

@@ -84,13 +84,18 @@ export function toWindowStop(leg) {
   return { kind: 'visit', place_id: leg.place_id, name: leg.name, arrive_iso: leg.arrive_iso, depart_iso: leg.depart_iso, xp: leg.xp }
 }
 
-export async function publishWindow({ mission, stops, capacity, note }) {
+/** What a quest is called when the host doesn't name it: "Mei's quest". */
+export function defaultQuestTitle(hostName) {
+  return hostName ? `${hostName}'s quest` : 'Open quest'
+}
+
+export async function publishWindow({ mission, stops, capacity, note, title }) {
   const client = await sb()
   const me = await myId(client)
   return must(await client.from('parties').insert({
     host_id: me,
     mission_id: mission.id,
-    title: mission.title.slice(0, 120),
+    title: (title?.trim() || mission.title).slice(0, 120),
     style: mission.style,
     capacity,
     note: note?.trim() || null,
@@ -254,4 +259,34 @@ export async function joinWindow({ quest, from, to, mission }) {
 export async function leaveWindow(id) {
   const client = await sb()
   must(await client.rpc('leave_window', { p_party: id }))
+}
+
+// ── Live location: only between joined members, only while the window runs (RLS enforces it) ──
+
+export async function shareLocation(partyId, { lat, lng, accuracy }) {
+  const client = await sb()
+  const me = await myId(client)
+  must(await client.from('party_locations').upsert({
+    party_id: partyId, user_id: me, lat, lng, accuracy_m: accuracy ?? null, updated_at: new Date().toISOString()
+  }))
+}
+
+export async function listLocations(partyId) {
+  const client = await sb()
+  return must(await client.from('party_locations').select('user_id, lat, lng, updated_at').eq('party_id', partyId))
+}
+
+export async function stopSharing(partyId) {
+  const client = await sb()
+  const me = await myId(client)
+  must(await client.from('party_locations').delete().eq('party_id', partyId).eq('user_id', me))
+}
+
+/** Calls onChange() whenever someone's location in this quest changes. Returns an unsubscribe function. */
+export async function watchLocations(partyId, onChange) {
+  const client = await sb()
+  const channel = client.channel(`locations:${partyId}`)
+    .on('postgres_changes', { event: '*', schema: 'public', table: 'party_locations', filter: `party_id=eq.${partyId}` }, onChange)
+    .subscribe()
+  return () => client.removeChannel(channel)
 }
