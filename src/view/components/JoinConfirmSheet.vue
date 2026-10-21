@@ -4,7 +4,8 @@ import { formatTime, formatDuration } from '../../model/services/hours.js'
 
 /**
  * The one confirm step before joining: exactly what changes in MY plan (previewJoin's result).
- * Joined stops are added at fixed times, some own stops may be removed, nothing else moves.
+ * Joined stops are added at fixed times and some own stops may be removed; nothing else moves,
+ * so kept stops aren't listed.
  * A big change (2+ stops, or a 2h+ stop, removed) gets a red warning.
  */
 const props = defineProps({
@@ -46,7 +47,6 @@ function whyRemoved(r) {
             <div class="fw-800"><i class="bi bi-exclamation-triangle-fill"></i> This replaces {{ p.removed.length === 1 ? 'a big part' : p.removed.length + ' stops' }} of your plan</div>
             <div class="small">
               Replaced: {{ p.removed.map((r) => `${r.leg.name} (${formatDuration(stay(r.leg))})`).join(', ') }}.
-              <template v-if="p.kept.length"> Kept: {{ p.kept.map((l) => l.name).join(', ') }}.</template>
             </div>
           </div>
 
@@ -72,19 +72,6 @@ function whyRemoved(r) {
               </li>
             </ul>
           </template>
-
-          <div class="tiny fw-800 text-uppercase text-muted mb-1">Kept, same times</div>
-          <ul v-if="p.kept.length" class="rows mb-3">
-            <li v-for="l in p.kept" :key="l.place_id">
-              <i class="bi bi-check2"></i>
-              <span class="flex-grow-1 min-w-0 text-truncate">{{ l.name }}</span>
-              <span class="mono tiny">{{ span(l) }}</span>
-            </li>
-          </ul>
-          <p v-else class="small text-muted mb-3">None of your own stops are left after this.</p>
-
-          <p class="small mb-3"><i class="bi bi-airplane"></i> {{ p.fit.detail }}</p>
-          <p v-if="p.removed.length" class="tiny text-muted mb-3">If you leave later, removed stops come back if they still fit.</p>
         </template>
 
         <div class="d-flex gap-2">

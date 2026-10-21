@@ -98,17 +98,16 @@ async function join() {
   }
 }
 function leave() {
-  if (!confirm('Leave this quest? Your stops with the group are removed and your own stops come back if they still fit.')) return
+  if (!confirm('Leave this quest?')) return
   act(async () => {
-    const { restored } = await mission.leaveQuest(q.value.id)
+    await mission.leaveQuest(q.value.id)
     await party.loadQuest(q.value.id)
-    return restored
-  }, (restored) => `You're solo again.${restored.length ? ` Back in your plan: ${restored.map((l) => l.name).join(', ')}.` : ''}`)
+  }, "You're solo again.")
 }
 </script>
 
 <template>
-  <main class="zt-page pb-5">
+  <main class="zt-page">
     <button type="button" class="btn btn-link btn-sm px-0 mb-2" @click="router.back()"><i class="bi bi-arrow-left"></i> Back</button>
 
     <div v-if="party.questStatus.loading && !q" class="text-center py-5"><div class="spinner-border text-primary" role="status"><span class="visually-hidden">Loading…</span></div></div>
@@ -238,7 +237,7 @@ function leave() {
 .stops li { display: flex; gap: 10px; align-items: flex-start; }
 .stops .dot { width: 28px; height: 28px; border-radius: 50%; display: grid; place-items: center; background: var(--zt-yellow); color: #111; border: 2px solid #111; font-weight: 800; font-size: 0.8rem; flex: none; }
 .min-w-0 { min-width: 0; }
-.action { position: sticky; bottom: calc(var(--zt-nav-h) + 20px); z-index: 5; box-shadow: var(--zt-shadow); }
+.action { box-shadow: var(--zt-shadow); }
 .fit-ok { background: #5fd38d; color: #111; }
 .fit-no { background: var(--zt-card); color: var(--zt-muted); }
 </style>

@@ -380,10 +380,8 @@ export const useMissionStore = defineStore('mission', {
         }
         if (q && q.mine && q.status !== 'closed') continue
         const host = this.mission.joined[id].host_name
-        const { restored } = await this.leaveQuest(id, { server: false })
-        useUiStore().toast(
-          `${host} changed their plan, so you're back on your own.${restored.length ? ` ${restored.map((l) => l.name).join(', ')} ${restored.length === 1 ? 'is' : 'are'} back.` : ''}`,
-          'warning', 6000)
+        await this.leaveQuest(id, { server: false })
+        useUiStore().toast(`${host} changed their plan, so you're back on your own.`, 'warning', 6000)
       }
     },
 
