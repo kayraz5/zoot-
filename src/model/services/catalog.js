@@ -1,20 +1,16 @@
 import { shallowRef } from 'vue'
-import seedPlaces from '../data/places.sg.json'
 import syncedPlaces from '../data/places.synced.json'
 import { getDb } from './db/index.js'
 import { nearestHub } from './travel.js'
 
 /**
  * Place catalog. Supabase `places` is the source of truth when connected.
- * Offline it uses places.synced.json (seed + OpenStreetMap, from `pnpm sync:places`),
- * or the curated seed if no sync has been run.
+ * Guests and offline use the bundled places.synced.json (seed + OpenStreetMap, from `pnpm sync:places`).
  * Inactive places are hidden from the catalog but kept in placeById so old stamps still resolve.
  */
-const bundled = syncedPlaces.length ? syncedPlaces : seedPlaces
-
 export const catalog = shallowRef([])
 export const placeById = shallowRef(new Map())
-setPlaces(bundled)
+setPlaces(syncedPlaces)
 
 let loaded = false
 
