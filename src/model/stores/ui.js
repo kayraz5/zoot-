@@ -15,7 +15,7 @@ export const useUiStore = defineStore('ui', {
 		haze: null,
 		lightning: null,
 		forceHaze: readFlag('zoot.forceHaze'),
-		forceLightning: readFlag('zoot-forceLightning')
+		forceLightning: readFlag('zoot.forceLightning')
 	}),
 	getters: {
 		// The haze reading to show: fake when forced, real otherwise.

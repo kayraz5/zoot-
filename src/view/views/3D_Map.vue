@@ -1,8 +1,13 @@
 <script setup>
 import { ref, computed, onMounted, onUnmounted, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { Map as MapLibreMap } from 'maplibre-gl'
+import { Map as MapLibreMap, setWorkerUrl } from 'maplibre-gl'
 import 'maplibre-gl/dist/maplibre-gl.css'
+// MapLibre resolves its worker next to its own module, which Vite never copies into the build.
+// Importing it with ?url makes Vite emit it as an asset and gives us the real URL.
+import maplibreWorkerUrl from 'maplibre-gl/dist/maplibre-gl-worker.mjs?url'
+
+setWorkerUrl(maplibreWorkerUrl)
 import axios from 'axios'
 import destination from '@turf/destination'
 import { point } from '@turf/helpers'
@@ -18,9 +23,13 @@ import { tick } from '../../model/services/clock.js'
 import { getWalkRoute } from '../../model/services/walkRoute.js'
 import { addQuestLayers, setQuestColors, setRoute, setFence, syncStopMarkers, createPlayerMarker, straight } from '../map/questLayers.js'
 import { describePsi } from '../../model/services/weather.js'
+import { removePlaceMarker } from '../components/placeMarker.js'
+import { PinLayer } from '../gl/pinPoint.js'
 
+const ORS_API_KEY = "eyJvcmciOiI1YjNjZTM1OTc4NTExMTAwMDFjZjYyNDgiLCJpZCI6IjdiZWU2YWY0OGY3NDQ4NjA5MGJiNjUwZTVkZjg5NTAwIiwiaCI6Im11cm11cjY0In0="
 const el = ref(null)
 let map = null
+let placeMarkers = []
 const weather_data = ref(null)
 const MapStyle = ref(false)
 const speed = ref(20)
@@ -29,6 +38,46 @@ const is3D = ref(true)
 const Go3D = ref(false)
 const colorTheme = ref('theme')
 const colorblind = ref(false)
+const SideInfo = ref(false)
+
+async function fetchRoute(start, end) {
+  const URL = `https://api.openrouteservice.org/v2/directions/foot-walking?api_key=${ORS_API_KEY}&start=${start[0]},${start[1]}&end=${end[0]},${end[1]}`
+  const response = await axios.get(URL)
+  return response.data.features[0].geometry
+}
+function getCurrentPosition() {
+  return new Promise((resolve, reject) => { // call resolve, and if there's a value from pos, then resolve value
+    navigator.geolocation.getCurrentPosition( // would be the current location cords, else will fall back into the error
+      (pos) => resolve([pos.coords.longitude, pos.coords.latitude]),
+      reject
+    )
+  })
+}
+
+async function showRouteTo(destination) {
+  const start = await getCurrentPosition()
+  const geometry = await fetchRoute(start, destination)
+
+  if (map.getSource('route')) {
+    map.getSource('route').setData({ type: 'Feature', geometry, properties: {} })
+  } else {
+    map.addSource('route', { // registers the route's coordinates under the name "route"
+      type: 'geojson',
+      data: { type: 'Feature', geometry, properties: {} }
+    })
+    map.addLayer({ // draws the route source's data as a line, from the current position to the destination
+      id: 'route-line',
+      type: 'line',
+      source: 'route',
+      layout: { 'line-join': 'round', 'line-cap': 'round' },
+      paint: {
+        'line-color': '#ff1dce', // bright purplish-pink
+        'line-width': 5,
+        'line-opacity': 0.9
+      }
+    })
+  }
+}
 
 // ── Mission state ────────────────────────────────────────────────────────
 const route = useRoute()
@@ -501,6 +550,7 @@ onMounted(() => {
 		addQuestLayers(map)
 		setQuestColors(map, colorTheme.value === 'theme')
 		player = createPlayerMarker(map)
+		map.addLayer(new PinLayer({ id: 'mbs-pin', lng: 103.8607, lat: 1.2830 }))
 		mapReady.value = true
 		await store.loadActive()
 		// "On map" from the mission list jumps to that stop; otherwise start on you, or on the whole quest.
@@ -541,6 +591,7 @@ onUnmounted(() => {
 	window.removeEventListener('keydown', onKey)
 	window.removeEventListener('keyup', onKeyUp)
 	markers.clear()
+	placeMarkers.forEach(removePlaceMarker)
 	map?.remove()
 })
 </script>
@@ -573,25 +624,34 @@ onUnmounted(() => {
 		<div class="time_back_from_trip">{{ leaveBy ? `Head back by ${formatTime(leaveBy)}` : m ? 'Quest complete' : 'Noactive quest' }}</div>
 	</div>
 
-	<button id="zoom" class="map-btn" type="button" @click="next && flyTo(next)" :disabled="!next"
-		aria-label="Zoom to next stop" title="Zoom to next stop">
-		<i class="bi bi-zoom-in"></i>
+	<button id="TestRoute" class="btn btn-warning rounded-pill" @click="showRouteTo([103.8607, 1.2834])">Test Route (MBS)</button>
+
+	<button id="MoreInfo" class="map-btn" type="button" @click="SideInfo = !SideInfo" aria-label="Map tools"
+		title="Map tools">
+		<i class="bi bi-list"></i>
 	</button>
 
-	<button id="outlook" class="map-btn" type="button" @click="overview" aria-label="Show whole quest"
-		title="Show whole quest">
-		<i class="bi bi-arrows-fullscreen"></i>
-	</button>
+	<div class="map-tools" :class="{ open: SideInfo }">
+		<button id="zoom" class="map-btn" type="button" @click="next && flyTo(next)" :disabled="!next"
+			aria-label="Zoom to next stop" title="Zoom to next stop">
+			<i class="bi bi-zoom-in"></i>
+		</button>
 
-	<button id="RealGps" class="map-btn" :class="{ active: following }" type="button" @click="recenter"
-		aria-label="Follow my location" title="Follow my location">
-		<i class="bi bi-crosshair"></i>
-	</button>
+		<button id="outlook" class="map-btn" type="button" @click="overview" aria-label="Show whole quest"
+			title="Show whole quest">
+			<i class="bi bi-arrows-fullscreen"></i>
+		</button>
 
-	<button id="TopView" class="map-btn" type="button" v-on:click="Go3D = !Go3D, View(Go3D)"
-		aria-label="Toggle top-down view" title="Toggle top-down view">
-		<i class="bi-map"></i>
-	</button>
+		<button id="RealGps" class="map-btn" :class="{ active: following }" type="button" @click="recenter"
+			aria-label="Follow my location" title="Follow my location">
+			<i class="bi bi-crosshair"></i>
+		</button>
+
+		<button id="TopView" class="map-btn" type="button" v-on:click="Go3D = !Go3D, View(Go3D)"
+			aria-label="Toggle top-down view" title="Toggle top-down view">
+			<i class="bi-map"></i>
+		</button>
+	</div>
 
 	<div id="CenterInfo" class="rounded-4">
 		<!-- No quest yet -->
@@ -836,24 +896,52 @@ onUnmounted(() => {
 	cursor: pointer;
 }
 
+#TestRoute {
+	position: absolute;
+	top: 150px;
+	right: 12px;
+	z-index: 1;
+	color: black;
+}
+
+/* The map buttons slide open from the hamburger button. */
+.map-tools {
+	opacity: 0;
+	transform: translateY(-12px);
+	pointer-events: none;
+	transition: opacity 0.25s ease, transform 0.25s ease;
+}
+
+.map-tools.open {
+	opacity: 1;
+	transform: translateY(0);
+	pointer-events: auto;
+}
+
 #zoom {
-	top: 350px;
+	top: 425px;
 	right: 12px;
 }
 
 #outlook {
-	top: 275px;
+	top: 350px;
 	right: 12px;
 }
 
 #RealGps {
-	top: 200px;
+	top: 275px;
 	right: 12px;
 }
 
 #TopView {
-	top: 425px;
+	top: 500px;
 	right: 12px;
+}
+
+#MoreInfo {
+	top: 200px;
+	right: 12px;
+	z-index: 1;
 }
 
 #CenterInfo {
