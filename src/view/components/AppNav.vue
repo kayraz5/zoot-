@@ -41,6 +41,7 @@
     border-radius: 40px;
     box-shadow: var(--zt-shadow);
     z-index: 1030;
+    margin-bottom: 5px;
 }
 
 .nav-item{

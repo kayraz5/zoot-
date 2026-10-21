@@ -4,9 +4,15 @@ import { Map as MapLibreMap } from 'maplibre-gl'
 import 'maplibre-gl/dist/maplibre-gl.css'
 import axios from 'axios'
 import AppNav from '../components/AppNav.vue'
+import { AxiosError } from 'axios'
+import { createPlaceMarker, removePlaceMarker } from '../components/placeMarker.js'
+import places from '../../model/data/places.sg.json'
+import { PinLayer } from '../gl/pinPoint.js'
 
+const ORS_API_KEY = "eyJvcmciOiI1YjNjZTM1OTc4NTExMTAwMDFjZjYyNDgiLCJpZCI6IjdiZWU2YWY0OGY3NDQ4NjA5MGJiNjUwZTVkZjg5NTAwIiwiaCI6Im11cm11cjY0In0="
 const el = ref(null)
 let map = null
+let markers = []
 const weather_data = ref(null)
 const MapStyle = ref(false)
 const demo = ref(false)
@@ -16,6 +22,48 @@ const is3D = ref(true)
 const Go3D = ref(false)
 const colorTheme = ref('theme')
 const colorblind = ref(false)
+const SideInfo = ref(false)
+
+
+async function fetchRoute(start, end) {
+  const URL = `https://api.openrouteservice.org/v2/directions/foot-walking?api_key=${ORS_API_KEY}&start=${start[0]},${start[1]}&end=${end[0]},${end[1]}`
+  const response = await axios.get(URL)
+  return response.data.features[0].geometry
+}
+function getCurrentPosition() {
+  return new Promise((resolve, reject) => { // call resolve, and if there's a value from pos, then resolve value
+    navigator.geolocation.getCurrentPosition( // would be the current location cords, else will fall back into the error
+      (pos) => resolve([pos.coords.longitude, pos.coords.latitude]),
+      reject
+    )
+  })
+}
+
+async function showRouteTo(destination) {
+  const start = await getCurrentPosition()   // ← was the hardcoded array
+  const geometry = await fetchRoute(start, destination)
+
+  if (map.getSource('route')) {
+    map.getSource('route').setData({ type: 'Feature', geometry, properties: {} })
+  } else {
+    map.addSource('route', { //used  to register the route's coordinates under the name "route"
+      type: 'geojson',
+      data: { type: 'Feature', geometry, properties: {} }
+    })
+    map.addLayer({ // draw the route source's data as a line. From the current position to the destination
+      id: 'route-line',
+      type: 'line',
+      source: 'route',
+      layout: { 'line-join': 'round', 'line-cap': 'round' },
+      paint: {
+        'line-color': '#ff1dce', // bright purplish-pink
+        'line-width': 5,
+        'line-opacity': 0.9
+      }
+    })
+  }
+}
+
 
 function GoToFlat() {
   map.easeTo({
@@ -40,6 +88,24 @@ function View(x) {
   else{
     GoTo3D()
   }
+}
+
+async function CenterOnMe() {
+  const current2 = await getCurrentPosition();
+  console.log('flying to', current2, 'current map center:', map.getCenter())
+  map.flyTo({
+    center: current2,
+    zoom: 18,
+    duration: 1500,
+  })
+}
+
+function ZoomOut() {
+  map.zoomTo(12, { duration: 1500 })
+}
+
+function ZoomIn() {
+  map.zoomIn({ duration: 1500 })
 }
 
 function RemoveBuildings(show) {
@@ -154,6 +220,18 @@ onMounted(() => {
   })
 
   map.on('load', applyMapColors)
+  map.on('load', CenterOnMe)
+  map.on('load', () => {
+    map.addLayer(new PinLayer({ id: 'mbs-pin', lng: 103.8607, lat: 1.2830 }))
+  })
+
+  
+  onUnmounted(() => {
+  markers.forEach(removePlaceMarker)
+  map?.remove()
+})
+
+
 })
 
 watch(colorTheme, applyMapColors)
@@ -167,8 +245,6 @@ onMounted(async () => {
     console.error(err)
   }
 })
-
-onUnmounted(() => map?.remove())
 </script>
 
 <template>
@@ -194,20 +270,28 @@ onUnmounted(() => map?.remove())
     <div class="time_back_from_trip">Head Back By{{ }}</div>
   </div>
 
-  <div id="zoom" class="map-btn">
-    <i class="bi bi-zoom-in"></i>
+  <button id="TestRoute" class="btn btn-warning rounded-pill" @click="showRouteTo([103.8607, 1.2834])">Test Route (MBS)</button>
+
+  <div id="MoreInfo" class="map-btn" @click="SideInfo = !SideInfo">
+    <i class="bi bi-list"></i>
   </div>
 
-  <div id="outlook" class="map-btn">
-    <i class="bi bi-arrows-fullscreen"></i>
-  </div>
+  <div class="map-tools" :class="{ open: SideInfo }">
+    <div id="zoom" class="map-btn" v-on:click="ZoomIn()">
+      <i class="bi bi-zoom-in"></i>
+    </div>
 
-  <div id="RealGps" class="map-btn">
-    <i class="bi bi-crosshair"></i>
-  </div>
+    <div id="outlook" class="map-btn" v-on:click="ZoomOut()">
+      <i class="bi bi-arrows-fullscreen"></i>
+    </div>
 
-  <div id="TopView" class="map-btn" v-on:click="Go3D = !Go3D, View(Go3D)">
-    <i class="bi-map"></i>
+    <div id="RealGps" class="map-btn" v-on:click="CenterOnMe()">
+      <i class="bi bi-crosshair"></i>
+    </div>
+
+    <div id="TopView" class="map-btn" v-on:click="Go3D = !Go3D, View(Go3D)">
+      <i class="bi-map"></i>
+    </div>
   </div>
 
   <div id="CenterInfo" class="rounded-4">
@@ -237,9 +321,9 @@ onUnmounted(() => map?.remove())
   <div v-if="demo === true" id="demo-controls" class="rounded-4">
     <div class="demo-row">
       <span class="demo-label">Speed</span>
-      <button class="btn rounded-pill btn-sm" :class="speed === 1 ? 'btn-warning' : 'btn-outline-warning'" @click="speed = 1">1&times;</button>
-      <button class="btn rounded-pill btn-sm" :class="speed === 6 ? 'btn-warning' : 'btn-outline-warning'" @click="speed = 6">6&times;</button>
-      <button class="btn rounded-pill btn-sm" :class="speed === 20 ? 'btn-warning' : 'btn-outline-warning'" @click="speed = 20">20&times;</button>
+      <button class="btn rounded-pill btn-sm" :class="speed === 1 ? 'btn-warning' : 'btn-outline-warning'" @click="speed = 1">1x</button>
+      <button class="btn rounded-pill btn-sm" :class="speed === 6 ? 'btn-warning' : 'btn-outline-warning'" @click="speed = 6">6x</button>
+      <button class="btn rounded-pill btn-sm" :class="speed === 20 ? 'btn-warning' : 'btn-outline-warning'" @click="speed = 20">20x</button>
     </div>
     <div class="demo-row">
       <span class="demo-label">WASD movement</span>
@@ -326,6 +410,14 @@ onUnmounted(() => map?.remove())
   border: 4px solid;
 }
 
+#TestRoute {
+  position: absolute;
+  top: 150px;
+  right: 12px;
+  z-index: 1;
+  color: black;
+}
+
 .time_left_from_trip {
   font-size: 30px;
   text-align: left;
@@ -358,31 +450,50 @@ onUnmounted(() => map?.remove())
   cursor: pointer;
 }
 
+.map-tools {
+  opacity: 0;
+  transform: translateY(-12px);
+  pointer-events: none;
+  transition: opacity 0.25s ease, transform 0.25s ease;
+}
+
+.map-tools.open {
+  opacity: 1;
+  transform: translateY(0);
+  pointer-events: auto;
+}
+
 #zoom {
-  top: 350px;
+  top: 425px;
   right: 12px;
 }
 
 #outlook {
-  top: 275px;
+  top: 350px;
   right: 12px;
 }
 
 #RealGps {
-  top: 200px;
+  top: 275px;
   right: 12px;
 }
 
 #TopView{
-  top: 425px;
+  top: 500px;
   right: 12px;
+}
+
+#MoreInfo{
+  top: 200px;
+  right: 12px;
+  z-index: 1;
 }
 
 #CenterInfo {
   position: absolute;
   left: 50%;
   transform: translateX(-50%);
-  bottom: 96px;
+  bottom: 100px;
   max-width: 600px;
   width: 90%;
   z-index: 1;
