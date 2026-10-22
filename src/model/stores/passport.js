@@ -85,12 +85,14 @@ export const usePassportStore = defineStore('passport', {
       if (this.userId !== userId) return // signed out or switched user while loading
 
       this.stamps = stamps
-      this.seen = new Set([...(page?.seen_places || []), ...this.seen])
+      // Stamped places count as seen too (stamps from before seen was saved never got added)
+      this.seen = new Set([...(page?.seen_places || []), ...this.seen, ...this.stampedIds])
       if (page) {
         // Drop areas whose chop isn't earned (e.g. slammed under the old one-stamp rule), so they slam at 6
         const chopped = new Set(this.choppedAreas)
         this.slammed = new Set(page.slammed_areas.filter((area) => chopped.has(area)))
-        if (this.slammed.size !== page.slammed_areas.length) this.save()
+        const changed = this.slammed.size !== page.slammed_areas.length || this.seen.size !== (page.seen_places || []).length
+        if (changed) this.save()
       } else {
         // No saved progress yet: chops already earned count as slammed, so they don't all replay
         this.slammed = new Set(this.choppedAreas)
