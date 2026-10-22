@@ -13,7 +13,7 @@ const DROP_COUNT = 100; // how many raindrops to draw
 const ui = useUiStore();
 
 // The pages where rain should appear (route names from the router file).
-const RAIN_PAGES = ['map', '3d-map']
+const RAIN_PAGES = ['map']
 
 const route = useRoute();
 const onRainPage = computed(() => RAIN_PAGES.includes(route.name));

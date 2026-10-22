@@ -8,21 +8,6 @@ export const ORIGINS = [
   { id: 'hotel-city-hall', label: 'Downtown hotel (City Hall)', short: 'Hotel', kind: 'hotel', lat: 1.2935, lng: 103.8532 }
 ]
 
-export const INTERESTS = [
-  { id: 'hawker', label: 'Hawker', icon: 'bi-egg-fried' },
-  { id: 'gardens', label: 'Gardens', icon: 'bi-flower1' },
-  { id: 'photo', label: 'Photo', icon: 'bi-camera' },
-  { id: 'views', label: 'Views', icon: 'bi-binoculars' },
-  { id: 'culture', label: 'Culture', icon: 'bi-bank' },
-  { id: 'museum', label: 'Museums', icon: 'bi-easel' },
-  { id: 'heritage', label: 'Heritage', icon: 'bi-hourglass-split' },
-  { id: 'food', label: 'Food', icon: 'bi-cup-hot' },
-  { id: 'shopping', label: 'Shopping', icon: 'bi-bag' },
-  { id: 'nightlife', label: 'Nightlife', icon: 'bi-moon-stars' },
-  { id: 'nature', label: 'Nature', icon: 'bi-tree' },
-  { id: 'beach', label: 'Beach', icon: 'bi-water' }
-]
-
 // Travel styles. `color` fills the badge, `on` is the icon colour that reads on top of it.
 export const STYLES = {
   budget: { label: 'Budget', icon: 'bi-piggy-bank-fill', blurb: 'Hawkers, free sights, MRT everywhere.', color: '#ffcc00', on: '#111111' },
