@@ -1,6 +1,6 @@
 import { BRAND, DEFAULT_COVER, onColor } from '../../model/services/brand.js'
 
-// Canvas drawings for each passport page. Each page is a 512×716 canvas used as a Three.js texture.
+// Canvas drawings for each passport page (512×716). The passport turns them into page images for flipbook-vue.
 
 export const PAGE_W = 512
 export const PAGE_H = 716
@@ -82,7 +82,16 @@ function speckle(ctx, cx, cy, radius, seed) {
 }
 
 // Round (or square) ink stamp with a glyph, label and small text underneath
-export function drawChop(ctx, { x, y, r, ink, glyph, label, sub, seed, alpha = 0.9, square = false }) {
+// Drawn on its own canvas first, so the speckle only knocks ink out of the chop, not holes in the page
+export function drawChop(ctx, options) {
+  const size = Math.ceil(options.r * 2.6)
+  const layer = document.createElement('canvas')
+  layer.width = layer.height = size
+  drawChopInk(layer.getContext('2d'), { ...options, x: size / 2, y: size / 2 })
+  ctx.drawImage(layer, options.x - size / 2, options.y - size / 2)
+}
+
+function drawChopInk(ctx, { x, y, r, ink, glyph, label, sub, seed, alpha = 0.9, square = false }) {
   const random = seededRandom(seed)
   ctx.save()
   ctx.translate(x, y)
@@ -249,7 +258,7 @@ export function drawIdentity(ctx, { name, style, level, title, xp, stamps, chops
 
 // One page per area: title, area chop (earned at `target` places, hidden until the slam reveals it)
 // and `target` place slots. `places` is every place in the area, already in display order.
-export function drawAreaPage(ctx, { area, places, stampsByPlace, target, pageNo, left, revealed = true, inkProgress = 1 }) {
+export function drawAreaPage(ctx, { area, places, stampsByPlace, target, pageNo, left, revealed = true }) {
   paper(ctx, '#fffbea', left)
   ctx.fillStyle = MUTED
   ctx.textAlign = 'left'
@@ -268,8 +277,8 @@ export function drawAreaPage(ctx, { area, places, stampsByPlace, target, pageNo,
   // Area chop in the top right, or a dashed placeholder with a faint glyph
   if (earned && revealed) {
     drawChop(ctx, {
-      x: 392, y: 104, r: 64 * (0.85 + 0.15 * inkProgress),
-      ink: area.ink, glyph: area.glyph, label: area.id, sub: 'SINGAPORE', seed: area.id, alpha: 0.88 * inkProgress
+      x: 392, y: 104, r: 64,
+      ink: area.ink, glyph: area.glyph, label: area.id, sub: 'SINGAPORE', seed: area.id, alpha: 0.88
     })
   } else {
     ctx.save()

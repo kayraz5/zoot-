@@ -23,9 +23,11 @@ function close() {
   ui.celebrate(null)
 }
 
+// Opens the passport on this place's page, where the new stamp slams into its slot
 function goToPassport() {
+  const placeId = celebration.value?.place?.id
   close()
-  router.push('/passport')
+  router.push({ path: '/passport', query: placeId ? { stamp: placeId } : {} })
 }
 </script>
 
@@ -54,7 +56,7 @@ function goToPassport() {
           <p v-else-if="celebration.area && areaCount < CHOP_TARGET" class="small text-muted mb-3">{{ areaCount }} / {{ CHOP_TARGET }} places toward the {{ celebration.area }} chop</p>
         </template>
         <div class="d-flex gap-2 justify-content-center">
-          <button v-if="celebration.chopEarned" class="btn btn-soft" @click="goToPassport"><i class="bi bi-journal-bookmark-fill"></i> See chop</button>
+          <button v-if="!celebration.returned" class="btn btn-soft" @click="goToPassport"><i class="bi bi-journal-bookmark-fill"></i> {{ celebration.chopEarned ? 'See chop' : 'See in passport' }}</button>
           <button class="btn btn-primary px-4" @click="close" autofocus>Nice!</button>
         </div>
       </div>

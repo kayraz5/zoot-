@@ -1,5 +1,6 @@
 <script setup>
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import { useRoute, useRouter } from 'vue-router'
 import Flipbook from 'flipbook-vue'
 import { StampSlam } from '../gl/stampSlam.js'
 import { drawCover, drawIdentity, drawAreaPage, drawBackPage, PAGE_W, PAGE_H } from '../gl/pageArt.js'
@@ -16,6 +17,8 @@ import { getDb } from '../../model/services/db/index.js'
 const passport = usePassportStore()
 const user = useUserStore()
 const mission = useMissionStore()
+const route = useRoute()
+const router = useRouter()
 
 const stage = ref(null)
 const book = ref(null) // the flipbook-vue component
@@ -35,6 +38,8 @@ const bookPages = computed(() => [null, ...pages.value])
 
 // Area chops waiting for their slam stay hidden until the stamp lands
 const revealedAreas = new Set()
+// Place just stamped (?stamp=id, from the stamp pop-up): its chop stays hidden until its own slam lands
+let newStamp = route.query.stamp || null
 
 const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms))
 
@@ -141,10 +146,11 @@ function paint(i, ctx) {
   const area = AREAS[i - FIRST_AREA_PAGE]
   if (area) {
     const waitingForSlam = passport.pendingSlams.includes(area.id)
+    const { [newStamp]: _, ...shownStamps } = stampsByPlace.value
     return drawAreaPage(ctx, {
       area,
       places: areaPlaces(area.id),
-      stampsByPlace: stampsByPlace.value,
+      stampsByPlace: newStamp ? shownStamps : stampsByPlace.value,
       target: CHOP_TARGET,
       pageNo: i,
       left,
@@ -155,17 +161,13 @@ function paint(i, ctx) {
   return drawBackPage(ctx, { badges: badges.value, left })
 }
 
-function drawPage(i) {
+// Short blob: URLs, not data: URLs (flipbook-vue repeats the URL in every curl strip, every frame)
+function pageImage(i) {
   const canvas = document.createElement('canvas')
   canvas.width = PAGE_W
   canvas.height = PAGE_H
   paint(i, canvas.getContext('2d'))
-  return canvas
-}
-
-// Short blob: URLs, not data: URLs (flipbook-vue repeats the URL in every curl strip, every frame)
-function pageImage(i) {
-  return new Promise((resolve) => drawPage(i).toBlob((blob) => resolve(URL.createObjectURL(blob)), 'image/png'))
+  return new Promise((resolve) => canvas.toBlob((blob) => resolve(URL.createObjectURL(blob)), 'image/png'))
 }
 
 async function repaintAll() {
@@ -226,8 +228,33 @@ async function playSlams() {
   }
 }
 
+// Turn to the place just stamped and slam its chop into its slot
+async function playNewStamp(placeId) {
+  const place = placeById.value.get(placeId)
+  const areaIndex = AREAS.findIndex((a) => a.id === place?.area)
+  if (areaIndex < 0) return
+  const page = FIRST_AREA_PAGE + areaIndex
+  goToPage(page)
+  await nextTick()
+  await wait(400)
+
+  // Same 2 × 3 slot layout as drawAreaPage; places past the 6th aren't on the page
+  const slot = areaPlaces(place.area).findIndex((p) => p.id === placeId)
+  const at = slot >= 0 && slot < CHOP_TARGET && pagePoint(page, 136 + (slot % 2) * 240, 262 + Math.floor(slot / 2) * 140)
+  const reveal = async () => {
+    newStamp = null
+    navigator.vibrate?.(40)
+    await repaintPage(page)
+  }
+  if (stampSlam && at) await stampSlam.slam({ x: at.x, y: at.y, size: 104 * at.scale, ink: AREAS[areaIndex].ink }, reveal)
+  else await reveal()
+  await wait(300)
+}
+
 async function runSlams() {
   busy.value = true
+  if (newStamp) await playNewStamp(newStamp)
+  newStamp = null
   // Stamps that load mid-slam get their turn too
   while (book.value && passport.pendingSlams.length) await playSlams()
   busy.value = false
@@ -271,9 +298,14 @@ onMounted(async () => {
     console.warn('[passport] WebGL unavailable, chops appear without the slam', err)
   }
 
+  // Drop ?stamp= so a refresh doesn't replay it
+  if (route.query.stamp) router.replace({ query: {} })
+  // Without a place stamped, the new-stamp slam is skipped (e.g. an old link)
+  if (newStamp && !passport.stampedIds.has(newStamp)) newStamp = null
+
   await wait(300)
-  if (passport.pendingSlams.length) await runSlams()
-  else goToPage(1)
+  if (newStamp || passport.pendingSlams.length) await runSlams()
+  else goToPage(latestStampPage())
   window.addEventListener('keydown', onKey)
 })
 
@@ -290,32 +322,27 @@ function onKey(e) {
   if (e.key === 'ArrowLeft') book.value?.flipLeft()
 }
 
-function jumpToArea(areaId) {
-  goToPage(FIRST_AREA_PAGE + AREAS.findIndex((a) => a.id === areaId))
+// Opens on the page of your most recent stamp, or the identity page if there are none
+function latestStampPage() {
+  const latest = passport.stamps.reduce((a, b) => (String(b.stamped_at) > String(a?.stamped_at ?? '') ? b : a), null)
+  const areaIndex = AREAS.findIndex((a) => a.id === latest?.area)
+  return areaIndex < 0 ? 1 : FIRST_AREA_PAGE + areaIndex
 }
 
-// Saves the right-hand page of the open spread (the only page on phones) as a PNG
-function savePage() {
-  const page = openPages.value.at(-1) ?? 0
-  const link = document.createElement('a')
-  link.download = `zoot-passport-p${page}.png`
-  link.href = drawPage(page).toDataURL('image/png')
-  link.click()
+function jumpToArea(areaId) {
+  goToPage(FIRST_AREA_PAGE + AREAS.findIndex((a) => a.id === areaId))
 }
 </script>
 
 <template>
   <main class="zt-page">
-    <div class="d-flex justify-content-between align-items-end mb-2">
-      <div>
-        <h1 class="title mb-0">Passport</h1>
-        <p class="text-muted small mb-0">{{ passport.stampedIds.size }} {{ passport.stampedIds.size === 1 ? 'place' : 'places' }} stamped · {{ passport.chopCount }} area {{ passport.chopCount === 1 ? 'chop' : 'chops' }}</p>
-      </div>
-      <button class="btn btn-soft btn-sm" @click="savePage"><i class="bi bi-download"></i> Save page</button>
+    <div class="mb-2">
+      <h1 class="title mb-0">Passport</h1>
+      <p class="text-muted small mb-0">{{ passport.stampedIds.size }} {{ passport.stampedIds.size === 1 ? 'place' : 'places' }} stamped · {{ passport.chopCount }} area {{ passport.chopCount === 1 ? 'chop' : 'chops' }}</p>
     </div>
 
     <div ref="stage" class="stage" :class="{ busy }">
-      <Flipbook v-if="pages.length" ref="book" class="book" :pages="bookPages" :click-to-zoom="false" :drag-to-flip="!busy" aria-label="Passport. Drag a page corner or tap a side to turn the page." />
+      <Flipbook v-if="pages.length" ref="book" class="book" :pages="bookPages" :click-to-zoom="false" aria-label="Passport. Drag a page corner or tap a side to turn the page." />
       <canvas ref="slamCanvas" class="slam-canvas"></canvas>
     </div>
 
