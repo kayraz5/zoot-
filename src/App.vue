@@ -7,13 +7,13 @@ import StampCelebration from './view/components/StampCelebration.vue'
 import RainOverlay from './view/components/RainOverlay.vue'
 import { useUserStore } from './model/stores/user.js'
 import { usePassportStore } from './model/stores/passport.js'
-import SkyEffects from './view/components/SkyEffects.vue'
-import CenterDialog from './view/components/CenterDialog.vue'
+import { useUiStore } from './model/stores/ui.js'
 
 const route = useRoute()
 const user = useUserStore()
 const passport = usePassportStore()
-const showNav = computed(() => route.meta.nav && user.isAuthed)
+const ui = useUiStore()
+const showNav = computed(() => route.meta.nav && user.isAuthed && !ui.navHidden)
 
 watch(() => user.userId, (id) => passport.load(id), { immediate: true })
 </script>

@@ -4,13 +4,13 @@ import { useRoute, useRouter } from 'vue-router'
 import { useMissionStore } from '../../model/stores/mission.js'
 import { useUiStore } from '../../model/stores/ui.js'
 import { loadCatalog, placeById } from '../../model/services/catalog.js'
-import { formatTime, formatDuration } from '../../model/services/hours.js'
+import { formatTime } from '../../model/services/hours.js'
 import { rainLookup } from '../../model/services/weather.js'
 import { RAIN_LIMIT } from '../../model/services/planner.js'
+import { tick } from '../../model/services/clock.js'
 import { STYLES } from '../../model/data/origins.js'
 import TimeToGate from '../components/TimeToGate.vue'
-import BufferBar from '../components/BufferBar.vue'
-import WeatherChip from '../components/WeatherChip.vue'
+import LayoverCard from '../components/LayoverCard.vue'
 import StopGallery from '../components/StopGallery.vue'
 import PlacePicker from '../components/PlacePicker.vue'
 import OpenToCompanySheet from '../components/OpenToCompanySheet.vue'
@@ -34,7 +34,9 @@ watch(() => route.params.id, load)
 const m = computed(() => store.mission)
 const companyOpen = ref(false) // "Open to company" sheet (group quests)
 const style = computed(() => STYLES[m.value?.style] || STYLES.budget)
-const leaveBy = computed(() => (m.value ? store.leaveBy() : null))
+// Live "leave by" from where the traveller is; refreshed every 30 s of the app clock.
+const clockStep = computed(() => Math.floor(tick.value / 30000))
+const leaveBy = computed(() => (clockStep.value, m.value ? store.leaveBy() : null))
 
 const modeIcon = { walk: 'bi-person-walking', mrt: 'bi-train-front', taxi: 'bi-taxi-front' }
 const modePill = { walk: '', mrt: 'ink', taxi: 'pale' }
@@ -107,32 +109,25 @@ const replans = [
     </div>
 
     <template v-else>
-      <header class="d-flex justify-content-between align-items-start gap-3 mb-3">
-        <div>
-          <div class="d-flex flex-wrap gap-2 mb-2">
+      <!-- Pills + countdown share the top row so the title gets the full width. -->
+      <header class="mhead mb-3">
+        <div class="mhead-top">
+          <div class="pills">
             <span class="zt-pill"><i class="bi" :class="style.icon"></i> {{ style.label }}</span>
-            <span v-if="m.source === 'groq'" class="zt-pill ink" :title="m.groq_model"><i class="bi bi-stars"></i> Picked by Groq</span>
-            <span v-else class="zt-pill paper" :title="m.fallback_reason || ''"><i class="bi bi-cpu"></i> Offline planner</span>
+            <span v-if="m.source === 'groq'" class="zt-pill ink" :title="m.groq_model"><i class="bi bi-stars"></i> Groq</span>
+            <span v-else class="zt-pill paper" :title="m.fallback_reason || ''"><i class="bi bi-cpu"></i> Offline</span>
             <span v-if="m.replans" class="zt-pill pale">Replanned ×{{ m.replans }}</span>
           </div>
-          <h1 class="title mb-1">{{ m.title }}</h1>
-          <p class="text-muted small mb-0">From {{ m.origin.label }} · {{ store.stampedCount }}/{{ store.visitLegs.length }} stamped</p>
+          <TimeToGate :must-return-ms="store.mustReturnMs" />
         </div>
-        <TimeToGate :must-return-ms="store.mustReturnMs" :leave-by-ms="leaveBy?.ms" />
+        <h1 class="title">{{ m.title }}</h1>
+        <div class="meta">
+          <span><i class="bi bi-geo-alt"></i> From {{ m.origin.label }}</span>
+          <span><i class="bi bi-patch-check"></i> {{ store.stampedCount }}/{{ store.visitLegs.length }} stamped</span>
+        </div>
       </header>
 
-      <section class="zt-card p-3 mb-3">
-        <div class="d-flex justify-content-between align-items-center mb-2">
-          <b class="small">Where your {{ formatDuration(Math.round((store.mustReturnMs - Date.parse(m.start_iso)) / 60000)) }} goes</b>
-          <WeatherChip />
-        </div>
-        <div class="tiny text-muted mono mb-2">{{ formatTime(m.start_iso) }} → {{ formatTime(store.mustReturnMs) }} (Singapore time)</div>
-        <BufferBar
-          :start-ms="Date.parse(m.start_iso)"
-          :window-min="Math.round((store.mustReturnMs - Date.parse(m.start_iso)) / 60000)"
-          :exit-min="m.buffers.exit_min" :out-min="m.total_out_min"
-          :reentry-min="m.buffers.reentry_min" :safety-min="m.buffers.safety_min" />
-      </section>
+      <LayoverCard :mission="m" :leave-by-ms="leaveBy?.ms ?? null" class="mb-3" />
 
       <div v-if="wetLegs.length" class="alert rain-alert d-flex align-items-center gap-3" role="alert">
         <i class="bi bi-cloud-lightning-rain fs-3"></i>
@@ -254,7 +249,13 @@ const replans = [
 </template>
 
 <style scoped>
-.title { font-size: clamp(1.7rem, 7vw, 2.4rem); }
+.mhead-top { display: flex; justify-content: space-between; align-items: center; gap: 12px; }
+.pills { display: flex; flex-wrap: wrap; gap: 6px; min-width: 0; }
+.pills .zt-pill { white-space: nowrap; }
+.title { font-size: clamp(1.6rem, 6.5vw, 2.3rem); line-height: 1.05; margin: 12px 0 6px; text-wrap: balance; }
+.meta { display: flex; flex-wrap: wrap; column-gap: 14px; row-gap: 2px; font-size: 0.84rem; color: var(--zt-muted); }
+.meta > span { white-space: nowrap; }
+.meta .bi { margin-right: 3px; }
 .timeline { position: relative; margin: 0 0 16px; }
 .timeline::before { content: ''; position: absolute; left: 18px; top: 8px; bottom: 8px; border-left: 3px dotted var(--zt-line); }
 .timeline li { position: relative; padding-left: 52px; }

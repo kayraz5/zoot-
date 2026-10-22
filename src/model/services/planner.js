@@ -2,11 +2,11 @@ import { travel, distanceM, nearestHub } from './travel.js'
 import { isOpenDuringVisit, formatTime, waitUntilOpen } from './hours.js'
 
 /**
- * Deterministic layover planner (Kayra + Hulbert lanes).
+ * Deterministic layover planner (Kayra)
  *
  * The clock is the product: every plan must return the traveller to their
- * origin by arrive_by = must_return − re-entry − safety. If it cannot, we refuse.
- * Groq may choose places (see groq.js), but minutes always come from here.
+ * origin by arrive_by = must_return − re-entry − safety. If it cannot, refuse.
+ * Groq may choose places (from groq.js), but minutes always come from here. Sourc of truth document.
  */
 
 export const MISSION_SCHEMA = 'zoot.mission.v1'
@@ -353,8 +353,8 @@ export function assembleMission(ctx, budget, visits, meta = {}) {
 }
 
 function pickPrefs(ctx) {
-	const { style, interests, energy, indoorPref, maxWalk, partySize, cleared } = ctx
-	return { style, interests, energy, indoorPref, maxWalk, partySize, cleared }
+	const { style, interests, energy, indoorPref, maxWalk, partySize, cleared, foodNeeds } = ctx
+	return { style, interests, energy, indoorPref, maxWalk, partySize, cleared, foodNeeds }
 }
 
 function startOf(ctx, budget) {
