@@ -1,0 +1,2 @@
+patchedDependencies:
+  flipbook-vue@1.0.0-beta.4: patches/flipbook-vue@1.0.0-beta.4.patch

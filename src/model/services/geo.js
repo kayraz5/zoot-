@@ -27,12 +27,6 @@ export function startGps() {
   )
 }
 
-export function stopGps() {
-  if (watchId == null) return
-  navigator.geolocation.clearWatch(watchId)
-  watchId = null
-}
-
 /** Toggle fake GPS; optionally drop the fake fix at a point. */
 export function setFake(on, point) {
   geo.fake = on

@@ -166,13 +166,13 @@ a { text-underline-offset: 3px; }
   position: fixed; left: 50%; transform: translateX(-50%);
   bottom: max(12px, env(safe-area-inset-bottom));
   width: min(520px, calc(100% - 24px)); height: var(--zt-nav-h);
-  display: grid; grid-template-columns: repeat(4, 1fr);
+  display: grid; grid-auto-flow: column; grid-auto-columns: 1fr; /* one column per tab, however many there are */
   border-radius: 26px; box-shadow: var(--zt-shadow); z-index: 1030;
 }
 .zt-nav a {
   display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 1px;
   color: var(--zt-ink); text-decoration: none; font-size: 0.66rem; font-weight: 800; text-transform: uppercase; letter-spacing: 0.05em;
-  border-radius: 18px; margin: 6px; border: 2px solid transparent;
+  border-radius: 18px; margin: 6px 3px; border: 2px solid transparent;
 }
 .zt-nav a i { font-size: 1.3rem; line-height: 1; }
 .zt-nav a.router-link-active { color: #111; background: var(--zt-yellow); border-color: var(--zt-line); }
@@ -238,6 +238,12 @@ a { text-underline-offset: 3px; }
   background-color: var(--zt-yellow);
   background-image: repeating-conic-gradient(from 0deg at 50% 62%, rgba(255, 255, 255, 0.34) 0deg 9deg, rgba(255, 255, 255, 0) 9deg 18deg);
 }
+
+/* Live location of other quest members on the map (view/map/memberMarkers.js) */
+.zt-member-marker { display: flex; flex-direction: column; align-items: center; gap: 2px; pointer-events: auto; }
+.zt-member-marker .face { width: 34px; height: 34px; border-radius: 32%; display: grid; place-items: center; font-family: var(--zt-font-head); font-weight: 700; font-size: 1rem; border: 3px solid #111; box-shadow: 0 3px 0 #111; }
+.zt-member-marker .name { font-size: 0.7rem; font-weight: 800; padding: 1px 6px; border-radius: 99px; background: #111; color: #ffcc00; white-space: nowrap; }
+.zt-member-marker.stale { opacity: 0.5; filter: grayscale(0.6); }
 
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation-duration: 0.01ms !important; animation-iteration-count: 1 !important; transition-duration: 0.01ms !important; }

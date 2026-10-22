@@ -4,15 +4,16 @@ import { useRoute, useRouter } from 'vue-router'
 import { useMissionStore } from '../../model/stores/mission.js'
 import { useUiStore } from '../../model/stores/ui.js'
 import { loadCatalog, placeById } from '../../model/services/catalog.js'
-import { formatTime, formatDuration } from '../../model/services/hours.js'
+import { formatTime } from '../../model/services/hours.js'
 import { rainLookup } from '../../model/services/weather.js'
 import { RAIN_LIMIT } from '../../model/services/planner.js'
+import { tick } from '../../model/services/clock.js'
 import { STYLES } from '../../model/data/origins.js'
 import TimeToGate from '../components/TimeToGate.vue'
-import BufferBar from '../components/BufferBar.vue'
-import WeatherChip from '../components/WeatherChip.vue'
+import LayoverCard from '../components/LayoverCard.vue'
 import StopGallery from '../components/StopGallery.vue'
 import PlacePicker from '../components/PlacePicker.vue'
+import OpenToCompanySheet from '../components/OpenToCompanySheet.vue'
 
 const route = useRoute()
 const router = useRouter()
@@ -24,13 +25,18 @@ async function load() {
   if (route.params.id) await store.load(route.params.id)
   else await store.loadActive()
   if (!ui.weather && store.mission) ui.loadWeather(store.mission.legs[0].lat, store.mission.legs[0].lng)
+  // Joined someone's quest? Check the host hasn't closed it or changed my stops.
+  if (store.mission?.joined) store.checkJoined()
 }
 onMounted(load)
 watch(() => route.params.id, load)
 
 const m = computed(() => store.mission)
+const companyOpen = ref(false) // "Open to company" sheet (group quests)
 const style = computed(() => STYLES[m.value?.style] || STYLES.budget)
-const leaveBy = computed(() => (m.value ? store.leaveBy() : null))
+// Live "leave by" from where the traveller is; refreshed every 30 s of the app clock.
+const clockStep = computed(() => Math.floor(tick.value / 30000))
+const leaveBy = computed(() => (clockStep.value, m.value ? store.leaveBy() : null))
 
 const modeIcon = { walk: 'bi-person-walking', mrt: 'bi-train-front', taxi: 'bi-taxi-front' }
 const modePill = { walk: '', mrt: 'ink', taxi: 'pale' }
@@ -103,32 +109,25 @@ const replans = [
     </div>
 
     <template v-else>
-      <header class="d-flex justify-content-between align-items-start gap-3 mb-3">
-        <div>
-          <div class="d-flex flex-wrap gap-2 mb-2">
+      <!-- Pills + countdown share the top row so the title gets the full width. -->
+      <header class="mhead mb-3">
+        <div class="mhead-top">
+          <div class="pills">
             <span class="zt-pill"><i class="bi" :class="style.icon"></i> {{ style.label }}</span>
-            <span v-if="m.source === 'groq'" class="zt-pill ink" :title="m.groq_model"><i class="bi bi-stars"></i> Picked by Groq</span>
-            <span v-else class="zt-pill paper" :title="m.fallback_reason || ''"><i class="bi bi-cpu"></i> Offline planner</span>
+            <span v-if="m.source === 'groq'" class="zt-pill ink" :title="m.groq_model"><i class="bi bi-stars"></i> Groq</span>
+            <span v-else class="zt-pill paper" :title="m.fallback_reason || ''"><i class="bi bi-cpu"></i> Offline</span>
             <span v-if="m.replans" class="zt-pill pale">Replanned ×{{ m.replans }}</span>
           </div>
-          <h1 class="title mb-1">{{ m.title }}</h1>
-          <p class="text-muted small mb-0">From {{ m.origin.label }} · {{ store.stampedCount }}/{{ store.visitLegs.length }} stamped</p>
+          <TimeToGate :must-return-ms="store.mustReturnMs" />
         </div>
-        <TimeToGate :must-return-ms="store.mustReturnMs" :leave-by-ms="leaveBy?.ms" />
+        <h1 class="title">{{ m.title }}</h1>
+        <div class="meta">
+          <span><i class="bi bi-geo-alt"></i> From {{ m.origin.label }}</span>
+          <span><i class="bi bi-patch-check"></i> {{ store.stampedCount }}/{{ store.visitLegs.length }} stamped</span>
+        </div>
       </header>
 
-      <section class="zt-card p-3 mb-3">
-        <div class="d-flex justify-content-between align-items-center mb-2">
-          <b class="small">Where your {{ formatDuration(Math.round((store.mustReturnMs - Date.parse(m.start_iso)) / 60000)) }} goes</b>
-          <WeatherChip />
-        </div>
-        <div class="tiny text-muted mono mb-2">{{ formatTime(m.start_iso) }} → {{ formatTime(store.mustReturnMs) }} (Singapore time)</div>
-        <BufferBar
-          :start-ms="Date.parse(m.start_iso)"
-          :window-min="Math.round((store.mustReturnMs - Date.parse(m.start_iso)) / 60000)"
-          :exit-min="m.buffers.exit_min" :out-min="m.total_out_min"
-          :reentry-min="m.buffers.reentry_min" :safety-min="m.buffers.safety_min" />
-      </section>
+      <LayoverCard :mission="m" :leave-by-ms="leaveBy?.ms ?? null" class="mb-3" />
 
       <div v-if="wetLegs.length" class="alert rain-alert d-flex align-items-center gap-3" role="alert">
         <i class="bi bi-cloud-lightning-rain fs-3"></i>
@@ -155,7 +154,7 @@ const replans = [
               <i v-else-if="leg.status === 'stamped'" class="bi bi-patch-check-fill"></i>
               <span v-else>{{ leg.seq }}</span>
             </div>
-            <div class="zt-card p-3 stop-card">
+            <div class="zt-card p-3 stop-card" :class="{ joined: leg.fixed }">
               <StopGallery v-if="leg.kind === 'visit' && placeById.get(leg.place_id)" :place="placeById.get(leg.place_id)" class="mb-3" />
               <div class="d-flex justify-content-between gap-2">
                 <div class="flex-grow-1">
@@ -177,7 +176,14 @@ const replans = [
               </div>
               <p class="small mb-2 why">{{ leg.why }}</p>
               <div v-if="leg.sidequest" class="zt-pill pale mb-2"><i class="bi bi-gem"></i> Sidequest</div>
-              <template v-if="leg.kind === 'visit' && leg.status === 'pending'">
+              <template v-if="leg.fixed && leg.status === 'pending'">
+                <div class="d-flex gap-2 flex-wrap align-items-center">
+                  <RouterLink :to="`/map?focus=${leg.seq}`" class="btn btn-sm btn-soft"><i class="bi bi-geo"></i> On map</RouterLink>
+                  <RouterLink :to="`/quests/${leg.party_id}`" class="btn btn-sm btn-soft"><i class="bi bi-people-fill"></i> Quest</RouterLink>
+                  <span class="tiny text-muted"><i class="bi bi-lock-fill"></i> Fixed time with {{ leg.with_host }}</span>
+                </div>
+              </template>
+              <template v-else-if="leg.kind === 'visit' && leg.status === 'pending'">
                 <div class="d-flex gap-2 flex-wrap">
                   <RouterLink :to="`/map?focus=${leg.seq}`" class="btn btn-sm btn-soft"><i class="bi bi-geo"></i> On map</RouterLink>
                   <button class="btn btn-sm btn-soft" :class="{ active: editing === leg.place_id }" :aria-expanded="editing === leg.place_id" @click="toggleEdit(leg)">
@@ -231,15 +237,25 @@ const replans = [
         <p class="tiny text-muted mb-0 mt-2">Stamped stops stay. Only future legs are replaced, from where you are now.</p>
       </section>
 
-      <div class="play-bar">
-        <button class="btn btn-pop btn-lg w-100" @click="router.push('/map')"><i class="bi bi-controller"></i> Play on map</button>
+      <div class="play-bar d-flex gap-2">
+        <button class="btn btn-soft btn-lg company-btn" @click="companyOpen = true" aria-label="Open to company">
+          <i class="bi bi-people-fill"></i><span class="d-none d-sm-inline"> Open to company</span>
+        </button>
+        <button class="btn btn-pop btn-lg flex-grow-1" @click="router.push('/map')"><i class="bi bi-controller"></i> Play on map</button>
       </div>
+      <OpenToCompanySheet :mission="m" :open="companyOpen" @close="companyOpen = false" />
     </template>
   </main>
 </template>
 
 <style scoped>
-.title { font-size: clamp(1.7rem, 7vw, 2.4rem); }
+.mhead-top { display: flex; justify-content: space-between; align-items: center; gap: 12px; }
+.pills { display: flex; flex-wrap: wrap; gap: 6px; min-width: 0; }
+.pills .zt-pill { white-space: nowrap; }
+.title { font-size: clamp(1.6rem, 6.5vw, 2.3rem); line-height: 1.05; margin: 12px 0 6px; text-wrap: balance; }
+.meta { display: flex; flex-wrap: wrap; column-gap: 14px; row-gap: 2px; font-size: 0.84rem; color: var(--zt-muted); }
+.meta > span { white-space: nowrap; }
+.meta .bi { margin-right: 3px; }
 .timeline { position: relative; margin: 0 0 16px; }
 .timeline::before { content: ''; position: absolute; left: 18px; top: 8px; bottom: 8px; border-left: 3px dotted var(--zt-line); }
 .timeline li { position: relative; padding-left: 52px; }
@@ -255,6 +271,7 @@ const replans = [
 .tl-stop.next .dot { background: var(--zt-pink); animation: zt-pulse 1.4s infinite; }
 .tl-stop.next .stop-card { box-shadow: 5px 5px 0 var(--zt-pink); }
 .stop-card { box-shadow: var(--zt-shadow-sm); }
+.stop-card.joined { border-color: var(--zt-pink); }
 .why { color: var(--zt-muted); }
 .edit-panel { border-top: 2px dashed var(--zt-soft-line); padding-top: 12px; }
 .stay-now { min-width: 5.5em; opacity: 1; }

@@ -3,23 +3,9 @@ export const ORIGINS = [
   { id: 'changi-t3', label: 'Changi Airport T3', short: 'Changi T3', kind: 'airport', lat: 1.3563, lng: 103.9866 },
   { id: 'changi-t1', label: 'Changi Airport T1', short: 'Changi T1', kind: 'airport', lat: 1.3618, lng: 103.9899 },
   { id: 'changi-t2', label: 'Changi Airport T2', short: 'Changi T2', kind: 'airport', lat: 1.3553, lng: 103.9886 },
+  { id: 'changi-t4', label: 'Changi Airport T4', short: 'Changi T4', kind: 'airport', lat: 1.3383, lng: 103.9833 },
   { id: 'jewel', label: 'Jewel Changi (landside)', short: 'Jewel', kind: 'airport', lat: 1.3602, lng: 103.9894 },
   { id: 'hotel-city-hall', label: 'Downtown hotel (City Hall)', short: 'Hotel', kind: 'hotel', lat: 1.2935, lng: 103.8532 }
-]
-
-export const INTERESTS = [
-  { id: 'hawker', label: 'Hawker', icon: 'bi-egg-fried' },
-  { id: 'gardens', label: 'Gardens', icon: 'bi-flower1' },
-  { id: 'photo', label: 'Photo', icon: 'bi-camera' },
-  { id: 'views', label: 'Views', icon: 'bi-binoculars' },
-  { id: 'culture', label: 'Culture', icon: 'bi-bank' },
-  { id: 'museum', label: 'Museums', icon: 'bi-easel' },
-  { id: 'heritage', label: 'Heritage', icon: 'bi-hourglass-split' },
-  { id: 'food', label: 'Food', icon: 'bi-cup-hot' },
-  { id: 'shopping', label: 'Shopping', icon: 'bi-bag' },
-  { id: 'nightlife', label: 'Nightlife', icon: 'bi-moon-stars' },
-  { id: 'nature', label: 'Nature', icon: 'bi-tree' },
-  { id: 'beach', label: 'Beach', icon: 'bi-water' }
 ]
 
 // Travel styles. `color` fills the badge, `on` is the icon colour that reads on top of it.

@@ -1,8 +1,13 @@
 <script setup>
 import { ref, computed, onMounted, onUnmounted, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { Map as MapLibreMap } from 'maplibre-gl'
+import { Map as MapLibreMap, setWorkerUrl } from 'maplibre-gl'
 import 'maplibre-gl/dist/maplibre-gl.css'
+// MapLibre resolves its worker next to its own module, which Vite never copies into the build.
+// Importing it with ?url makes Vite emit it as an asset and gives us the real URL.
+import maplibreWorkerUrl from 'maplibre-gl/dist/maplibre-gl-worker.mjs?url'
+
+setWorkerUrl(maplibreWorkerUrl)
 import axios from 'axios'
 import destination from '@turf/destination'
 import { point } from '@turf/helpers'
@@ -19,6 +24,21 @@ import { distanceM, travel } from '../../model/services/travel.js'
 import { addQuestLayers, createPlayerMarker, setFence, setQuestColors, syncStopMarkers, straight } from '../map/questLayers.js'
 import { loadCatalog } from '../../model/services/catalog.js'
 import { formatTime } from '../../model/services/hours.js'
+import AppNav from '../components/AppNav.vue'
+import { useMissionStore } from '../../model/stores/mission.js'
+import { useUiStore } from '../../model/stores/ui.js'
+import { loadCatalog } from '../../model/services/catalog.js'
+import { geo, startGps, setFake, teleport, hasFix } from '../../model/services/geo.js'
+import { checkInStatus } from '../../model/services/checkin.js'
+import { travel, distanceM } from '../../model/services/travel.js'
+import { formatTime } from '../../model/services/hours.js'
+import { tick } from '../../model/services/clock.js'
+import { getWalkRoute } from '../../model/services/walkRoute.js'
+import { addQuestLayers, setQuestColors, setRoute, setFence, syncStopMarkers, createPlayerMarker, straight } from '../map/questLayers.js'
+import { describePsi } from '../../model/services/weather.js'
+import { removePlaceMarker } from '../components/placeMarker.js'
+import { PinLayer } from '../gl/pinPoint.js'
+import QuestCoopChip from '../components/QuestCoopChip.vue'
 
 const ORS_API_KEY = "eyJvcmciOiI1YjNjZTM1OTc4NTExMTAwMDFjZjYyNDgiLCJpZCI6IjdiZWU2YWY0OGY3NDQ4NjA5MGJiNjUwZTVkZjg5NTAwIiwiaCI6Im11cm11cjY0In0="
 const el = ref(null)
@@ -79,17 +99,17 @@ function getCurrentPosition() {
 }
 
 async function showRouteTo(destination) {
-  const start = await getCurrentPosition()   // ← was the hardcoded array
+  const start = await getCurrentPosition()
   const geometry = await fetchRoute(start, destination)
 
   if (map.getSource('route')) {
     map.getSource('route').setData({ type: 'Feature', geometry, properties: {} })
   } else {
-    map.addSource('route', { //used  to register the route's coordinates under the name "route"
+    map.addSource('route', { // registers the route's coordinates under the name "route"
       type: 'geojson',
       data: { type: 'Feature', geometry, properties: {} }
     })
-    map.addLayer({ // draw the route source's data as a line. From the current position to the destination
+    map.addLayer({ // draws the route source's data as a line, from the current position to the destination
       id: 'route-line',
       type: 'line',
       source: 'route',
@@ -103,12 +123,17 @@ async function showRouteTo(destination) {
   }
 }
 
-
 // ── Mission state ────────────────────────────────────────────────────────
 const route = useRoute()
 const router = useRouter()
 const store = useMissionStore()
+
 const ui = useUiStore()
+const haze = computed(() => {
+	if (!ui.shownHaze) return null
+	return { psi: ui.shownHaze.psi, ...describePsi(ui.shownHaze.psi) }
+})
+const lightningNearby = computed(() => ui.shownLightning?.nearby === true)
 const mapReady = ref(false)
 const following = ref(true) // camera follows you until you drag the map
 const stamping = ref(false)
@@ -129,31 +154,27 @@ const opts = computed(() => ({ maxWalk: m.value?.prefs?.maxWalk, style: m.value?
 
 const liveTravel = computed(() => (next.value && here.value ? travel(here.value, next.value, opts.value) : null))
 const distance = computed(() => (next.value && here.value ? distanceM(here.value, next.value) : null))
-const stopNumber = computed(() => {
-  const visits = store.visitLegs
-  return next.value?.kind === 'visit' ? `${visits.indexOf(next.value) + 1}/${visits.length}` : ''
-})
 
 /** Can you stamp right now? Visits use the real check-in rules; the trip home uses a wider radius. */
 const check = computed(() => {
-  tick.value
-  const n = next.value
-  if (!n) return null
-  if (n.kind === 'return') {
-    if (!here.value) return { ok: false, message: 'Waiting for GPS…' }
-    const d = distanceM(here.value, n)
-    return d <= HOME_RADIUS_M
-      ? { ok: true, message: `You're back at ${n.name}. Check in to finish the quest.` }
-      : { ok: false, message: `${formatDist(d)} from ${n.name}. Get within ${HOME_RADIUS_M} m to finish.` }
-  }
-  return checkInStatus({ place: n, position: here.value ? { ...here.value, accuracy: geo.accuracy } : null, fake: geo.fake })
+	tick.value
+	const n = next.value
+	if (!n) return null
+	if (n.kind === 'return') {
+		if (!here.value) return { ok: false, message: 'Waiting for GPS…' }
+		const d = distanceM(here.value, n)
+		return d <= HOME_RADIUS_M
+			? { ok: true, message: `You're back at ${n.name}. Check in to finish the quest.` }
+			: { ok: false, message: `${formatDist(d)} from ${n.name}. Get within ${HOME_RADIUS_M} m to finish.` }
+	}
+	return checkInStatus({ place: n, position: here.value ? { ...here.value, accuracy: geo.accuracy } : null, fake: geo.fake })
 })
 
 /** Minutes you'd arrive after the planned time if you set off now (negative = early). */
 const lateBy = computed(() => {
-  if (!next.value || !liveTravel.value) return null
-  const eta = tick.value + liveTravel.value.minutes * 60000
-  return Math.round((eta - Date.parse(next.value.arrive_iso)) / 60000)
+	if (!next.value || !liveTravel.value) return null
+	const eta = tick.value + liveTravel.value.minutes * 60000
+	return Math.round((eta - Date.parse(next.value.arrive_iso)) / 60000)
 })
 
 /** The next instruction: a walking/MRT/taxi hint. No turn-by-turn text — fetchRoute() (OpenRouteService) only gives us the line, not steps. */
@@ -166,13 +187,13 @@ const guidance = computed(() => {
 })
 
 const countdown = computed(() => {
-  if (!store.mustReturnMs) return null
-  const s = Math.max(0, Math.floor((store.mustReturnMs - tick.value) / 1000))
-  return `${Math.floor(s / 3600)}:${String(Math.floor((s % 3600) / 60)).padStart(2, '0')}:${String(s % 60).padStart(2, '0')}`
+	if (!store.mustReturnMs) return null
+	const s = Math.max(0, Math.floor((store.mustReturnMs - tick.value) / 1000))
+	return `${Math.floor(s / 3600)}:${String(Math.floor((s % 3600) / 60)).padStart(2, '0')}:${String(s % 60).padStart(2, '0')}`
 })
 const leaveBy = computed(() => {
-  tick.value
-  return m.value && next.value ? store.leaveBy()?.ms ?? null : null
+	tick.value
+	return m.value && next.value ? store.leaveBy()?.ms ?? null : null
 })
 // CHANGE: was one computed returning a class-name string via a ternary chain
 // (`timeLevel`, hard to see at a glance which number maps to which class).
@@ -185,24 +206,24 @@ const isTimeCritical = computed(() => minutesToDeadline.value < 45) // under 45 
 const isTimeWarning = computed(() => minutesToDeadline.value < 90 && !isTimeCritical.value) // under 90 min left (but not critical yet) → amber
 
 function formatDist(meters) {
-  if (meters == null) return ''
-  return meters >= 1000 ? `${(meters / 1000).toFixed(1)} km` : `${Math.round(meters / 10) * 10} m`
+	if (meters == null) return ''
+	return meters >= 1000 ? `${(meters / 1000).toFixed(1)} km` : `${Math.round(meters / 10) * 10} m`
 }
 
 
 // ── Drawing ──────────────────────────────────────────────────────────────
 function drawMission() {
-  if (!mapReady.value) return
-  if (here.value) player.setLngLat([here.value.lng, here.value.lat]).addTo(map)
-  syncStopMarkers(map, markers, store.legs, next.value, (leg) => flyTo(leg))
-  drawRoute()
-  drawFence()
+	if (!mapReady.value) return
+	if (here.value) player.setLngLat([here.value.lng, here.value.lat]).addTo(map)
+	syncStopMarkers(map, markers, store.legs, next.value, (leg) => flyTo(leg))
+	drawRoute()
+	drawFence()
 }
 
 function drawFence() {
-  const n = next.value
-  const radius = n?.kind === 'return' ? HOME_RADIUS_M : (check.value?.radius ?? 80)
-  setFence(map, n, radius, !!check.value?.ok)
+	const n = next.value
+	const radius = n?.kind === 'return' ? HOME_RADIUS_M : (check.value?.radius ?? 80)
+	setFence(map, n, radius, !!check.value?.ok)
 }
 
 /** You → next stop + every later pending leg, drawn the same way as the Test Route (MBS) button: one plain pink line via fetchRoute(). */
@@ -247,9 +268,9 @@ function drawRoute() {
 
 /** Where the traveller was before `leg`: the leg before it, or the trip origin. */
 function previousPoint(leg) {
-  const legs = store.legs
-  const i = legs.indexOf(leg)
-  return i > 0 ? legs[i - 1] : m.value.origin
+	const legs = store.legs
+	const i = legs.indexOf(leg)
+	return i > 0 ? legs[i - 1] : m.value.origin
 }
 
 /** Street routes between later stops (only walking legs need the router; MRT/taxi stay straight). */
@@ -299,98 +320,98 @@ async function refreshLiveRoute(force = false) {
 
 // ── Camera ───────────────────────────────────────────────────────────────
 function flyTo(p, zoom = 17) {
-  map?.flyTo({ center: [p.lng, p.lat], zoom, duration: 1200 })
-  following.value = false
+	map?.flyTo({ center: [p.lng, p.lat], zoom, duration: 1200 })
+	following.value = false
 }
 
 function recenter() {
-  following.value = true
-  if (!geo.fake) startGps()
-  if (here.value) map.easeTo({ center: [here.value.lng, here.value.lat], zoom: 17, duration: 800 })
-  else ui.toast('Waiting for GPS… Allow location access, or turn on Demo-Walk.', 'dark')
+	following.value = true
+	if (!geo.fake) startGps()
+	if (here.value) map.easeTo({ center: [here.value.lng, here.value.lat], zoom: 17, duration: 800 })
+	else ui.toast('Waiting for GPS… Allow location access, or turn on Demo-Walk.', 'dark')
 }
 
 /** Fit you + every remaining stop on screen, leaving room for the stop card. */
 function overview() {
-  // The trip home is usually far (the airport), so leave it out unless it's the last thing left.
-  const ahead = store.legs.filter((l) => l.status === 'pending')
-  const pts = [here.value, ...(ahead.length > 1 ? ahead.filter((l) => l.kind === 'visit') : ahead)].filter(Boolean)
-  if (!pts.length && m.value) pts.push(m.value.origin)
-  if (!pts.length) return
-  const lngs = pts.map((p) => p.lng)
-  const lats = pts.map((p) => p.lat)
-  following.value = false
-  map.fitBounds([[Math.min(...lngs), Math.min(...lats)], [Math.max(...lngs), Math.max(...lats)]], {
-    padding: { top: 140, bottom: 300, left: 60, right: 100 }, maxZoom: 16.5, duration: 1000
-  })
+	// The trip home is usually far (the airport), so leave it out unless it's the last thing left.
+	const ahead = store.legs.filter((l) => l.status === 'pending')
+	const pts = [here.value, ...(ahead.length > 1 ? ahead.filter((l) => l.kind === 'visit') : ahead)].filter(Boolean)
+	if (!pts.length && m.value) pts.push(m.value.origin)
+	if (!pts.length) return
+	const lngs = pts.map((p) => p.lng)
+	const lats = pts.map((p) => p.lat)
+	following.value = false
+	map.fitBounds([[Math.min(...lngs), Math.min(...lats)], [Math.max(...lngs), Math.max(...lats)]], {
+		padding: { top: 140, bottom: 300, left: 60, right: 100 }, maxZoom: 16.5, duration: 1000
+	})
 }
 
 // ── Stamping & help ──────────────────────────────────────────────────────
 async function stampNext() {
-  const n = next.value
-  if (!n || stamping.value) return
-  if (!check.value?.ok) return ui.toast(check.value?.message || 'Not in range yet.', 'warning', 3500)
-  stamping.value = true
-  try {
-    if (n.kind === 'return') await store.completeReturn()
-    else await store.stamp(n)
-    liveRoute.value = null
-  } catch (err) {
-    ui.toast(err.message, 'warning', 4500)
-  } finally {
-    stamping.value = false
-  }
+	const n = next.value
+	if (!n || stamping.value) return
+	if (!check.value?.ok) return ui.toast(check.value?.message || 'Not in range yet.', 'warning', 3500)
+	stamping.value = true
+	try {
+		if (n.kind === 'return') await store.completeReturn()
+		else await store.stamp(n)
+		liveRoute.value = null
+	} catch (err) {
+		ui.toast(err.message, 'warning', 4500)
+	} finally {
+		stamping.value = false
+	}
 }
 
 async function replan(mode) {
-  helpOpen.value = false
-  await store.replan(mode)
+	helpOpen.value = false
+	await store.replan(mode)
 }
 
 async function skipNext() {
-  helpOpen.value = false
-  if (next.value?.kind !== 'visit') return
-  await store.skip(next.value)
-  ui.toast('Stop skipped. On to the next one.', 'dark')
+	helpOpen.value = false
+	if (next.value?.kind !== 'visit') return
+	await store.skip(next.value)
+	ui.toast('Stop skipped. On to the next one.', 'dark')
 }
 
 // ── Demo-Walk (fake GPS) ─────────────────────────────────────────────────
 function bearingDeg(a, b) {
-  const r = (x) => (x * Math.PI) / 180
-  const y = Math.sin(r(b.lng - a.lng)) * Math.cos(r(b.lat))
-  const x = Math.cos(r(a.lat)) * Math.sin(r(b.lat)) - Math.sin(r(a.lat)) * Math.cos(r(b.lat)) * Math.cos(r(b.lng - a.lng))
-  return (Math.atan2(y, x) * 180) / Math.PI
+	const r = (x) => (x * Math.PI) / 180
+	const y = Math.sin(r(b.lng - a.lng)) * Math.cos(r(b.lat))
+	const x = Math.cos(r(a.lat)) * Math.sin(r(b.lat)) - Math.sin(r(a.lat)) * Math.cos(r(b.lat)) * Math.cos(r(b.lng - a.lng))
+	return (Math.atan2(y, x) * 180) / Math.PI
 }
 
 function offsetFrom(p, bearing, meters) {
-  const [lng, lat] = destination(point([p.lng, p.lat]), meters / 1000, bearing, { units: 'kilometers' }).geometry.coordinates
-  return { lat, lng }
+	const [lng, lat] = destination(point([p.lng, p.lat]), meters / 1000, bearing, { units: 'kilometers' }).geometry.coordinates
+	return { lat, lng }
 }
 /** A spot `meters` short of the next stop, on the line from the previous one. */
 function nearNext(meters) {
-  const n = next.value
-  if (!n) return m.value?.origin || null
-  const prev = previousPoint(n)
-  return offsetFrom(n, bearingDeg(n, prev), meters)
+	const n = next.value
+	if (!n) return m.value?.origin || null
+	const prev = previousPoint(n)
+	return offsetFrom(n, bearingDeg(n, prev), meters)
 }
 
 function toggleDemo() {
-  if (geo.fake) {
-    setFake(false)
-    ui.toast('Using real GPS.', 'dark')
-  } else {
-    setFake(true, here.value || nearNext(200) || undefined)
-    following.value = true
-    ui.toast('Demo-Walk on: use WASD / arrow keys, or tap the map to move.', 'dark', 4000)
-  }
+	if (geo.fake) {
+		setFake(false)
+		ui.toast('Using real GPS.', 'dark')
+	} else {
+		setFake(true, here.value || nearNext(200) || undefined)
+		following.value = true
+		ui.toast('Demo-Walk on: use WASD / arrow keys, or tap the map to move.', 'dark', 4000)
+	}
 }
 
 function jumpTo(meters) {
-  const p = nearNext(meters)
-  if (!p) return
-  if (!geo.fake) setFake(true)
-  teleport(p)
-  following.value = true
+	const p = nearNext(meters)
+	if (!p) return
+	if (!geo.fake) setFake(true)
+	teleport(p)
+	following.value = true
 }
 
 const KEY_DIRS = { w: 0, arrowup: 0, s: 180, arrowdown: 180, a: -90, arrowleft: -90, d: 90, arrowright: 90 }
@@ -398,84 +419,84 @@ const keys = new Set()
 let raf = 0
 let lastFrame = 0
 function onKey(e) {
-  if (!geo.fake || !wasd.value || e.target.closest?.('input, textarea, select')) return
-  const k = e.key.toLowerCase()
-  if (k in KEY_DIRS) {
-    keys.add(k)
-    e.preventDefault()
-  }
+	if (!geo.fake || !wasd.value || e.target.closest?.('input, textarea, select')) return
+	const k = e.key.toLowerCase()
+	if (k in KEY_DIRS) {
+		keys.add(k)
+		e.preventDefault()
+	}
 }
 const onKeyUp = (e) => keys.delete(e.key.toLowerCase())
 function loop(t) {
-  const dt = Math.min(100, t - (lastFrame || t))
-  lastFrame = t
-  if (keys.size && geo.fake && hasFix() && map) {
-    let x = 0
-    let y = 0
-    for (const k of keys) {
-      const a = ((KEY_DIRS[k] + map.getBearing()) * Math.PI) / 180
-      x += Math.sin(a)
-      y += Math.cos(a)
-    }
-    if (x || y) {
-      const metersPerSec = 1.4 * speed.value // walking pace × demo speed
-      teleport(offsetFrom(here.value, (Math.atan2(x, y) * 180) / Math.PI, (metersPerSec * dt) / 1000))
-      following.value = true
-    }
-  }
-  raf = requestAnimationFrame(loop)
+	const dt = Math.min(100, t - (lastFrame || t))
+	lastFrame = t
+	if (keys.size && geo.fake && hasFix() && map) {
+		let x = 0
+		let y = 0
+		for (const k of keys) {
+			const a = ((KEY_DIRS[k] + map.getBearing()) * Math.PI) / 180
+			x += Math.sin(a)
+			y += Math.cos(a)
+		}
+		if (x || y) {
+			const metersPerSec = 1.4 * speed.value // walking pace × demo speed
+			teleport(offsetFrom(here.value, (Math.atan2(x, y) * 180) / Math.PI, (metersPerSec * dt) / 1000))
+			following.value = true
+		}
+	}
+	raf = requestAnimationFrame(loop)
 }
 
 // ── Reactions ────────────────────────────────────────────────────────────
 watch(() => [here.value?.lat, here.value?.lng], () => {
-  if (!mapReady.value || !here.value) return
-  player.setLngLat([here.value.lng, here.value.lat]).addTo(map)
-  if (following.value) {
-    // Following always means street level, even if you'd zoomed out to see the whole quest.
-    const zoom = map.getZoom() < 15.5 ? 16.8 : undefined
-    if (geo.fake && !zoom) map.jumpTo({ center: [here.value.lng, here.value.lat] })
-    else map.easeTo({ center: [here.value.lng, here.value.lat], zoom, duration: zoom ? 900 : 600 })
-  }
-  drawFence()
-  refreshLiveRoute()
+	if (!mapReady.value || !here.value) return
+	player.setLngLat([here.value.lng, here.value.lat]).addTo(map)
+	if (following.value) {
+		// Following always means street level, even if you'd zoomed out to see the whole quest.
+		const zoom = map.getZoom() < 15.5 ? 16.8 : undefined
+		if (geo.fake && !zoom) map.jumpTo({ center: [here.value.lng, here.value.lat] })
+		else map.easeTo({ center: [here.value.lng, here.value.lat], zoom, duration: zoom ? 900 : 600 })
+	}
+	drawFence()
+	refreshLiveRoute()
 })
 
 // Stamps, skips and replans change the legs: redraw everything.
 watch(() => [mapReady.value, m.value?.id, store.legs.map((l) => l.seq + l.status + l.place_id).join()], () => {
-  drawMission()
-  refreshPlanned()
-  refreshLiveRoute(true)
+	drawMission()
+	refreshPlanned()
+	refreshLiveRoute(true)
 })
 
 watch(check, drawFence)
 
 let noFixTimer = 0
 onMounted(async () => {
-  await loadCatalog()
-  await store.loadActive()
-  if (!geo.fake) startGps()
-  noFixTimer = setTimeout(() => {
-    if (!hasFix() && m.value) ui.toast("Can't find your location. Allow location access, or tap Enable Demo-Walk to try the quest from here.", 'warning', 6000)
-  }, 8000)
-  window.addEventListener('keydown', onKey)
-  window.addEventListener('keyup', onKeyUp)
-  raf = requestAnimationFrame(loop)
+	await loadCatalog()
+	await store.loadActive()
+	if (!geo.fake) startGps()
+	noFixTimer = setTimeout(() => {
+		if (!hasFix() && m.value) ui.toast("Can't find your location. Allow location access, or tap Enable Demo-Walk to try the quest from here.", 'warning', 6000)
+	}, 8000)
+	window.addEventListener('keydown', onKey)
+	window.addEventListener('keyup', onKeyUp)
+	raf = requestAnimationFrame(loop)
 })
 
 function GoToFlat() {
-  map.easeTo({
-    pitch: 0,
-    bearing: 0,
-    duration: 600
-  })
+	map.easeTo({
+		pitch: 0,
+		bearing: 0,
+		duration: 600
+	})
 }
 
 function GoTo3D() {
-  map.easeTo({
-    pitch: 56,
-    bearing: -18,
-    duration: 600
-  })
+	map.easeTo({
+		pitch: 56,
+		bearing: -18,
+		duration: 600
+	})
 }
 
 function View(x) {
@@ -518,99 +539,99 @@ function ZoomIn() {
 }
 
 function RemoveBuildings(show) {
-  map.setLayoutProperty('building', 'visibility', show ? 'visible' : 'none')
-  map.setLayoutProperty('building-3d', 'visibility', show ? 'visible' : 'none')
+	map.setLayoutProperty('building', 'visibility', show ? 'visible' : 'none')
+	map.setLayoutProperty('building-3d', 'visibility', show ? 'visible' : 'none')
 }
 
 function applyMapColors() {
-  if (!map || !map.isStyleLoaded()) return
+	if (!map || !map.isStyleLoaded()) return
 
-  if (colorTheme.value === 'theme') {
-    // Background + water → darker version of the Simple theme's own hue
-    map.setPaintProperty('background', 'background-color', '#463320')
-    map.setPaintProperty('water', 'fill-color', '#002166')
+	if (colorTheme.value === 'theme') {
+		// Background + water → darker version of the Simple theme's own hue
+		map.setPaintProperty('background', 'background-color', '#463320')
+		map.setPaintProperty('water', 'fill-color', '#002166')
 
-    // Buildings → darker version of the Simple theme's own hue
-    map.setPaintProperty('building', 'fill-color', '#37342f')
-    map.setPaintProperty('building-3d', 'fill-extrusion-color', '#37342f')
+		// Buildings → darker version of the Simple theme's own hue
+		map.setPaintProperty('building', 'fill-color', '#37342f')
+		map.setPaintProperty('building-3d', 'fill-extrusion-color', '#37342f')
 
-    // Every road layer → bright yellow, regardless of class
-    map.getStyle().layers.forEach((layer) => {
-      if (layer.id.startsWith('road_') && layer.type === 'line') {
-        map.setPaintProperty(layer.id, 'line-color', '#ffcc00')
-      }
-    })
+		// Every road layer → bright yellow, regardless of class
+		map.getStyle().layers.forEach((layer) => {
+			if (layer.id.startsWith('road_') && layer.type === 'line') {
+				map.setPaintProperty(layer.id, 'line-color', '#ffcc00')
+			}
+		})
 
-    // Landcover → darker version of each layer's own original hue
-    const landcoverDark = {
-      landcover_grass: '#2e481e',
-      landcover_ice: '#273f3f',
-      landcover_sand: '#5a4e0c',
-      landcover_wood: '#2b5214'
-    }
-    map.getStyle().layers.forEach((layer) => {
-      if (landcoverDark[layer.id]) {
-        map.setPaintProperty(layer.id, 'fill-color', landcoverDark[layer.id])
-      } else if ((layer.id.startsWith('landuse_') || layer.id === 'park') && layer.type === 'fill') {
-        map.setPaintProperty(layer.id, 'fill-color', '#141414')
-      }
-    })
-  } else {
-    map.setPaintProperty('background', 'background-color', '#f8f4f0')
-    map.setPaintProperty('water', 'fill-color', '#9ebdff')
-    map.setPaintProperty('building', 'fill-color', '#dcd9d6')
-    map.setPaintProperty('building-3d', 'fill-extrusion-color', '#dcd9d6')
+		// Landcover → darker version of each layer's own original hue
+		const landcoverDark = {
+			landcover_grass: '#2e481e',
+			landcover_ice: '#273f3f',
+			landcover_sand: '#5a4e0c',
+			landcover_wood: '#2b5214'
+		}
+		map.getStyle().layers.forEach((layer) => {
+			if (landcoverDark[layer.id]) {
+				map.setPaintProperty(layer.id, 'fill-color', landcoverDark[layer.id])
+			} else if ((layer.id.startsWith('landuse_') || layer.id === 'park') && layer.type === 'fill') {
+				map.setPaintProperty(layer.id, 'fill-color', '#141414')
+			}
+		})
+	} else {
+		map.setPaintProperty('background', 'background-color', '#f8f4f0')
+		map.setPaintProperty('water', 'fill-color', '#9ebdff')
+		map.setPaintProperty('building', 'fill-color', '#dcd9d6')
+		map.setPaintProperty('building-3d', 'fill-extrusion-color', '#dcd9d6')
 
-    map.getStyle().layers.forEach((layer) => {
-      if (layer.id.startsWith('road_') && layer.type === 'line') {
-        map.setPaintProperty(layer.id, 'line-color', '#333333')
-      }
-    })
+		map.getStyle().layers.forEach((layer) => {
+			if (layer.id.startsWith('road_') && layer.type === 'line') {
+				map.setPaintProperty(layer.id, 'line-color', '#333333')
+			}
+		})
 
-    const landcoverLight = {
-      landcover_grass: '#b0d59a',
-      landcover_ice: '#e0ecec',
-      landcover_sand: '#f7efc3',
-      landcover_wood: '#ace38c'
-    }
-    map.getStyle().layers.forEach((layer) => {
-      if (landcoverLight[layer.id]) {
-        map.setPaintProperty(layer.id, 'fill-color', landcoverLight[layer.id])
-      } else if ((layer.id.startsWith('landuse_') || layer.id === 'park') && layer.type === 'fill') {
-        map.setPaintProperty(layer.id, 'fill-color', '#f8f4f0')
-      }
-    })
-  }
+		const landcoverLight = {
+			landcover_grass: '#b0d59a',
+			landcover_ice: '#e0ecec',
+			landcover_sand: '#f7efc3',
+			landcover_wood: '#ace38c'
+		}
+		map.getStyle().layers.forEach((layer) => {
+			if (landcoverLight[layer.id]) {
+				map.setPaintProperty(layer.id, 'fill-color', landcoverLight[layer.id])
+			} else if ((layer.id.startsWith('landuse_') || layer.id === 'park') && layer.type === 'fill') {
+				map.setPaintProperty(layer.id, 'fill-color', '#f8f4f0')
+			}
+		})
+	}
 }
 
 function ApplyColorblindMode(enabled) {
-  if (!map || !map.isStyleLoaded()) return
+	if (!map || !map.isStyleLoaded()) return
 
-  if (enabled) {
-    map.setPaintProperty('building', 'fill-color', '#E69F00')           // orange
-    map.setPaintProperty('building-3d', 'fill-extrusion-color', '#E69F00')
-    map.setPaintProperty('water', 'fill-color', '#0072B2')              // blue
+	if (enabled) {
+		map.setPaintProperty('building', 'fill-color', '#E69F00')           // orange
+		map.setPaintProperty('building-3d', 'fill-extrusion-color', '#E69F00')
+		map.setPaintProperty('water', 'fill-color', '#0072B2')              // blue
 
-    map.getStyle().layers.forEach((layer) => {
-      if (layer.id.startsWith('road_') && layer.type === 'line') {
-        map.setPaintProperty(layer.id, 'line-color', '#F0E442')         // yellow
-      }
-    })
+		map.getStyle().layers.forEach((layer) => {
+			if (layer.id.startsWith('road_') && layer.type === 'line') {
+				map.setPaintProperty(layer.id, 'line-color', '#F0E442')         // yellow
+			}
+		})
 
-    const landcoverSafe = {
-      landcover_grass: '#009E73',   // bluish-green
-      landcover_wood: '#009E73',
-      landcover_sand: '#E69F00',
-      landcover_ice: '#56B4E9'
-    }
-    map.getStyle().layers.forEach((layer) => {
-      if (landcoverSafe[layer.id]) {
-        map.setPaintProperty(layer.id, 'fill-color', landcoverSafe[layer.id])
-      }
-    })
-  } else {
-    applyMapColors()
-  }
+		const landcoverSafe = {
+			landcover_grass: '#009E73',   // bluish-green
+			landcover_wood: '#009E73',
+			landcover_sand: '#E69F00',
+			landcover_ice: '#56B4E9'
+		}
+		map.getStyle().layers.forEach((layer) => {
+			if (landcoverSafe[layer.id]) {
+				map.setPaintProperty(layer.id, 'fill-color', landcoverSafe[layer.id])
+			}
+		})
+	} else {
+		applyMapColors()
+	}
 }
 
 onMounted(() => {
@@ -652,18 +673,29 @@ onMounted(() => {
 })
 
 watch(colorTheme, () => {
-  applyMapColors()
-  if (map) setQuestColors(map, colorTheme.value === 'theme')
+	applyMapColors()
+	if (map) setQuestColors(map, colorTheme.value === 'theme')
 })
 
 onMounted(async () => {
-  try {
-    const res = await axios.get("https://api.open-meteo.com/v1/forecast?latitude=1.2897&longitude=103.8501&current=temperature_2m,rain,uv_index")
-    weather_data.value = res.data
-    console.log(weather_data)
-  } catch (err) {
-    console.error(err)
-  }
+	ui.loadWeather(1.2897, 103.8501) // fills ui.haze and ui.lightning (it handles its own errors)
+	try {
+		const res = await axios.get("https://api.open-meteo.com/v1/forecast?latitude=1.2897&longitude=103.8501&current=temperature_2m,rain,uv_index")
+		weather_data.value = res.data
+	} catch (err) {
+		console.error(err)
+	}
+})
+
+onUnmounted(() => {
+	cancelAnimationFrame(raf)
+	clearTimeout(noFixTimer)
+	clearTimeout(retryTimer)
+	window.removeEventListener('keydown', onKey)
+	window.removeEventListener('keyup', onKeyUp)
+	markers.clear()
+	placeMarkers.forEach(removePlaceMarker)
+	map?.remove()
 })
 </script>
 
@@ -841,8 +873,8 @@ onMounted(async () => {
 
 <style scoped>
 .quest-map {
-  position: absolute;
-  inset: 0;
+	position: absolute;
+	inset: 0;
 }
 
 #top-left {
@@ -909,13 +941,13 @@ onMounted(async () => {
   text-align: left;
 }
 
-#NeedHelp{
-  margin-top: 3px;
-  color: black;
-  max-width: fit-content;
-  border-color: rgb(238, 238, 107);
-  margin-left: 8px;
-  margin-top: 10px;
+#NeedHelp {
+	margin-top: 3px;
+	color: black;
+	max-width: fit-content;
+	border-color: rgb(238, 238, 107);
+	margin-left: 8px;
+	margin-top: 10px;
 }
 
 
@@ -936,6 +968,7 @@ onMounted(async () => {
   cursor: pointer;
 }
 
+/* The map buttons slide open from the hamburger button. */
 .map-tools {
   display: flex;
   flex-direction: column;
@@ -948,9 +981,9 @@ onMounted(async () => {
 }
 
 .map-tools.open {
-  opacity: 1;
-  transform: translateY(0);
-  pointer-events: auto;
+	opacity: 1;
+	transform: translateY(0);
+	pointer-events: auto;
 }
 
 #CenterInfo {
@@ -990,8 +1023,8 @@ onMounted(async () => {
 }
 
 .stop-dist .behind {
-  color: var(--zt-orange);
-  font-weight: 700;
+	color: var(--zt-orange);
+	font-weight: 700;
 }
 
 .stop-near {
@@ -1036,11 +1069,11 @@ onMounted(async () => {
 }
 
 #ChangeMap {
-  color: black;
-  text-align: left;
-  width: fit-content;
-  border-radius: 13px;
-  margin-top: 10px;
+	color: black;
+	text-align: left;
+	width: fit-content;
+	border-radius: 13px;
+	margin-top: 10px;
 }
 
 #demo-controls {
@@ -1054,13 +1087,13 @@ onMounted(async () => {
 }
 
 .demo-row {
-  display: flex;
-  align-items: center;
-  gap: 8px;
+	display: flex;
+	align-items: center;
+	gap: 8px;
 }
 
-.demo-row + .demo-row {
-  margin-top: 8px;
+.demo-row+.demo-row {
+	margin-top: 8px;
 }
 
 .demo-label {
@@ -1074,12 +1107,12 @@ onMounted(async () => {
 }
 
 .map-backdrop {
-  position: fixed;
-  inset: 0;
-  z-index: 1;
-  backdrop-filter: blur(6px);
-  -webkit-backdrop-filter: blur(6px);
-  background: rgba(0, 0, 0, 0.3);
+	position: fixed;
+	inset: 0;
+	z-index: 1;
+	backdrop-filter: blur(6px);
+	-webkit-backdrop-filter: blur(6px);
+	background: rgba(0, 0, 0, 0.3);
 }
 
 #MapPop {
@@ -1095,30 +1128,63 @@ onMounted(async () => {
 }
 
 /* ── Mission wiring ── */
-.map-btn.active { color: var(--zt-black); background: var(--zt-yellow); }
-.map-btn:disabled { opacity: 0.45; cursor: default; }
+.map-btn.active {
+	color: var(--zt-black);
+	background: var(--zt-yellow);
+}
+
+.map-btn:disabled {
+	opacity: 0.45;
+	cursor: default;
+}
+
+#top-right.amber {
+	background: var(--zt-orange) !important;
+}
+
+#top-right.red {
+	background: #e5243b !important;
+	color: #fff !important;
+	animation: ttg-alarm 1.2s infinite;
+}
+
+@keyframes ttg-alarm {
+	0% {
+		box-shadow: 0 0 0 0 rgba(229, 36, 59, 0.7);
+	}
+
+	70%,
+	100% {
+		box-shadow: 0 0 0 16px rgba(229, 36, 59, 0);
+	}
+}
+
+.time_back_from_trip {
+	font-size: 0.8rem;
+}
 
 #top-right.amber { background: var(--zt-orange) !important; }
 #top-right.red { background: #e5243b !important; color: #fff !important; animation: ttg-alarm 1.2s infinite; }
 @keyframes ttg-alarm { 0% { box-shadow: 0 0 0 0 rgba(229, 36, 59, 0.7); } 70%, 100% { box-shadow: 0 0 0 16px rgba(229, 36, 59, 0); } }
 .time_back_from_trip { font-size: clamp(0.7rem, 2.6vw, 0.8rem); }
 
-.stop-dist .ontime { color: #5fd38d; font-weight: 700; }
-.stop-dist .muted { opacity: 0.7; }
 .stop-guide {
   margin-top: 6px;
   color: var(--zt-yellow);
   font-size: clamp(0.78rem, 2.8vw, 0.9rem);
   font-weight: 700;
 }
-.stop-guide .bi { margin-right: 4px; }
 
-.stamp-btn:disabled { cursor: wait; }
-.stamp-btn:not(.ready) { opacity: 0.55; border-style: dashed; }
-.stamp-btn.ready { background: var(--zt-yellow); animation: stamp-ready 1.4s infinite; }
-.stamp-btn.ready .stamp-label { color: var(--zt-black); }
-.stamp-btn.ready .stamp-circle { background: var(--zt-black); color: var(--zt-yellow); }
-@keyframes stamp-ready { 0% { box-shadow: 0 0 0 0 rgba(255, 204, 0, 0.7); } 70%, 100% { box-shadow: 0 0 0 18px rgba(255, 204, 0, 0); } }
+@keyframes stamp-ready {
+	0% {
+		box-shadow: 0 0 0 0 rgba(255, 204, 0, 0.7);
+	}
+
+	70%,
+	100% {
+		box-shadow: 0 0 0 18px rgba(255, 204, 0, 0);
+	}
+}
 
 .demo-hint { color: var(--zt-yellow-pale); opacity: 0.7; font-size: clamp(0.62rem, 2.2vw, 0.7rem); margin-top: 8px; }
 
@@ -1205,12 +1271,30 @@ onMounted(async () => {
   place-items: center;
   font-size: clamp(0.8rem, 2.8vw, 1rem);
 }
+
 .zt-player-marker .pulse {
-  position: absolute;
-  inset: 0;
-  border-radius: 50%;
-  background: rgba(255, 204, 0, 0.45);
-  animation: zt-player-pulse 1.8s ease-out infinite;
+	position: absolute;
+	inset: 0;
+	border-radius: 50%;
+	background: rgba(255, 204, 0, 0.45);
+	animation: zt-player-pulse 1.8s ease-out infinite;
 }
-@keyframes zt-player-pulse { from { transform: scale(0.8); opacity: 1; } to { transform: scale(2.2); opacity: 0; } }
+
+.psi-dot { display: inline-block; width: 9px; height: 9px; border-radius: 50%; border: 1.5px solid #111; margin-left: 2px; }
+.psi-good { background: #2e9e5b; }
+.psi-moderate { background: #f5f5f5; }   /* white dot with a dark ring reads on yellow */
+.psi-unhealthy { background: #e07a1f; }
+.psi-very-unhealthy, .psi-hazardous { background: #d6322e; }
+
+@keyframes zt-player-pulse {
+	from {
+		transform: scale(0.8);
+		opacity: 1;
+	}
+
+	to {
+		transform: scale(2.2);
+		opacity: 0;
+	}
+}
 </style>
