@@ -6,11 +6,19 @@ import 'maplibre-gl/dist/maplibre-gl.css'
 import axios from 'axios'
 import destination from '@turf/destination'
 import { point } from '@turf/helpers'
-import AppNav from '../components/AppNav.vue'
 import { AxiosError } from 'axios'
 import { createPlaceMarker, removePlaceMarker } from '../components/placeMarker.js'
 import places from '../../model/data/places.sg.json'
 import { PinLayer } from '../gl/pinPoint.js'
+import { useMissionStore } from '../../model/stores/mission.js'
+import { useUiStore } from '../../model/stores/ui.js'
+import { geo, hasFix, startGps, setFake, teleport } from '../../model/services/geo.js'
+import { tick } from '../../model/services/clock.js'
+import { checkInStatus } from '../../model/services/checkin.js'
+import { distanceM, travel } from '../../model/services/travel.js'
+import { addQuestLayers, createPlayerMarker, setFence, setQuestColors, syncStopMarkers, straight } from '../map/questLayers.js'
+import { loadCatalog } from '../../model/services/catalog.js'
+import { formatTime } from '../../model/services/hours.js'
 
 const ORS_API_KEY = "eyJvcmciOiI1YjNjZTM1OTc4NTExMTAwMDFjZjYyNDgiLCJpZCI6IjdiZWU2YWY0OGY3NDQ4NjA5MGJiNjUwZTVkZjg5NTAwIiwiaCI6Im11cm11cjY0In0="
 const el = ref(null)
@@ -26,17 +34,46 @@ const colorTheme = ref('theme')
 const colorblind = ref(false)
 const SideInfo = ref(false)
 
+// Bottom nav — inlined here (not the shared AppNav.vue) so it can be tweaked
+// just for this view without touching the component other pages may use.
+const navItems = [
+  { to: '/map', icon: 'bi-geo-alt-fill', label: 'Map' },
+  { to: '/mission', icon: 'bi-signpost-split-fill', label: 'Mission' },
+  { to: '/passport', icon: 'bi-journal-bookmark-fill', label: 'Passport' },
+  { to: '/me', icon: 'bi-person-circle', label: 'Me' }
+]
 
-async function fetchRoute(start, end) {
-  const URL = `https://api.openrouteservice.org/v2/directions/foot-walking?api_key=${ORS_API_KEY}&start=${start[0]},${start[1]}&end=${end[0]},${end[1]}`
-  const response = await axios.get(URL)
-  return response.data.features[0].geometry
+
+// CHANGE: added a cache in front of the OpenRouteService call.
+// Why: this ORS key's free tier only allows 200 requests/day. Once the mission
+// routing (refreshLiveRoute + refreshPlanned, below) started calling fetchRoute()
+// too — refetching every ~3s while you walk, and again on every stamp/skip/replan —
+// that quota drained in minutes. Every failed request is silently caught and falls
+// back to a straight line (see drawRoute()), which is the "straight line instead of
+// roads" behaviour you were seeing. Caching by the exact [start,end] pair means the
+// same two points are only ever fetched from ORS once, no matter how many times
+// refreshPlanned()/refreshLiveRoute() ask for them again.
+const routeCache = new Map()
+function fetchRoute(start, end) {
+  const key = `${start[0].toFixed(5)},${start[1].toFixed(5)}|${end[0].toFixed(5)},${end[1].toFixed(5)}`
+  if (!routeCache.has(key)) {
+    const URL = `https://api.openrouteservice.org/v2/directions/foot-walking?api_key=${ORS_API_KEY}&start=${start[0]},${start[1]}&end=${end[0]},${end[1]}`
+    const job = axios.get(URL)
+      .then((response) => response.data.features[0].geometry)
+      .catch((err) => {
+        routeCache.delete(key) // don't remember a failed/rate-limited call — let the next attempt try again
+        throw err
+      })
+    routeCache.set(key, job)
+  }
+  return routeCache.get(key)
 }
 function getCurrentPosition() {
   return new Promise((resolve, reject) => { // call resolve, and if there's a value from pos, then resolve value
     navigator.geolocation.getCurrentPosition( // would be the current location cords, else will fall back into the error
       (pos) => resolve([pos.coords.longitude, pos.coords.latitude]),
-      reject
+      reject,
+      { timeout: 8000 } // CHANGE: added — without this, a device/browser that never gets a GPS fix just hangs forever, silently
     )
   })
 }
@@ -119,17 +156,13 @@ const lateBy = computed(() => {
   return Math.round((eta - Date.parse(next.value.arrive_iso)) / 60000)
 })
 
-/** The next instruction: a street turn when walking, the MRT/taxi hop otherwise. */
+/** The next instruction: a walking/MRT/taxi hint. No turn-by-turn text — fetchRoute() (OpenRouteService) only gives us the line, not steps. */
 const guidance = computed(() => {
   const t = liveTravel.value
   if (!t || !here.value) return null
   if (t.mode !== 'walk') return { icon: modeIcon[t.mode], text: t.detail }
   if (distance.value < 40) return { icon: 'bi-flag-fill', text: "You're there. Look around for the spot." }
-  const lr = liveRoute.value
-  if (!lr || lr.to !== next.value) return { icon: 'bi-person-walking', text: `Walk ${formatDist(distance.value)} to the stop` }
-  const step = lr.steps.find((s, i) => i > 0 && s.text !== 'Arrive at the stop' && distanceM(here.value, s.at) > 10)
-  if (!step) return { icon: 'bi-flag-fill', text: `Straight on, ${formatDist(distance.value)} to go` }
-  return { icon: step.icon, text: `In ${formatDist(distanceM(here.value, step.at))}: ${step.text}` }
+  return { icon: 'bi-person-walking', text: `Walk ${formatDist(distance.value)} to the stop` }
 })
 
 const countdown = computed(() => {
@@ -141,15 +174,21 @@ const leaveBy = computed(() => {
   tick.value
   return m.value && next.value ? store.leaveBy()?.ms ?? null : null
 })
-const timeLevel = computed(() => {
-  const min = (store.mustReturnMs - tick.value) / 60000
-  return min < 45 ? 'red' : min < 90 ? 'amber' : ''
-})
+// CHANGE: was one computed returning a class-name string via a ternary chain
+// (`timeLevel`, hard to see at a glance which number maps to which class).
+// Now it's a plain minutes value plus two named boolean checks — the template
+// below wires each one straight to its class with :class="{ red: ..., amber: ... }",
+// so to change a threshold you just edit the number here, and to see which
+// class is "on" you just read the two lines instead of tracing a ternary.
+const minutesToDeadline = computed(() => (store.mustReturnMs - tick.value) / 60000)
+const isTimeCritical = computed(() => minutesToDeadline.value < 45) // under 45 min left → red
+const isTimeWarning = computed(() => minutesToDeadline.value < 90 && !isTimeCritical.value) // under 90 min left (but not critical yet) → amber
 
 function formatDist(meters) {
   if (meters == null) return ''
   return meters >= 1000 ? `${(meters / 1000).toFixed(1)} km` : `${Math.round(meters / 10) * 10} m`
 }
+
 
 // ── Drawing ──────────────────────────────────────────────────────────────
 function drawMission() {
@@ -166,7 +205,7 @@ function drawFence() {
   setFence(map, n, radius, !!check.value?.ok)
 }
 
-/** You → next stop (bold, live) + every later pending leg (faded). */
+/** You → next stop + every later pending leg, drawn the same way as the Test Route (MBS) button: one plain pink line via fetchRoute(). */
 function drawRoute() {
   if (!mapReady.value) return
   const segs = []
@@ -174,11 +213,36 @@ function drawRoute() {
   if (n) {
     const from = here.value || previousPoint(n)
     const lr = liveRoute.value
-    const mode = liveTravel.value?.mode || n.travel_mode
-    const coords = lr && lr.to === n && mode === 'walk' ? [[from.lng, from.lat], ...lr.coords] : straight(from, n)
-    segs.push({ coords, mode, active: true })
+    // CHANGE: this ternary is the "straight line" fallback. `lr` (liveRoute) only gets
+    // set once refreshLiveRoute()'s fetchRoute() call has resolved with real road
+    // geometry — until then (or if that fetch fails), we draw straight(from, n), a
+    // literal two-point line, just so the map always shows *something* while waiting.
+    const coords = lr && lr.to === n ? [[from.lng, from.lat], ...lr.coords] : straight(from, n)
+    segs.push(coords)
   }
-  setRoute(map, [...segs, ...plannedSegments.value])
+  for (const seg of plannedSegments.value) segs.push(seg.coords)
+
+  const data = {
+    type: 'FeatureCollection',
+    features: segs.map((coords) => ({ type: 'Feature', geometry: { type: 'LineString', coordinates: coords }, properties: {} }))
+  }
+
+  if (map.getSource('mission-route')) {
+    map.getSource('mission-route').setData(data)
+  } else {
+    map.addSource('mission-route', { type: 'geojson', data })
+    map.addLayer({
+      id: 'mission-route-line',
+      type: 'line',
+      source: 'mission-route',
+      layout: { 'line-join': 'round', 'line-cap': 'round' },
+      paint: {
+        'line-color': '#ff1dce',
+        'line-width': 5,
+        'line-opacity': 0.9
+      }
+    })
+  }
 }
 
 /** Where the traveller was before `leg`: the leg before it, or the trip origin. */
@@ -195,8 +259,11 @@ async function refreshPlanned() {
   for (let i = 1; i < pending.length; i++) {
     const a = pending[i - 1]
     const b = pending[i]
-    const r = b.travel_mode === 'walk' ? await getWalkRoute(a, b) : null
-    segs.push({ coords: r ? r.coords : straight(a, b), mode: b.travel_mode, active: false })
+    // CHANGE: .catch(() => null) means a failed/rate-limited fetchRoute() call (see the
+    // cache + comment on fetchRoute() above) quietly falls back to straight(a, b)
+    // instead of breaking the page — that fallback is what a "straight line" segment is.
+    const geometry = b.travel_mode === 'walk' ? await fetchRoute([a.lng, a.lat], [b.lng, b.lat]).catch(() => null) : null
+    segs.push({ coords: geometry ? geometry.coordinates : straight(a, b), mode: b.travel_mode, active: false })
   }
   plannedSegments.value = segs
   drawRoute()
@@ -222,8 +289,11 @@ async function refreshLiveRoute(force = false) {
   }
   lastRouteAt = Date.now()
   const from = { ...here.value }
-  const r = await getWalkRoute(from, n)
-  if (r && next.value === n) liveRoute.value = { ...r, from, to: n }
+  // CHANGE: same fallback pattern as refreshPlanned() above — if this fails, geometry
+  // is null, liveRoute.value never gets set, and drawRoute() draws a straight line
+  // for this leg until a later call succeeds (now much rarer thanks to the cache).
+  const geometry = await fetchRoute([from.lng, from.lat], [n.lng, n.lat]).catch(() => null)
+  if (geometry && next.value === n) liveRoute.value = { coords: geometry.coordinates, from, to: n }
   drawRoute()
 }
 
@@ -291,6 +361,7 @@ function bearingDeg(a, b) {
   const x = Math.cos(r(a.lat)) * Math.sin(r(b.lat)) - Math.sin(r(a.lat)) * Math.cos(r(b.lat)) * Math.cos(r(b.lng - a.lng))
   return (Math.atan2(y, x) * 180) / Math.PI
 }
+
 function offsetFrom(p, bearing, meters) {
   const [lng, lat] = destination(point([p.lng, p.lat]), meters / 1000, bearing, { units: 'kilometers' }).geometry.coordinates
   return { lat, lng }
@@ -416,14 +487,26 @@ function View(x) {
   }
 }
 
-async function CenterOnMe() {
-  const current2 = await getCurrentPosition();
-  console.log('flying to', current2, 'current map center:', map.getCenter())
-  map.flyTo({
-    center: current2,
-    zoom: 18,
-    duration: 1500,
-  })
+// CHANGE: previously, any failure here — location permission denied, GPS
+// unavailable, the new 8s timeout above firing — was an *unhandled promise
+// rejection*: no error shown anywhere, map just doesn't move. That's exactly
+// what "the button does nothing" looks like from the outside. Now it's wrapped
+// in try/catch, logs the real browser error to the console, and (for an actual
+// button click) shows a toast so it's obvious *why* it failed instead of
+// looking broken. `notifyOnFail` is false for the automatic on-load call below,
+// so you don't get a toast before you've even looked at the map.
+async function CenterOnMe(notifyOnFail = true) {
+  try {
+    const current2 = await getCurrentPosition()
+    map.flyTo({
+      center: current2,
+      zoom: 18,
+      duration: 1500,
+    })
+  } catch (err) {
+    console.error('CenterOnMe: could not get your location', err)
+    if (notifyOnFail) ui.toast('Could not get your location. Check this site is allowed to use your location.', 'warning', 4500)
+  }
 }
 
 function ZoomOut() {
@@ -546,6 +629,14 @@ onMounted(() => {
   })
 
   map.on('load', applyMapColors)
+  map.on('load', () => {
+    // Creates the zt-route/zt-fence sources+layers and the "you are here" marker, then
+    // flips mapReady so drawMission()/drawRoute()/drawFence() and the follow-camera
+    // watcher (which all bail out while !mapReady) actually start running.
+    addQuestLayers(map)
+    player = createPlayerMarker(map)
+    mapReady.value = true
+  })
   map.on('load', CenterOnMe)
   map.on('load', () => {
     map.addLayer(new PinLayer({ id: 'mbs-pin', lng: 103.8607, lat: 1.2830 }))
@@ -591,34 +682,39 @@ onMounted(async () => {
 
   <button id="top-left3" @click="toggleDemo" class="btn btn-warning rounded-pill">{{ demo ? 'Use real GPS' : 'Enable Demo-Walk' }}</button>
 
-  <div id="top-right" class="badge rounded-4 text-bg-warning" :class="timeLevel" role="timer">
-    <span class="bi-airplane-fill"> &nbsp; Time to Travel</span>
-    <br>
-    <div class="time_left_from_trip mono">{{ countdown || '--:--:--' }}</div>
-    <div class="time_back_from_trip">{{ leaveBy ? `Head back by ${formatTime(leaveBy)}` : m ? 'Quest complete' : 'No active quest' }}</div>
-  </div>
-
-  <button id="TestRoute" class="btn btn-warning rounded-pill" @click="showRouteTo([103.8607, 1.2834])">Test Route (MBS)</button>
-
-  <div id="MoreInfo" class="map-btn" @click="SideInfo = !SideInfo">
-    <i class="bi bi-list"></i>
-  </div>
-
-  <div class="map-tools" :class="{ open: SideInfo }">
-    <div id="zoom" class="map-btn" v-on:click="ZoomIn()">
-      <i class="bi bi-zoom-in"></i>
+  <div id="right-stack">
+    <!-- CHANGE: was :class="timeLevel" (one computed string). Now each class is wired
+         to its own named boolean, so it's explicit right here which condition turns
+         red/amber on, instead of having to go read the ternary in the script. -->
+    <div id="top-right" class="badge rounded-4 text-bg-warning" :class="{ red: isTimeCritical, amber: isTimeWarning }" role="timer">
+      <span class="bi-airplane-fill"> &nbsp; Time to Travel</span>
+      <br>
+      <div class="time_left_from_trip mono">{{ countdown || '--:--:--' }}</div>
+      <div class="time_back_from_trip">{{ leaveBy ? `Head back by ${formatTime(leaveBy)}` : m ? 'Quest complete' : 'No active quest' }}</div>
     </div>
 
-    <div id="outlook" class="map-btn" v-on:click="ZoomOut()">
-      <i class="bi bi-arrows-fullscreen"></i>
+    <button id="TestRoute" class="btn btn-warning rounded-pill" @click="showRouteTo([103.8607, 1.2834])">Test Route (MBS)</button>
+
+    <div id="MoreInfo" class="map-btn" @click="SideInfo = !SideInfo">
+      <i class="bi bi-list"></i>
     </div>
 
-    <div id="RealGps" class="map-btn" v-on:click="CenterOnMe()">
-      <i class="bi bi-crosshair"></i>
-    </div>
+    <div class="map-tools" :class="{ open: SideInfo }">
+      <div id="zoom" class="map-btn" v-on:click="ZoomIn()">
+        <i class="bi bi-zoom-in"></i>
+      </div>
 
-    <div id="TopView" class="map-btn" v-on:click="Go3D = !Go3D, View(Go3D)">
-      <i class="bi-map"></i>
+      <div id="outlook" class="map-btn" v-on:click="ZoomOut()">
+        <i class="bi bi-arrows-fullscreen"></i>
+      </div>
+
+      <div id="RealGps" class="map-btn" v-on:click="CenterOnMe()">
+        <i class="bi bi-crosshair"></i>
+      </div>
+
+      <div id="TopView" class="map-btn" v-on:click="Go3D = !Go3D, View(Go3D)">
+        <i class="bi-map"></i>
+      </div>
     </div>
   </div>
 
@@ -735,7 +831,12 @@ onMounted(async () => {
     </div>
   </div>
 
-  <AppNav />
+  <nav class="map-nav zt-glass" aria-label="Main">
+    <RouterLink v-for="i in navItems" :key="i.to" :to="i.to">
+      <i class="bi" :class="i.icon" aria-hidden="true"></i>
+      <span>{{ i.label }}</span>
+    </RouterLink>
+  </nav>
 </template>
 
 <style scoped>
@@ -746,59 +847,65 @@ onMounted(async () => {
 
 #top-left {
   position: absolute;
-  top: 12px;
-  left: 12px;
+  top: clamp(8px, 3vw, 12px);
+  left: clamp(8px, 3vw, 12px);
   z-index: 1;
-  font-size: 15px;
-  padding-right: 15px;
+  font-size: clamp(12px, 3.6vw, 15px);
+  padding-right: clamp(10px, 3.6vw, 15px);
   border-color: black;
-  border: 3px solid;
+  border: clamp(2px, 0.7vw, 3px) solid;
 }
 
 #img-pill {
   margin-right: 5px;
+  width: clamp(20px, 6vw, 25px);
+  height: clamp(20px, 6vw, 25px);
 }
 
 #top-left2 {
   position: absolute;
-  top: 60px;
-  left: 12px;
+  top: clamp(44px, 14vw, 60px);
+  left: clamp(8px, 3vw, 12px);
   z-index: 1;
-  font-size: 15px;
+  font-size: clamp(12px, 3.6vw, 15px);
   border-color: black;
-  border: 3px solid;
+  border: clamp(2px, 0.7vw, 3px) solid;
 }
 
 #top-left3 {
   position: absolute;
-  top: 100px;
-  left: 12px;
+  top: clamp(72px, 24vw, 100px);
+  left: clamp(8px, 3vw, 12px);
   z-index: 1;
-  font-size: 10px;
-  border: 3px solid;
-  padding: 5px;
+  font-size: clamp(8px, 2.4vw, 10px);
+  border: clamp(2px, 0.7vw, 3px) solid;
+  padding: clamp(3px, 1.2vw, 5px);
+}
+
+#right-stack {
+  position: absolute;
+  top: clamp(8px, 3vw, 12px);
+  right: clamp(8px, 3vw, 12px);
+  z-index: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: clamp(10px, 3vw, 16px);
 }
 
 #top-right {
-  position: absolute;
-  top: 12px;
-  right: 12px;
-  padding: 14px;
+  padding: clamp(8px, 3.4vw, 14px);
   line-height: 1.6;
   text-align: left;
-  border: 4px solid;
+  border: clamp(2px, 1vw, 4px) solid;
 }
 
 #TestRoute {
-  position: absolute;
-  top: 150px;
-  right: 12px;
-  z-index: 1;
   color: black;
 }
 
 .time_left_from_trip {
-  font-size: 30px;
+  font-size: clamp(20px, 7vw, 30px);
   text-align: left;
 }
 
@@ -813,23 +920,27 @@ onMounted(async () => {
 
 
 .map-btn {
-  position: absolute;
   z-index: 1;
-  width: 60px;
-  height: 60px;
+  width: clamp(46px, 14vw, 60px);
+  height: clamp(46px, 14vw, 60px);
+  flex-shrink: 0;
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 24px;
+  font-size: clamp(18px, 5.6vw, 24px);
   color: var(--zt-yellow-pale);
   background: var(--zt-black);
-  border: 4px solid var(--zt-yellow);
+  border: clamp(2px, 1vw, 4px) solid var(--zt-yellow);
   border-radius: var(--zt-radius);
   box-shadow: var(--zt-shadow);
   cursor: pointer;
 }
 
 .map-tools {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: clamp(10px, 3vw, 16px);
   opacity: 0;
   transform: translateY(-12px);
   pointer-events: none;
@@ -842,51 +953,25 @@ onMounted(async () => {
   pointer-events: auto;
 }
 
-#zoom {
-  top: 425px;
-  right: 12px;
-}
-
-#outlook {
-  top: 350px;
-  right: 12px;
-}
-
-#RealGps {
-  top: 275px;
-  right: 12px;
-}
-
-#TopView{
-  top: 500px;
-  right: 12px;
-}
-
-#MoreInfo{
-  top: 200px;
-  right: 12px;
-  z-index: 1;
-}
-
 #CenterInfo {
   position: absolute;
   left: 50%;
   transform: translateX(-50%);
-  bottom: 100px;
+  bottom: clamp(70px, 20vw, 100px);
   max-width: 600px;
   width: 90%;
   z-index: 1;
   text-align: left;
   background: var(--zt-black);
-  border: 4px solid var(--zt-yellow);
+  border: clamp(2px, 1vw, 4px) solid var(--zt-yellow);
   box-shadow: var(--zt-shadow);
-  padding: 18px 20px;
+  padding: clamp(12px, 4vw, 18px) clamp(14px, 4.6vw, 20px);
 }
 
 .stop-meta {
   color: var(--zt-yellow-pale);
   opacity: 0.7;
-  font-size: 0.75rem;
+  font-size: clamp(0.65rem, 2.4vw, 0.75rem);
   font-weight: 800;
   text-transform: uppercase;
   letter-spacing: 0.05em;
@@ -894,13 +979,13 @@ onMounted(async () => {
 
 .stop-title {
   color: var(--zt-yellow-pale);
-  font-size: 1.6rem;
+  font-size: clamp(1.15rem, 5vw, 1.6rem);
   font-weight: 800;
   margin: 2px 0;
 }
 
 .stop-dist {
-  font-size: 0.9rem;
+  font-size: clamp(0.75rem, 2.8vw, 0.9rem);
   color: var(--zt-yellow-pale);
 }
 
@@ -910,17 +995,17 @@ onMounted(async () => {
 }
 
 .stop-near {
-  font-size: 0.8rem;
+  font-size: clamp(0.7rem, 2.5vw, 0.8rem);
   color: var(--zt-yellow-pale);
   opacity: 0.7;
   margin-top: 6px;
 }
 
 .stamp-btn {
-  width: 100px;
-  height: 100px;
+  width: clamp(72px, 24vw, 100px);
+  height: clamp(72px, 24vw, 100px);
   border-radius: 50%;
-  border: 4px solid var(--zt-yellow);
+  border: clamp(2px, 1vw, 4px) solid var(--zt-yellow);
   background: transparent;
   display: flex;
   flex-direction: column;
@@ -931,20 +1016,20 @@ onMounted(async () => {
 }
 
 .stamp-circle {
-  width: 42px;
-  height: 42px;
+  width: clamp(32px, 10vw, 42px);
+  height: clamp(32px, 10vw, 42px);
   border-radius: 50%;
   background: var(--zt-yellow-pale);
   color: var(--zt-black);
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 20px;
+  font-size: clamp(16px, 4.8vw, 20px);
 }
 
 .stamp-label {
   color: var(--zt-yellow-pale);
-  font-size: 0.7rem;
+  font-size: clamp(0.6rem, 2.2vw, 0.7rem);
   font-weight: 800;
   text-transform: uppercase;
   letter-spacing: 0.05em;
@@ -960,12 +1045,12 @@ onMounted(async () => {
 
 #demo-controls {
   position: absolute;
-  top: 140px;
-  left: 12px;
+  top: clamp(100px, 32vw, 140px);
+  left: clamp(8px, 3vw, 12px);
   z-index: 1;
   background: var(--zt-black);
-  border: 4px solid var(--zt-yellow);
-  padding: 12px 16px;
+  border: clamp(2px, 1vw, 4px) solid var(--zt-yellow);
+  padding: clamp(8px, 3vw, 12px) clamp(10px, 3.8vw, 16px);
 }
 
 .demo-row {
@@ -980,12 +1065,12 @@ onMounted(async () => {
 
 .demo-label {
   color: var(--zt-yellow-pale);
-  font-size: 0.75rem;
+  font-size: clamp(0.65rem, 2.4vw, 0.75rem);
   font-weight: 800;
   text-transform: uppercase;
   letter-spacing: 0.05em;
   margin-right: 4px;
-  min-width: 110px;
+  min-width: clamp(80px, 26vw, 110px);
 }
 
 .map-backdrop {
@@ -1004,9 +1089,9 @@ onMounted(async () => {
   transform: translate(-50%, -50%);
   z-index: 2;
   background: var(--zt-black);
-  border: 4px solid var(--zt-yellow);
+  border: clamp(2px, 1vw, 4px) solid var(--zt-yellow);
   box-shadow: var(--zt-shadow);
-  padding: 12px 16px;
+  padding: clamp(8px, 3vw, 12px) clamp(10px, 3.8vw, 16px);
 }
 
 /* ── Mission wiring ── */
@@ -1016,14 +1101,14 @@ onMounted(async () => {
 #top-right.amber { background: var(--zt-orange) !important; }
 #top-right.red { background: #e5243b !important; color: #fff !important; animation: ttg-alarm 1.2s infinite; }
 @keyframes ttg-alarm { 0% { box-shadow: 0 0 0 0 rgba(229, 36, 59, 0.7); } 70%, 100% { box-shadow: 0 0 0 16px rgba(229, 36, 59, 0); } }
-.time_back_from_trip { font-size: 0.8rem; }
+.time_back_from_trip { font-size: clamp(0.7rem, 2.6vw, 0.8rem); }
 
 .stop-dist .ontime { color: #5fd38d; font-weight: 700; }
 .stop-dist .muted { opacity: 0.7; }
 .stop-guide {
   margin-top: 6px;
   color: var(--zt-yellow);
-  font-size: 0.9rem;
+  font-size: clamp(0.78rem, 2.8vw, 0.9rem);
   font-weight: 700;
 }
 .stop-guide .bi { margin-right: 4px; }
@@ -1035,7 +1120,7 @@ onMounted(async () => {
 .stamp-btn.ready .stamp-circle { background: var(--zt-black); color: var(--zt-yellow); }
 @keyframes stamp-ready { 0% { box-shadow: 0 0 0 0 rgba(255, 204, 0, 0.7); } 70%, 100% { box-shadow: 0 0 0 18px rgba(255, 204, 0, 0); } }
 
-.demo-hint { color: var(--zt-yellow-pale); opacity: 0.7; font-size: 0.7rem; margin-top: 8px; }
+.demo-hint { color: var(--zt-yellow-pale); opacity: 0.7; font-size: clamp(0.62rem, 2.2vw, 0.7rem); margin-top: 8px; }
 
 #HelpPop {
   position: absolute;
@@ -1045,47 +1130,80 @@ onMounted(async () => {
   z-index: 2;
   width: min(340px, 90vw);
   background: var(--zt-black);
-  border: 4px solid var(--zt-yellow);
+  border: clamp(2px, 1vw, 4px) solid var(--zt-yellow);
   box-shadow: var(--zt-shadow);
-  padding: 16px;
+  padding: clamp(10px, 4vw, 16px);
 }
 #HelpPop .btn-warning { color: var(--zt-black); font-weight: 700; text-align: left; }
 #HelpPop .btn-outline-warning { text-align: left; }
-.help-note { color: var(--zt-yellow-pale); opacity: 0.75; font-size: 0.75rem; margin-bottom: 10px; }
+.help-note { color: var(--zt-yellow-pale); opacity: 0.75; font-size: clamp(0.65rem, 2.4vw, 0.75rem); margin-bottom: 10px; }
+
+/* ── Bottom nav (own copy — edit freely, this only affects the 3D map view) ── */
+.map-nav {
+  position: fixed;
+  left: 50%;
+  transform: translateX(-50%);
+  bottom: max(12px, env(safe-area-inset-bottom));
+  width: min(520px, calc(100% - 24px));
+  height: var(--zt-nav-h);
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  border-radius: 26px;
+  box-shadow: var(--zt-shadow);
+  z-index: 1030;
+}
+.map-nav a {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 1px;
+  color: var(--zt-ink);
+  text-decoration: none;
+  font-size: 0.66rem;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  border-radius: 18px;
+  margin: 6px;
+  border: 2px solid transparent;
+}
+.map-nav a i { font-size: 1.3rem; line-height: 1; }
+.map-nav a.router-link-active { color: #111; background: var(--zt-yellow); border-color: var(--zt-line); }
 </style>
 
 <!-- Map markers are created by MapLibre outside this component, so their styles can't be scoped. -->
 <style>
 .zt-stop-marker {
-  width: 34px;
-  height: 34px;
+  width: clamp(26px, 8vw, 34px);
+  height: clamp(26px, 8vw, 34px);
   border-radius: 50%;
-  border: 3px solid #111;
+  border: clamp(2px, 0.9vw, 3px) solid #111;
   background: #fff4c2;
   color: #111;
   font-weight: 800;
-  font-size: 0.95rem;
+  font-size: clamp(0.78rem, 2.8vw, 0.95rem);
   display: grid;
   place-items: center;
   box-shadow: 3px 3px 0 #111;
   cursor: pointer;
   padding: 0;
 }
-.zt-stop-marker.next { background: #f83878; color: #fff; width: 42px; height: 42px; font-size: 1.1rem; z-index: 2; animation: zt-marker-pulse 1.4s infinite; }
+.zt-stop-marker.next { background: #f83878; color: #fff; width: clamp(32px, 10vw, 42px); height: clamp(32px, 10vw, 42px); font-size: clamp(0.92rem, 3.2vw, 1.1rem); z-index: 2; animation: zt-marker-pulse 1.4s infinite; }
 .zt-stop-marker.done { background: #111; color: #ffcc00; border-color: #ffcc00; box-shadow: none; }
 @keyframes zt-marker-pulse { 0% { box-shadow: 3px 3px 0 #111, 0 0 0 0 rgba(248, 56, 120, 0.7); } 70%, 100% { box-shadow: 3px 3px 0 #111, 0 0 0 16px rgba(248, 56, 120, 0); } }
 
-.zt-player-marker { position: relative; width: 40px; height: 40px; pointer-events: none; }
+.zt-player-marker { position: relative; width: clamp(30px, 10vw, 40px); height: clamp(30px, 10vw, 40px); pointer-events: none; }
 .zt-player-marker .core {
   position: absolute;
   inset: 4px;
   border-radius: 50%;
   background: #ffcc00;
-  border: 3px solid #111;
+  border: clamp(2px, 0.9vw, 3px) solid #111;
   color: #111;
   display: grid;
   place-items: center;
-  font-size: 1rem;
+  font-size: clamp(0.8rem, 2.8vw, 1rem);
 }
 .zt-player-marker .pulse {
   position: absolute;
