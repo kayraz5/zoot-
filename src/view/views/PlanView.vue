@@ -1,16 +1,17 @@
 <script setup>
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
-import { useTripStore, MAX_LAYOVER_H } from '../../model/stores/trip.js'
+import { useTripStore } from '../../model/stores/trip.js'
 import { useMissionStore } from '../../model/stores/mission.js'
 import { useUserStore } from '../../model/stores/user.js'
 import { useUiStore } from '../../model/stores/ui.js'
 import { ORIGINS, STYLES } from '../../model/data/origins.js'
 import { computeBudget } from '../../model/services/planner.js'
-import { formatTime, toSgLocalInput, fromSgLocalInput } from '../../model/services/hours.js'
+import { formatDuration, formatTime, toSgLocalInput } from '../../model/services/hours.js'
 import { distanceM } from '../../model/services/travel.js'
 import { now, tick } from '../../model/services/clock.js'
 import BufferBar from '../components/BufferBar.vue'
+import LayoverDialog from '../components/plan/LayoverDialog.vue'
 
 /**
  * Plan a layover, flight time first (Kayra: itinerary engine, planner.js).
@@ -70,47 +71,23 @@ function hm(min, upper = true) {
 }
 
 const sgDate = new Intl.DateTimeFormat('en-SG', { timeZone: 'Asia/Singapore', weekday: 'short', day: 'numeric', month: 'short' })
-const sgClock = new Intl.DateTimeFormat('en-SG', { timeZone: 'Asia/Singapore', hour: '2-digit', minute: '2-digit', hour12: true })
-const flightDay = computed(() => sgDate.format(trip.mustReturnMs).replace(',', ''))
-const flightClock = computed(() => sgClock.format(trip.mustReturnMs).toUpperCase())
+const dayOf = (ms) => sgDate.format(ms).replace(',', '')
+const arrivalDay = computed(() => dayOf(trip.arrivalMs))
+const departureDay = computed(() => dayOf(trip.mustReturnMs))
+const sameDay = computed(() => arrivalDay.value === departureDay.value)
 
-// ── Flight time (step 0, also reopened from the flight card) ───────────
-// Typed into a visible field and confirmed with Continue: some browsers never fire
-// `change` from their native picker, so the form cannot rely on it alone.
-const editingFlight = ref(false)
-const flightDraft = ref('')
-const showFlightCard = computed(() => !d.flightSet || editingFlight.value)
-const flightMinLocal = computed(() => (tick.value, toSgLocalInput(trip.startMs + 60 * 60000)))
-const flightMaxLocal = computed(() => toSgLocalInput(now() + 8 * 86400e3))
+// ── Layover (step 0, also reopened from the layover card) ──────────────
+const editingLayover = ref(false)
+const showLayoverDialog = computed(() => !d.layoverSet || editingLayover.value)
 
-const flightDraftMs = computed(() => (flightDraft.value ? fromSgLocalInput(flightDraft.value) : null))
-const flightDraftBudget = computed(() =>
-	flightDraftMs.value == null ? null : computeBudget({ origin: trip.origin, startMs: trip.startMs, mustReturnMs: flightDraftMs.value, cleared: d.cleared })
-)
-const flightError = computed(() => {
-	const ms = flightDraftMs.value
-	if (ms == null) return ''
-	if (Number.isNaN(ms)) return 'Enter a date and time.'
-	if (ms <= trip.startMs) return 'That time has already passed.'
-	if (ms - trip.startMs > MAX_LAYOVER_H * 3600e3) return `Layovers are up to ${MAX_LAYOVER_H} h. Longer than that is a stopover.`
-	return ''
-})
-const canConfirmFlight = computed(() => flightDraftMs.value != null && !flightError.value)
+// ── Passport / entry ───────────────────────────────────────────────────
 
-function openFlight() {
-	flightDraft.value = d.flightSet ? d.mustReturnLocal : ''
-	editingFlight.value = true
-}
-function confirmFlight() {
-	if (!canConfirmFlight.value) return
-	trip.setFlight(flightDraft.value)
-	editingFlight.value = false
-}
-
-// ── Start time (More options) ──────────────────────────────────────────
-const startMinLocal = computed(() => (tick.value, toSgLocalInput(now())))
-const startMaxLocal = computed(() => toSgLocalInput(now() + 7 * 86400e3))
-const startInPast = computed(() => (tick.value, !d.startNow && trip.startMs < now() - 60000))
+// ── Start time (More options): at landing, or a later time inside the layover ──
+const startMinLocal = computed(() => (tick.value, toSgLocalInput(Math.max(trip.arrivalMs, now()))))
+const startMaxLocal = computed(() => toSgLocalInput(trip.mustReturnMs - 60 * 60000))
+const startInPast = computed(() => (tick.value, !d.startAtLanding && trip.startMs < now() - 60000))
+/** Forecasts only reach a week ahead; rain checks kick in closer to the day. */
+const beyondForecast = computed(() => (tick.value, trip.startMs - now() > 7 * 86400e3))
 
 // ── Starting from ──────────────────────────────────────────────────────
 const TERMINAL_ORDER = ['changi-t1', 'changi-t2', 'changi-t3', 'changi-t4', 'jewel']
@@ -200,13 +177,13 @@ const FOOD = [
 const optionsSummary = computed(() => {
 	const parts = [`Walk ≤ ${d.maxWalk} min`, `${d.partySize} ${d.partySize === 1 ? 'person' : 'people'}`]
 	if (d.foodNeeds !== 'none') parts.push(FOOD.find((f) => f.id === d.foodNeeds)?.label)
-	if (!d.startNow) parts.push(`from ${formatTime(trip.startMs)}`)
+	if (!d.startAtLanding) parts.push(`out at ${formatTime(trip.startMs)}`)
 	return parts.join(' · ')
 })
 const setParty = (n) => (d.partySize = Math.min(8, Math.max(1, n)))
 
 // ── Steps and submit ───────────────────────────────────────────────────
-const canLeaveStep1 = computed(() => d.flightSet && !tooShort.value && !startInPast.value)
+const canLeaveStep1 = computed(() => d.layoverSet && !tooShort.value && !startInPast.value)
 const canBuild = computed(() => canLeaveStep1.value && d.interests.length > 0 && !planning.value)
 
 function next() {
@@ -241,7 +218,7 @@ async function submit() {
 			<div class="d-flex align-items-center gap-2">
 				<button v-if="!wide && step > 1" type="button" class="icon-btn" aria-label="Back" @click="back"><i class="bi bi-chevron-left"></i></button>
 				<h1 class="zt-display mb-0 flex-grow-1 plan-title">Plan a layover</h1>
-				<span v-if="!wide && step > 1 && d.flightSet" class="zt-pill left-pill"><i class="bi bi-clock"></i> {{ hm(budget.usable_min, false) }} left</span>
+				<span v-if="!wide && step > 1 && d.layoverSet" class="zt-pill left-pill"><i class="bi bi-clock"></i> {{ hm(budget.usable_min, false) }} left</span>
 				<RouterLink v-if="firstTime" to="/" class="exit-link tiny fw-800" aria-label="Exit planning"><i class="bi bi-x-lg"></i> Exit</RouterLink>
 			</div>
 			<template v-if="!wide">
@@ -254,20 +231,29 @@ async function submit() {
 
 		<div class="plan-grid">
 			<div class="plan-main d-grid gap-3">
-				<!-- Step 1: flight, time budget, starting point -->
+				<!-- Step 1: layover, entry check, time budget, starting point -->
 				<template v-if="showStep(1)">
 					<section class="zt-card p-3">
-						<div class="label">Flight leaves</div>
-						<button type="button" class="field-btn" @click="openFlight">
-							<i class="bi bi-clock"></i>
-							<span class="flex-grow-1 text-start fw-800">{{ d.flightSet ? flightDay : 'Pick date & time' }}</span>
-							<span v-if="d.flightSet" class="fw-800 mono">{{ flightClock }} <span class="sgt">SGT</span></span>
-							<i class="bi bi-chevron-right"></i>
+						<div class="label">Your layover</div>
+						<button type="button" class="field-btn layover-btn" aria-label="Change your layover times" @click="editingLayover = true">
+							<span class="leg">
+								<span class="leg-k"><i class="bi bi-airplane-engines"></i> Lands</span>
+								<b class="mono">{{ d.layoverSet ? `${arrivalDay} · ${formatTime(trip.arrivalMs)}` : 'Add times' }}</b>
+							</span>
+							<i class="bi bi-arrow-right leg-arrow" aria-hidden="true"></i>
+							<span class="leg">
+								<span class="leg-k"><i class="bi bi-airplane"></i> Departs</span>
+								<b class="mono">{{ d.layoverSet ? `${sameDay ? '' : departureDay + ' · '}${formatTime(trip.mustReturnMs)}` : '—' }}</b>
+							</span>
+							<i class="bi bi-chevron-right ms-auto" aria-hidden="true"></i>
 						</button>
+						<div v-if="d.layoverSet" class="layover-meta tiny mt-2">
+							<span><i class="bi bi-hourglass-split"></i> Layover {{ formatDuration(trip.layoverMin) }}</span>
+						</div>
 					</section>
 
-					<section v-if="!wide" class="have-card" :class="{ tight: d.flightSet && tooShort }">
-						<template v-if="d.flightSet">
+					<section v-if="!wide" class="have-card" :class="{ tight: d.layoverSet && tooShort }">
+						<template v-if="d.layoverSet">
 							<div class="label">You have</div>
 							<div class="d-flex align-items-baseline gap-2 flex-wrap">
 								<span class="big">{{ hm(budget.usable_min) }}</span><b class="small">to explore</b>
@@ -279,8 +265,9 @@ async function submit() {
 							<BufferBar v-if="showBuffers" class="mt-2" :start-ms="trip.startMs" :window-min="budget.window_min" :exit-min="budget.exit_min"
 								:out-min="Math.max(0, budget.usable_min)" :reentry-min="budget.reentry_min" :safety-min="budget.safety_min" />
 							<p v-if="tooShort" class="small fw-800 mb-0 mt-2">Too tight to leave the airport safely. Stay airside and explore the terminal.</p>
+							<p v-else-if="beyondForecast" class="tiny mb-0 mt-2"><i class="bi bi-cloud-sun"></i> Rain checks start a week before your trip. Replan closer to the day.</p>
 						</template>
-						<p v-else class="small fw-800 mb-0">Pick your flight time to see how long you have.</p>
+						<p v-else class="small fw-800 mb-0">Add your landing and departure times to see how long you have.</p>
 					</section>
 
 					<section class="zt-card p-3">
@@ -357,14 +344,14 @@ async function submit() {
 					</button>
 				</div>
 
-				<div v-if="startInPast" class="alert alert-warning mb-0">That start time has already passed. Pick a later one in More options, or choose Now.</div>
+				<div v-if="startInPast" class="alert alert-warning mb-0">That start time has already passed. Pick a later one in More options, or go back to {{ trip.landed ? 'Now' : 'At landing' }}.</div>
 				<div v-if="mission.refusal && !planning" class="alert alert-danger mb-0"><b>Planner refused:</b> {{ mission.refusal }}</div>
 			</div>
 
 			<!-- Wide: sticky summary -->
 			<aside v-if="wide" class="plan-side">
-				<div class="have-card" :class="{ tight: d.flightSet && tooShort }">
-					<template v-if="d.flightSet">
+				<div class="have-card" :class="{ tight: d.layoverSet && tooShort }">
+					<template v-if="d.layoverSet">
 						<div class="label">You have</div>
 						<div class="big">{{ hm(budget.usable_min) }}</div>
 						<b class="small d-block">to explore</b>
@@ -378,8 +365,9 @@ async function submit() {
 						<BufferBar v-if="showBuffers" class="mt-2" :start-ms="trip.startMs" :window-min="budget.window_min" :exit-min="budget.exit_min"
 							:out-min="Math.max(0, budget.usable_min)" :reentry-min="budget.reentry_min" :safety-min="budget.safety_min" />
 						<p v-if="tooShort" class="small fw-800 mb-0 mt-2">Too tight to leave the airport safely.</p>
+						<p v-else-if="beyondForecast" class="tiny mb-0 mt-2"><i class="bi bi-cloud-sun"></i> Rain checks start a week before your trip.</p>
 					</template>
-					<p v-else class="small fw-800 mb-0">Pick your flight time to see how long you have.</p>
+					<p v-else class="small fw-800 mb-0">Add your landing and departure times to see how long you have.</p>
 				</div>
 				<button type="button" class="btn btn-dark-pop btn-lg w-100 mt-3" :disabled="!canBuild" @click="submit">
 					<i class="bi bi-magic"></i> Build my quest
@@ -387,34 +375,8 @@ async function submit() {
 			</aside>
 		</div>
 
-		<!-- Step 0: flight time first (and editing it later from the flight card) -->
-		<div v-if="showFlightCard" class="scrim flight-scrim" role="dialog" aria-modal="true" aria-labelledby="flight-q"
-			@keydown.esc="d.flightSet && (editingFlight = false)">
-			<form class="zt-card p-3 flight-card" @submit.prevent="confirmFlight">
-				<div class="d-flex justify-content-between align-items-start">
-					<span class="badge-icon"><i class="bi bi-airplane-fill"></i></span>
-					<button v-if="d.flightSet" type="button" class="btn-close" aria-label="Cancel" @click="editingFlight = false"></button>
-				</div>
-				<h2 id="flight-q" class="zt-display mt-2 mb-1">When does your flight leave?</h2>
-				<p class="tiny text-muted mb-3">We'll work out how long you have.</p>
-				<label class="field-btn picker-field" for="flight-time">
-					<i class="bi bi-calendar-event"></i>
-					<input id="flight-time" v-model="flightDraft" type="datetime-local" class="flex-grow-1"
-						:min="flightMinLocal" :max="flightMaxLocal" required aria-describedby="flight-help" />
-					<span class="sgt">SGT</span>
-				</label>
-				<p id="flight-help" class="tiny mt-2 mb-0" :class="flightError ? 'text-danger fw-800' : 'text-muted'">
-					<template v-if="flightError">{{ flightError }}</template>
-					<template v-else-if="flightDraftBudget">
-						You'd have about <b>{{ hm(flightDraftBudget.usable_min, false) }}</b> to explore, back at {{ trip.origin.short }} by {{ formatTime(flightDraftBudget.arriveByMs) }}.
-					</template>
-					<template v-else>Singapore time, as on your boarding pass.</template>
-				</p>
-				<button type="submit" class="btn btn-primary btn-lg w-100 mt-3" :disabled="!canConfirmFlight">
-					Continue <i class="bi bi-chevron-right"></i>
-				</button>
-			</form>
-		</div>
+		<!-- Step 0: landing + departure (and editing them later from the layover card) -->
+		<LayoverDialog v-if="showLayoverDialog" :can-cancel="d.layoverSet" @close="editingLayover = false" />
 
 		<!-- Phones: More options bottom sheet -->
 		<div v-if="!wide && optionsOpen" class="scrim" @click.self="optionsOpen = false">
@@ -450,11 +412,12 @@ async function submit() {
 
 			<div class="label">Heading out</div>
 			<div class="d-flex flex-wrap gap-2 mb-2">
-				<button type="button" class="zt-chip" :class="{ active: d.startNow }" @click="trip.setStart(true)">Now</button>
-				<button type="button" class="zt-chip" :class="{ active: !d.startNow }" @click="trip.setStart(false)">Later</button>
+				<button type="button" class="zt-chip" :class="{ active: d.startAtLanding }" @click="trip.setStart(true)">{{ trip.landed ? 'Now' : 'At landing' }}</button>
+				<button type="button" class="zt-chip" :class="{ active: !d.startAtLanding }" @click="trip.setStart(false)">Later</button>
 			</div>
-			<input v-if="!d.startNow" type="datetime-local" class="form-control mb-3" aria-label="Start time (Singapore time)" :value="d.startLocal"
+			<input v-if="!d.startAtLanding" type="datetime-local" class="form-control mb-1" aria-label="Start time (Singapore time)" :value="d.startLocal"
 				:min="startMinLocal" :max="startMaxLocal" @change="trip.setStart(false, $event.target.value)" />
+			<p class="tiny text-muted mb-3">{{ d.startAtLanding ? (trip.landed ? 'You have landed, so the plan starts from now.' : 'The plan starts when you land.') : 'For example after a nap or a shower at the airport.' }}</p>
 
 			<div class="row g-3">
 				<div class="col-6">
@@ -522,9 +485,15 @@ async function submit() {
 }
 .field-btn:hover:not(:disabled) { background: var(--zt-yellow-pale); }
 .sgt { font-size: 0.62rem; font-weight: 800; color: var(--zt-muted); }
-.picker-field { cursor: text; }
-.picker-field input { border: 0; background: transparent; color: var(--zt-ink); font-weight: 800; min-width: 0; outline: none; }
-.picker-field:focus-within { box-shadow: 0 0 0 4px var(--zt-yellow); }
+/* Layover summary: lands → departs */
+.layover-btn { gap: 12px; }
+.leg { display: flex; flex-direction: column; align-items: flex-start; min-width: 0; }
+.leg-k { font-size: 0.66rem; font-weight: 800; text-transform: uppercase; letter-spacing: 0.04em; color: var(--zt-muted); }
+.leg b { white-space: nowrap; font-size: 0.88rem; }
+.leg-arrow { color: var(--zt-muted); }
+.layover-meta { display: flex; flex-wrap: wrap; column-gap: 14px; row-gap: 2px; color: var(--zt-muted); font-weight: 700; }
+.layover-meta > span { white-space: nowrap; }
+.layover-meta .bi { margin-right: 3px; }
 .exit-link { color: var(--zt-ink); text-decoration: none; white-space: nowrap; }
 .exit-link:hover { color: var(--zt-pink); }
 
@@ -589,11 +558,6 @@ async function submit() {
 	position: fixed; inset: 0; z-index: 1400; display: grid; place-items: end center;
 	background: rgba(17, 17, 17, 0.45); padding: 16px;
 }
-.flight-scrim { place-items: center; background: rgba(255, 251, 234, 0.6); backdrop-filter: blur(6px); }
-[data-bs-theme='dark'] .flight-scrim { background: rgba(17, 17, 17, 0.6); }
-.flight-card { width: min(420px, 100%); box-shadow: 8px 8px 0 var(--zt-shadow-color); }
-.flight-card h2 { font-size: 2rem; }
-.badge-icon { display: inline-grid; place-items: center; width: 32px; height: 32px; border-radius: 50%; background: var(--zt-yellow); color: #111; border: 2px solid var(--zt-line); }
 .sheet { width: min(560px, 100%); padding: 12px 16px 16px; border-radius: 24px 24px 18px 18px; max-height: 85vh; overflow-y: auto; }
 .sheet-h { font-size: 1.6rem; }
 .grabber { width: 44px; height: 5px; border-radius: 999px; background: var(--zt-soft-line); margin: 0 auto 10px; }
