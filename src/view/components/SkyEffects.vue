@@ -5,7 +5,7 @@ import { useUiStore } from '../../model/stores/ui.js'
 
 // Haze layer + lightning flashes, drawn over the map pages only.
 
-const SKY_PAGES = ['map', '3d-map']
+const SKY_PAGES = ['map']
 const HAZE_STARTS_AT_PSI = 100   // no haze layer at or below this (PSI "Moderate" or better)
 
 const ui = useUiStore()

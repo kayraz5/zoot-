@@ -25,8 +25,6 @@ const routes = [
   { path: '/party/:id?', redirect: (to) => (to.params.id ? `/quests/${to.params.id}` : '/quests') },
   ...(DEV_PANEL ? [{ path: '/dev', name: 'dev', component: () => import('../../view/views/DevView.vue'), meta: { auth: true, nav: true } }] : []),
   { path: '/:pathMatch(.*)*', redirect: '/' },
-  { path: '/3d-map', name: '3d-map', component: () => 
-    import('../../view/views/3D_Map.vue') },
 ]
 
 export const router = createRouter({
