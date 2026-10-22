@@ -1,7 +1,9 @@
 import { defineStore } from 'pinia'
-import { fetchForecast } from '../services/weather.js'
+import { fetchForecast, fetchHaze, fetchLightning } from '../services/weather.js'
 
 /** Theme, toasts, celebrations, weather and dev flags (Matthew + Hulbert lanes). */
+const DEV_PSI = 160 // "Unhealthy" level, used when haze is forced on
+
 export const useUiStore = defineStore('ui', {
   state: () => ({
     theme: document.documentElement.getAttribute('data-bs-theme') || 'light',
@@ -43,5 +45,5 @@ export const useUiStore = defineStore('ui', {
 })
 
 function readFlag(key) {
-  try { return localStorage.getItem(key) === '1' } catch { return false }
+	try { return localStorage.getItem(key) === '1' } catch { return false }
 }

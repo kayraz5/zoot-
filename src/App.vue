@@ -4,6 +4,7 @@ import { useRoute } from 'vue-router'
 import AppNav from './view/components/AppNav.vue'
 import ToastHost from './view/components/ToastHost.vue'
 import StampCelebration from './view/components/StampCelebration.vue'
+import RainOverlay from './view/components/RainOverlay.vue'
 import { useUserStore } from './model/stores/user.js'
 import { usePassportStore } from './model/stores/passport.js'
 import { useUiStore } from './model/stores/ui.js'
@@ -14,7 +15,7 @@ const passport = usePassportStore()
 const ui = useUiStore()
 const showNav = computed(() => route.meta.nav && user.isAuthed && !ui.navHidden)
 
-watch(() => user.userId, (id) => id && passport.load(id), { immediate: true })
+watch(() => user.userId, (id) => passport.load(id), { immediate: true })
 </script>
 
 <template>
@@ -22,6 +23,9 @@ watch(() => user.userId, (id) => id && passport.load(id), { immediate: true })
     <component :is="Component" />
   </RouterView>
   <AppNav v-if="showNav" />
+  <SkyEffects />
+  <RainOverlay />  
   <ToastHost />
   <StampCelebration />
+  <CenterDialog />
 </template>

@@ -116,8 +116,8 @@ async function signOut() {
             <RouterLink to="/onboard" class="list-group-item list-group-item-action">
                 <i class="bi bi-shuffle"></i> Retake the style quiz
             </RouterLink>
-            <RouterLink to="/party" class="list-group-item list-group-item-action">
-                <i class="bi bi-people"></i> Quest parties <span class="zt-pill pale ms-1">Soon</span>
+            <RouterLink to="/quests" class="list-group-item list-group-item-action">
+                <i class="bi bi-people"></i> Group quests
             </RouterLink>
             
             <button class="list-group-item list-group-item-action" @click="ui.toggleTheme()">

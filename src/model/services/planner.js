@@ -1,5 +1,5 @@
 import { travel, distanceM, nearestHub } from './travel.js'
-import { isOpenDuringVisit, formatTime } from './hours.js'
+import { isOpenDuringVisit, formatTime, waitUntilOpen } from './hours.js'
 
 /**
  * Deterministic layover planner (Kayra)
@@ -461,6 +461,8 @@ export function keptVisits(mission, catalogById, capMs) {
 	})
 }
 
+const FIXED_LATE_MIN = 10
+
 /**
  * Re-time a live mission from `start` ({point, ms}) without choosing new places: stamped legs
  * take their real times, pending legs and the return leg follow on with fresh travel times.
@@ -486,10 +488,21 @@ export function retimeMission(mission, { start, catalogById }) {
 	for (const l of pending) {
 		const p = catalogById.get(l.place_id) || l
 		const tr = travel(cur, p, { ...opts, atMs: t })
-		const arrive = t + tr.minutes * MIN
-		const depart = arrive + l.stay_min * MIN
-		Object.assign(l, { travel_mode: tr.mode, travel_min: tr.minutes, travel_detail: tr.detail, arrive_iso: iso(arrive), depart_iso: iso(depart) })
-		if (!isOpenDuringVisit(p, arrive, depart)) problems.push(`${l.name} would be closed when you get there`)
+		const reach = t + tr.minutes * MIN
+		let arrive, depart
+		if (l.fixed) {
+			// Joined from someone's open quest: the group meets at a set time, so it never moves.
+			// The join rule only keeps a 15-min gap, so allow arriving up to 10 min late before refusing.
+			arrive = Date.parse(l.arrive_iso)
+			depart = Date.parse(l.depart_iso)
+			if (reach > arrive + FIXED_LATE_MIN * MIN) problems.push(`You'd be ${Math.round((reach - arrive) / MIN)} min late to meet ${l.with_host} at ${l.name}`)
+		} else {
+			// Early for a place that opens later (e.g. a 19:40 show)? Wait for it instead of refusing.
+			arrive = waitUntilOpen(p, reach, l.stay_min) ?? reach
+			depart = arrive + l.stay_min * MIN
+		}
+		Object.assign(l, { travel_mode: tr.mode, travel_min: tr.minutes, travel_detail: l.fixed ? l.travel_detail : tr.detail, arrive_iso: iso(arrive), depart_iso: iso(depart) })
+		if (!l.fixed && !isOpenDuringVisit(p, arrive, depart)) problems.push(`${l.name} would be closed when you get there`)
 		t = depart
 		cur = p
 	}

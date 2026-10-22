@@ -5,42 +5,51 @@ import { useUiStore } from '../../model/stores/ui.js'
 import { useUserStore } from '../../model/stores/user.js'
 import { AREAS } from '../../model/data/origins.js'
 
+// Pop-up after a stamp, or after returning to the airport/hotel.
 const ui = useUiStore()
 const user = useUserStore()
 const router = useRouter()
-const c = computed(() => ui.celebration)
-const ink = computed(() => AREAS.find((a) => a.id === c.value?.area)?.ink || '#111111')
-const glyph = computed(() => AREAS.find((a) => a.id === c.value?.area)?.glyph || '✦')
 
-function close() { ui.celebrate(null) }
-function toPassport() { close(); router.push('/passport') }
+const celebration = computed(() => ui.celebration)
+const area = computed(() => AREAS.find((a) => a.id === celebration.value?.area))
+const ink = computed(() => area.value?.ink || '#111111')
+const glyph = computed(() => area.value?.glyph || '✦')
+
+function close() {
+  ui.celebrate(null)
+}
+
+function goToPassport() {
+  close()
+  router.push('/passport')
+}
 </script>
 
 <template>
   <Transition name="zt-fade">
-    <div v-if="c" class="celebrate" role="dialog" aria-modal="true" aria-label="Stamp collected" @click.self="close">
+    <div v-if="celebration" class="celebrate" role="dialog" aria-modal="true" aria-label="Stamp collected" @click.self="close">
       <div class="card-pop zt-card text-center p-4">
-        <template v-if="c.returned">
-          <div class="gate-icon mb-2"><i class="bi" :class="c.onTime ? 'bi-airplane-fill' : 'bi-alarm-fill'"></i></div>
-          <h2 class="zt-display title mb-1">{{ c.onTime ? 'Back with time to spare' : 'Back, a little late' }}</h2>
-          <p class="text-muted mb-3">{{ c.onTime ? 'Quest complete. Enjoy the flight.' : 'You made it, but the buffer was eaten. Next time, leave earlier.' }}</p>
-          <div v-if="c.xp" class="xp-burst mb-3">+{{ c.xp }} XP</div>
+        <template v-if="celebration.returned">
+          <div class="gate-icon mb-2"><i class="bi" :class="celebration.onTime ? 'bi-airplane-fill' : 'bi-alarm-fill'"></i></div>
+          <h2 class="zt-display title mb-1">{{ celebration.onTime ? 'Back with time to spare' : 'Back, a little late' }}</h2>
+          <p class="text-muted mb-3">{{ celebration.onTime ? 'Quest complete. Enjoy the flight.' : 'You made it, but the buffer was eaten. Next time, leave earlier.' }}</p>
+          <div v-if="celebration.xp" class="xp-burst mb-3">+{{ celebration.xp }} XP</div>
         </template>
         <template v-else>
           <div class="chop-stage mb-2">
             <div class="splat"></div>
             <div class="chop" :style="{ '--ink': ink }">
               <span class="glyph">{{ glyph }}</span>
-              <span class="ring-text">{{ c.area }}</span>
+              <span class="ring-text">{{ celebration.area }}</span>
             </div>
           </div>
-          <h2 class="zt-display title mb-1">{{ c.place?.name }}</h2>
+          <h2 class="zt-display title mb-1">{{ celebration.place?.name }}</h2>
           <p class="text-muted small mb-2">Stamped · Level {{ user.level.level }} · {{ user.title }}</p>
-          <div class="xp-burst mb-3">+{{ c.xp }} XP</div>
-          <p v-if="c.firstInArea" class="mb-3"><span class="zt-pill pale"><i class="bi bi-journal-plus"></i> New passport page: {{ c.area }}</span></p>
+          <div class="xp-burst mb-3">+{{ celebration.xp }} XP</div>
+          <p v-if="celebration.firstInArea" class="mb-3"><span class="zt-pill pale"><i class="bi bi-journal-plus"></i> New passport page: {{ celebration.area }}</span></p>
         </template>
         <div class="d-flex gap-2 justify-content-center">
-          <button v-if="c.firstInArea" class="btn btn-soft" @click="toPassport"><i class="bi bi-journal-bookmark-fill"></i> See chop</button>
+          <button v-if="celebration.firstInArea" class="btn btn-soft" @click="goToPassport"><i class="bi bi-journal-bookmark-fill"></i> See chop</button>
           <button class="btn btn-primary px-4" @click="close" autofocus>Nice!</button>
         </div>
       </div>
