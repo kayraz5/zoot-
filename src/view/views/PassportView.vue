@@ -1,6 +1,7 @@
 <script setup>
-import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
-import { PassportBook } from '../gl/passportScene.js'
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import Flipbook from 'flipbook-vue'
+import { StampSlam } from '../gl/stampSlam.js'
 import { drawCover, drawIdentity, drawAreaPage, drawBackPage, PAGE_W, PAGE_H } from '../gl/pageArt.js'
 import { AREAS, STYLES } from '../../model/data/origins.js'
 import { catalog, placeById, loadCatalog } from '../../model/services/catalog.js'
@@ -11,29 +12,29 @@ import { useMissionStore } from '../../model/stores/mission.js'
 import { DEFAULT_COVER } from '../../model/services/brand.js'
 import { getDb } from '../../model/services/db/index.js'
 
-// 3D passport page: flip through pages and play the slam for newly stamped areas
+// Passport page: flipbook-vue turns the pages, and a Three.js stamp slams newly earned area chops
 const passport = usePassportStore()
 const user = useUserStore()
 const mission = useMissionStore()
 
-const canvas = ref(null)
-const spread = ref(0)
-const failed = ref(false) // no WebGL, show the text fallback
-const busy = ref(false) // animation running, ignore input
+const stage = ref(null)
+const book = ref(null) // the flipbook-vue component
+const slamCanvas = ref(null)
+const pages = ref([]) // one image (blob: URL) per page
+const busy = ref(false) // slam playing, ignore input
 const missions = ref([]) // every saved mission, for the mission badges
 
-let book = null
+let stampSlam = null
 let otter = null
-let dragStartX = null
 
 // Page order: cover, identity, one page per area, badges
 const FIRST_AREA_PAGE = 2
 const pageCount = AREAS.length + 3
-const spreadCount = Math.ceil(pageCount / 2)
+// Leading null: the cover sits alone on the right. Book index = page + 1.
+const bookPages = computed(() => [null, ...pages.value])
 
-// Slam state per area: chop hidden until the stamp hits, then ink fades in
+// Area chops waiting for their slam stay hidden until the stamp lands
 const revealedAreas = new Set()
-const inkProgress = {}
 
 const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms))
 
@@ -77,9 +78,22 @@ function areaPlaces(areaId) {
   return [...stamped, ...rest]
 }
 
+// Pages on the open spread (one on phones)
+const openPages = computed(() => {
+  const b = book.value
+  if (!b) return []
+  return [b.showLeftPage && b.leftPage, b.showRightPage && b.rightPage].filter(Boolean).map((index) => index - 1)
+})
+
+// Same numbers as printed on the pages (the cover is 0)
+const pageLabel = computed(() => {
+  const open = openPages.value.filter((page) => page > 0)
+  return open.length ? `Page ${open.join('–')} / ${pageCount - 1}` : 'Cover'
+})
+
 // Area pages on the open spread, for the "All N places" buttons
 const openAreas = computed(() =>
-  [spread.value * 2 - 1, spread.value * 2]
+  openPages.value
     .map((page) => AREAS[page - FIRST_AREA_PAGE])
     .filter(Boolean)
     .map((area) => ({ ...area, total: catalog.value.filter((place) => place.area === area.id).length }))
@@ -101,7 +115,7 @@ const badges = computed(() => {
   ]
 })
 
-// Draws page i; PassportBook calls this for every page texture
+// Draws page i onto a canvas
 function paint(i, ctx) {
   const left = i % 2 === 1
   const profile = user.profile || {}
@@ -134,25 +148,61 @@ function paint(i, ctx) {
       target: CHOP_TARGET,
       pageNo: i,
       left,
-      revealed: !waitingForSlam || revealedAreas.has(area.id),
-      inkProgress: inkProgress[area.id] ?? 1
+      revealed: !waitingForSlam || revealedAreas.has(area.id)
     })
   }
 
   return drawBackPage(ctx, { badges: badges.value, left })
 }
 
-async function flipTo(targetSpread) {
-  if (!book) return
-  const settled = book.flipTo(targetSpread)
-  spread.value = book.spread
-  await settled
+function drawPage(i) {
+  const canvas = document.createElement('canvas')
+  canvas.width = PAGE_W
+  canvas.height = PAGE_H
+  paint(i, canvas.getContext('2d'))
+  return canvas
 }
 
-// Turn to each newly stamped area and slam its chop onto the page
+// Short blob: URLs, not data: URLs (flipbook-vue repeats the URL in every curl strip, every frame)
+function pageImage(i) {
+  return new Promise((resolve) => drawPage(i).toBlob((blob) => resolve(URL.createObjectURL(blob)), 'image/png'))
+}
+
+async function repaintAll() {
+  const old = pages.value
+  pages.value = await Promise.all(Array.from({ length: pageCount }, (_, i) => pageImage(i)))
+  old.forEach((url) => URL.revokeObjectURL(url))
+}
+
+async function repaintPage(i) {
+  const next = [...pages.value]
+  URL.revokeObjectURL(next[i])
+  next[i] = await pageImage(i)
+  pages.value = next
+}
+
+function goToPage(i) {
+  const b = book.value
+  if (!b) return
+  // Two-page spreads start on an even book index; 1 means the cover
+  const index = b.displayedPages === 2 ? (i + 1) & ~1 : i + 1
+  b.goToPage(index || 1)
+}
+
+// Position of canvas pixel (x, y) of page i on the slam canvas, from the page image flipbook-vue shows
+function pagePoint(i, x, y) {
+  const img = [...stage.value.querySelectorAll('img.page')].find((el) => el.src === pages.value[i])
+  if (!img) return null
+  const page = img.getBoundingClientRect()
+  const box = stage.value.getBoundingClientRect()
+  const scale = page.width / PAGE_W
+  return { x: page.left - box.left + x * scale, y: page.top - box.top + y * scale, scale }
+}
+
+// Turn to each newly earned area and slam its chop onto the page
 async function playSlams() {
   for (const areaId of [...passport.pendingSlams]) {
-    if (!book) return // left the page mid-slam
+    if (!book.value) return // left the page mid-slam
     const areaIndex = AREAS.findIndex((a) => a.id === areaId)
     if (areaIndex < 0) {
       passport.consumeSlam(areaId)
@@ -160,22 +210,27 @@ async function playSlams() {
     }
 
     const page = FIRST_AREA_PAGE + areaIndex
-    await flipTo(book.spreadForPage(page))
-    await wait(300)
-    await book.slam(page, 392, 104, AREAS[areaIndex].ink, () => {
+    goToPage(page)
+    await nextTick()
+    await wait(400)
+    const at = pagePoint(page, 392, 104)
+    const reveal = async () => {
       revealedAreas.add(areaId)
-      // Fade the ink in over a few frames
-      for (let step = 0; step <= 6; step++) {
-        setTimeout(() => {
-          inkProgress[areaId] = 0.4 + (step / 6) * 0.6
-          book?.repaint(page)
-        }, step * 45)
-      }
       navigator.vibrate?.(40)
-    })
+      await repaintPage(page)
+    }
+    if (stampSlam && at) await stampSlam.slam({ x: at.x, y: at.y, size: 128 * at.scale, ink: AREAS[areaIndex].ink }, reveal)
+    else await reveal() // no WebGL: just show the chop
     passport.consumeSlam(areaId)
-    await wait(500)
+    await wait(400)
   }
+}
+
+async function runSlams() {
+  busy.value = true
+  // Stamps that load mid-slam get their turn too
+  while (book.value && passport.pendingSlams.length) await playSlams()
+  busy.value = false
 }
 
 async function loadMissions() {
@@ -189,20 +244,12 @@ async function loadMissions() {
 // Stamps, profile or badges can arrive after the pages were first drawn
 watch(
   () => [passport.stamps.length, passport.seen.size, user.profile, catalog.value, badges.value],
-  () => {
-    if (!book) return
-    book.setCoverColor(user.profile?.cover_color || DEFAULT_COVER)
-    book.repaintAll()
-    if (passport.pendingSlams.length && !busy.value) runSlams()
+  async () => {
+    if (!pages.value.length || busy.value) return
+    await repaintAll()
+    if (passport.pendingSlams.length) runSlams()
   }
 )
-
-async function runSlams() {
-  busy.value = true
-  // Stamps that load mid-slam get their turn too
-  while (book && passport.pendingSlams.length) await playSlams()
-  busy.value = false
-}
 
 onMounted(async () => {
   await Promise.all([loadCatalog(), passport.whenLoaded()])
@@ -216,82 +263,45 @@ onMounted(async () => {
     ])
   } catch {}
 
+  await repaintAll()
+  await nextTick()
   try {
-    book = new PassportBook(canvas.value, { pageCount, paint, coverColor: user.profile?.cover_color || DEFAULT_COVER })
+    stampSlam = new StampSlam(slamCanvas.value)
   } catch (err) {
-    console.warn('[passport] WebGL unavailable', err)
-    failed.value = true
-    return
+    console.warn('[passport] WebGL unavailable, chops appear without the slam', err)
   }
 
-  busy.value = true
-  await wait(500)
-  busy.value = false
+  await wait(300)
   if (passport.pendingSlams.length) await runSlams()
-  else await flipTo(1)
+  else goToPage(1)
   window.addEventListener('keydown', onKey)
 })
 
 onBeforeUnmount(() => {
   window.removeEventListener('keydown', onKey)
-  book?.dispose()
-  book = null
+  stampSlam?.dispose()
+  stampSlam = null
+  pages.value.forEach((url) => URL.revokeObjectURL(url))
 })
 
 function onKey(e) {
-  if (e.key === 'ArrowRight') flipTo(spread.value + 1)
-  if (e.key === 'ArrowLeft') flipTo(spread.value - 1)
-}
-
-function onPointerDown(e) {
-  dragStartX = e.clientX
-}
-
-// Swipe to turn, or tap the right/left half
-function onPointerUp(e) {
-  if (dragStartX == null || busy.value) return
-  const dragDistance = e.clientX - dragStartX
-  dragStartX = null
-
-  if (Math.abs(dragDistance) > 40) {
-    flipTo(spread.value + (dragDistance < 0 ? 1 : -1))
-    return
-  }
-  const rect = canvas.value.getBoundingClientRect()
-  const tappedRightHalf = e.clientX - rect.left > rect.width / 2
-  flipTo(spread.value + (tappedRightHalf ? 1 : -1))
+  if (busy.value) return
+  if (e.key === 'ArrowRight') book.value?.flipRight()
+  if (e.key === 'ArrowLeft') book.value?.flipLeft()
 }
 
 function jumpToArea(areaId) {
-  const areaIndex = AREAS.findIndex((a) => a.id === areaId)
-  flipTo(book.spreadForPage(FIRST_AREA_PAGE + areaIndex))
+  goToPage(FIRST_AREA_PAGE + AREAS.findIndex((a) => a.id === areaId))
 }
 
-// Saves the right-hand page of the open spread as a PNG
+// Saves the right-hand page of the open spread (the only page on phones) as a PNG
 function savePage() {
-  let page = 0
-  if (spread.value > 0) {
-    const rightPage = spread.value * 2
-    page = Math.min(pageCount - 1, rightPage < pageCount ? rightPage : rightPage - 1)
-  }
-
-  const pageCanvas = document.createElement('canvas')
-  pageCanvas.width = PAGE_W
-  pageCanvas.height = PAGE_H
-  paint(page, pageCanvas.getContext('2d'))
-
+  const page = openPages.value.at(-1) ?? 0
   const link = document.createElement('a')
   link.download = `zoot-passport-p${page}.png`
-  link.href = pageCanvas.toDataURL('image/png')
+  link.href = drawPage(page).toDataURL('image/png')
   link.click()
 }
-
-// Text fallback when WebGL isn't available
-const stampedAreas = computed(() =>
-  AREAS
-    .map((area) => ({ ...area, count: (passport.byArea[area.id] || []).length }))
-    .filter((area) => area.count > 0)
-)
 </script>
 
 <template>
@@ -304,21 +314,17 @@ const stampedAreas = computed(() =>
       <button class="btn btn-soft btn-sm" @click="savePage"><i class="bi bi-download"></i> Save page</button>
     </div>
 
-    <div class="stage" :class="{ busy }">
-      <canvas v-if="!failed" ref="canvas" @pointerdown="onPointerDown" @pointerup="onPointerUp" aria-label="3D passport. Tap right side for next page, left for previous." role="img"></canvas>
-      <div v-else class="fallback p-3">
-        <p class="small text-muted">3D is unavailable on this device. Places stamped per area ({{ CHOP_TARGET }} earns the chop):</p>
-        <div v-for="area in stampedAreas" :key="area.id" class="zt-pill me-1 mb-1" :style="{ color: area.ink }">{{ area.glyph }} {{ area.id }} {{ Math.min(area.count, CHOP_TARGET) }}/{{ CHOP_TARGET }}<template v-if="area.count >= CHOP_TARGET"> ✓</template></div>
-        <p v-if="!stampedAreas.length" class="small">No stamps yet.</p>
-      </div>
+    <div ref="stage" class="stage" :class="{ busy }">
+      <Flipbook v-if="pages.length" ref="book" class="book" :pages="bookPages" :click-to-zoom="false" :drag-to-flip="!busy" aria-label="Passport. Drag a page corner or tap a side to turn the page." />
+      <canvas ref="slamCanvas" class="slam-canvas"></canvas>
     </div>
 
-    <div class="d-flex justify-content-center align-items-center gap-3 mt-2" v-if="!failed">
-      <button class="btn btn-soft" :disabled="busy || spread === 0" @click="flipTo(spread - 1)" aria-label="Previous page"><i class="bi bi-chevron-left"></i></button>
-      <span class="small fw-800 mono">{{ spread === 0 ? 'Cover' : `Spread ${spread} / ${spreadCount}` }}</span>
-      <button class="btn btn-soft" :disabled="busy || spread >= spreadCount" @click="flipTo(spread + 1)" aria-label="Next page"><i class="bi bi-chevron-right"></i></button>
+    <div class="d-flex justify-content-center align-items-center gap-3 mt-2">
+      <button class="btn btn-soft" :disabled="busy || !book?.canFlipLeft" @click="book.flipLeft()" aria-label="Previous page"><i class="bi bi-chevron-left"></i></button>
+      <span class="small fw-800 mono">{{ pageLabel }}</span>
+      <button class="btn btn-soft" :disabled="busy || !book?.canFlipRight" @click="book.flipRight()" aria-label="Next page"><i class="bi bi-chevron-right"></i></button>
     </div>
-    <div v-if="!failed && openAreas.length" class="d-flex flex-wrap justify-content-center gap-2 mt-2">
+    <div v-if="openAreas.length" class="d-flex flex-wrap justify-content-center gap-2 mt-2">
       <RouterLink v-for="a in openAreas" :key="a.id" :to="{ path: '/codex', query: { area: a.id } }" class="btn btn-soft btn-sm">
         <span :style="{ color: a.ink }">{{ a.glyph }}</span> All {{ a.total }} {{ a.id }} places
       </RouterLink>
@@ -326,7 +332,7 @@ const stampedAreas = computed(() =>
 
     <div class="zt-section-title"><i class="bi bi-bookmark-star"></i> Jump to a page</div>
     <div class="d-flex flex-wrap gap-2">
-      <button v-for="a in AREAS" :key="a.id" class="zt-chip" :disabled="busy || failed" @click="jumpToArea(a.id)">
+      <button v-for="a in AREAS" :key="a.id" class="zt-chip" :disabled="busy" @click="jumpToArea(a.id)">
         <span :style="{ color: a.ink }">{{ a.glyph }}</span> {{ a.id }}
         <span v-if="passport.byArea[a.id]" class="badge rounded-pill text-bg-danger">{{ passport.byArea[a.id].length }}</span>
       </button>
@@ -346,6 +352,9 @@ const stampedAreas = computed(() =>
   background-image: repeating-conic-gradient(from 0deg at 50% 55%, rgba(255, 255, 255, 0.32) 0deg 9deg, rgba(255, 255, 255, 0) 9deg 18deg);
 }
 [data-bs-theme='dark'] .stage { background-color: #1b1b1b; background-image: repeating-conic-gradient(from 0deg at 50% 55%, rgba(255, 204, 0, 0.1) 0deg 9deg, rgba(255, 204, 0, 0) 9deg 18deg); }
-.stage canvas { width: 100%; height: 100%; display: block; touch-action: pan-y; cursor: pointer; }
-.stage.busy canvas { cursor: progress; }
+/* Portrait on phones, so flipbook-vue shows one large page instead of two small ones */
+@media (max-width: 600px) { .stage { aspect-ratio: 3 / 4.1; max-height: 72vh; } }
+.book { width: 100%; height: 100%; }
+.stage.busy .book { pointer-events: none; }
+.slam-canvas { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; }
 </style>

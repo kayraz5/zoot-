@@ -1,0 +1,26 @@
+diff --git a/dist/flipbook.mjs b/dist/flipbook.mjs
+index 7d9674c16b5b728a4a8fa39cf9d65a1f6cc1dfc5..5dcf951d6af596da650abc71342c27387aab4382 100644
+--- a/dist/flipbook.mjs
++++ b/dist/flipbook.mjs
+@@ -569,8 +569,8 @@ var script = {
+         rotate = -rotate;
+         dRotate = -dRotate;
+       }
+-      this.minX = 2e308;
+-      this.maxX = -2e308;
++      this._minX = 2e308; // patched: plain fields, writing reactive minX/maxX during render loops in Vue 3
++      this._maxX = -2e308;
+       results = [];
+       for (i = j = 0, ref = this.nPolygons; (0 <= ref ? j < ref : j > ref); i = 0 <= ref ? ++j : --j) {
+         bgPos = (i / (this.nPolygons - 1) * 100) + "% 0px";
+@@ -588,8 +588,8 @@ var script = {
+         m.rotateY(-rotate);
+         x0 = m.transformX(0);
+         x1 = m.transformX(polygonWidth);
+-        this.maxX = Math.max(Math.max(x0, x1), this.maxX);
+-        this.minX = Math.min(Math.min(x0, x1), this.minX);
++        this._maxX = Math.max(Math.max(x0, x1), this._maxX);
++        this._minX = Math.min(Math.min(x0, x1), this._minX);
+         lighting = this.computeLighting(pageRotation - rotate, dRotate);
+         radian += dRadian;
+         rotate += dRotate;

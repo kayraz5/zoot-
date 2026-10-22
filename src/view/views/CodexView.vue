@@ -64,9 +64,9 @@ const seenTotal = computed(() => shownPlaces.value.filter(isSeen).length)
           <span class="icon">
             <i v-if="placeState(place) === 'stamped'" class="bi bi-patch-check-fill"></i>
             <i v-else-if="placeState(place) === 'seen'" class="bi bi-eye"></i>
-            <i v-else class="bi bi-question-lg"></i>
+            <i v-else class="bi bi-geo-alt"></i>
           </span>
-          <span class="name">{{ placeState(place) === 'unknown' ? '???' : place.name }}</span>
+          <span class="name">{{ place.name }}</span>
         </RouterLink>
       </div>
     </section>
@@ -83,7 +83,7 @@ const seenTotal = computed(() => shownPlaces.value.filter(isSeen).length)
 .cell.stamped .icon { background: #111; color: var(--zt-yellow); border-color: #111; }
 .cell.seen .icon { background: var(--zt-yellow-pale); color: #111; }
 .cell.unknown { border-style: dashed; }
-.cell.unknown .name { color: var(--zt-muted); letter-spacing: 0.2em; }
+.cell.unknown .name { color: var(--zt-muted); }
 .cell.unknown .icon { border-style: dashed; color: var(--zt-muted); }
 .name { font-size: 0.7rem; font-weight: 700; line-height: 1.15; }
 .bar-stamped { background: #111; }

@@ -4,6 +4,11 @@ settings:
   autoInstallPeers: true
   excludeLinksFromLockfile: false
 
+patchedDependencies:
+  flipbook-vue@1.0.0-beta.4:
+    hash: ec7f45997f7b0b679dcfb570ba0e0b6614df1795f8958e81a38c5d6116ad2bf6
+    path: patches/flipbook-vue@1.0.0-beta.4.patch
+
 importers:
 
   .:
@@ -29,6 +34,9 @@ importers:
       bootstrap-icons:
         specifier: ^1.13.2
         version: 1.13.2
+      flipbook-vue:
+        specifier: 1.0.0-beta.4
+        version: 1.0.0-beta.4(patch_hash=ec7f45997f7b0b679dcfb570ba0e0b6614df1795f8958e81a38c5d6116ad2bf6)(vue@3.5.44)
       maplibre-gl:
         specifier: ^6.14.0
         version: 6.14.0
@@ -842,6 +850,11 @@ packages:
       picomatch:
         optional: true
 
+  flipbook-vue@1.0.0-beta.4:
+    resolution: {integrity: sha512-4FycLNWkxEpHUCk08s1g9q1G/r1S/r3GI7LCalwMtr4G7Y7IDgKbA9AF7AjDPFudny+Rqndw74SHKVnksSebCA==}
+    peerDependencies:
+      vue: '>=2.6.10'
+
   follow-redirects@1.16.1:
     resolution: {integrity: sha512-FNvFGzoMLWmE6Yj9spb/zjd7yiNCHiAW9/Tg9CXrQ8wuu32HtlJOwWO11OJafl5FfY3DxTdQ0vj42zU1kvv5jg==}
     engines: {node: '>=4.0'}
@@ -1229,6 +1242,9 @@ packages:
   readdirp@5.1.1:
     resolution: {integrity: sha512-Kko+Y5XQ6fM+Ce3dq3m9YGxnacYZYl9cA1wZjaF3Vbry2L3i1qVg8+CAgNPsXRArPMUMCaOR7oa9Nqntc43JKA==}
     engines: {node: '>= 20.19.0'}
+
+  rematrix@0.7.2:
+    resolution: {integrity: sha512-NYLmE17dX15eUPhngLMTKlRYwATxEhcRdn9LKtk/iOXHxDKglCZnD2MrMLKwLlB5FX8u9kF/9yMhlQJpeDcuPw==}
 
   require-from-string@2.0.2:
     resolution: {integrity: sha512-Xf0nWe6RseziFMu+Ap9biiUbmplq6S9/p+7w7YXP/JBHhrUDDUhwa+vANyubuqfZWTveU//DYVGsDG7RKL/vEw==}
@@ -2357,6 +2373,11 @@ snapshots:
     optionalDependencies:
       picomatch: 4.0.7
 
+  flipbook-vue@1.0.0-beta.4(patch_hash=ec7f45997f7b0b679dcfb570ba0e0b6614df1795f8958e81a38c5d6116ad2bf6)(vue@3.5.44):
+    dependencies:
+      rematrix: 0.7.2
+      vue: 3.5.44
+
   follow-redirects@1.16.1: {}
 
   form-data@4.0.6:
@@ -2710,6 +2731,8 @@ snapshots:
   quickselect@3.0.0: {}
 
   readdirp@5.1.1: {}
+
+  rematrix@0.7.2: {}
 
   require-from-string@2.0.2: {}
 
