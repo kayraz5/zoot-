@@ -13,14 +13,14 @@ const route = useRoute()
 const onSkyPage = computed(() => SKY_PAGES.includes(route.name))
 
 // ---------------------------------------------------------------
-// Haze: stronger PSI means a thicker layer (from about 0.15 up to 0.6)
+// Haze: fades in from nothing at PSI 100 to full strength at PSI 200
 // ---------------------------------------------------------------
 const hazeOpacity = computed(() => {
 	if (!onSkyPage.value) return 0
 	const psi = ui.shownHaze?.psi
 	if (psi == null || psi <= HAZE_STARTS_AT_PSI) return 0
-	const strength = Math.min((psi - HAZE_STARTS_AT_PSI) / 200, 1)   // 0 to 1
-	return 0.50 + strength * 0.45                                    // was 0.15 + strength * 0.45
+	const strength = Math.min((psi - HAZE_STARTS_AT_PSI) / 100, 1)   // 0 to 1
+	return strength * 0.95
 })
 
 // The cloud blobs: how far down the screen, how big, how fast they drift,

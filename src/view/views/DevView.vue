@@ -20,6 +20,7 @@ const router = useRouter()
 const groq = ref('checking…')
 
 onMounted(async () => {
+	ui.loadWeather() // so the status lines show real results even if the map wasn't opened first
 	await store.loadActive()
 	try {
 		const r = await fetch('/api/summary', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ place: { name: 'Merlion Park', blurb: 'Test.' } }) })
@@ -123,7 +124,7 @@ async function resetLocal() {
 						@change="ui.setForceHaze($event.target.checked)" />
 				</div>
 			</div>
-			<p class="tiny text-muted mb-0">PSI reads 160 (Unhealthy). The chip and map pill show it, and a haze layer
+			<p class="tiny text-muted mb-0">PSI reads 160 (Unhealthy). The weather chip shows a masked face with it, and a haze layer
 				drifts over the map.</p>
 		</section>
 		<section class="zt-card p-3 mb-3">
@@ -134,7 +135,7 @@ async function resetLocal() {
 						:checked="ui.forceLightning" @change="ui.setForceLightning($event.target.checked)" />
 				</div>
 			</div>
-			<p class="tiny text-muted mb-0">A strike reads 3 km away. The bolt icon appears and the map flashes every
+			<p class="tiny text-muted mb-0">A strike reads 3 km away. The weather chip's icon gains a lightning bolt and the map flashes every
 				few seconds.</p>
 		</section>
 		<section class="zt-card p-3 mb-3">
@@ -153,6 +154,8 @@ async function resetLocal() {
 				<li>Data: {{ user.mode === 'supabase' ? 'Supabase' : 'Guest (localStorage)' }}{{ HAS_SUPABASE ? '' : '(no Supabase keys)' }}</li>
 				<li>Groq: {{ groq }}</li>
 				<li>Weather: {{ ui.weather ? 'Open-Meteo OK' : ui.weatherError || 'not loaded' }}</li>
+				<li>Haze (PSI): {{ ui.haze ? 'NEA OK' : ui.hazeError || 'not loaded' }}</li>
+				<li>Lightning: {{ ui.lightning ? 'NEA OK' : ui.lightningError || 'not loaded' }}</li>
 			</ul>
 		</section>
 

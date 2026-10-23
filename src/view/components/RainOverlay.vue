@@ -31,7 +31,10 @@ const rainChance = computed(() => {
 	return hour ? hour.prob : 0;
 });
 
-const isRaining = computed(() => onRainPage.value && rainChance.value > RAIN_THRESHOLD);
+// Rain falls when the chance is high, or when the forecast says it is raining right now (same rule as the chip's rain icon)
+const rainingNow = computed(() => (ui.weather?.current?.mm ?? 0) > 0);
+
+const isRaining = computed(() => onRainPage.value && (rainChance.value > RAIN_THRESHOLD || rainingNow.value));
 
 // Make each raindrop slightly different so the rain looks natural.
 // This runs once, not on every update.
