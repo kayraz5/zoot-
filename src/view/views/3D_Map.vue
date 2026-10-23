@@ -22,16 +22,15 @@ import { formatTime } from '../../model/services/hours.js'
 import { tick } from '../../model/services/clock.js'
 import { getWalkRoute } from '../../model/services/walkRoute.js'
 import { addQuestLayers, setQuestColors, setRoute, setFence, syncStopMarkers, createPlayerMarker, straight } from '../map/questLayers.js'
-import { describePsi } from '../../model/services/weather.js'
 import { removePlaceMarker } from '../components/placeMarker.js'
 import { PinLayer } from '../gl/pinPoint.js'
 import QuestCoopChip from '../components/QuestCoopChip.vue'
+import WeatherChip from '../components/WeatherChip.vue'
 
 const ORS_API_KEY = "eyJvcmciOiI1YjNjZTM1OTc4NTExMTAwMDFjZjYyNDgiLCJpZCI6IjdiZWU2YWY0OGY3NDQ4NjA5MGJiNjUwZTVkZjg5NTAwIiwiaCI6Im11cm11cjY0In0="
 const el = ref(null)
 let map = null
 let placeMarkers = []
-const weather_data = ref(null)
 const MapStyle = ref(false)
 const speed = ref(20)
 const wasd = ref(true)
@@ -86,11 +85,6 @@ const router = useRouter()
 const store = useMissionStore()
 
 const ui = useUiStore()
-const haze = computed(() => {
-	if (!ui.shownHaze) return null
-	return { psi: ui.shownHaze.psi, ...describePsi(ui.shownHaze.psi) }
-})
-const lightningNearby = computed(() => ui.shownLightning?.nearby === true)
 const mapReady = ref(false)
 const following = ref(true) // camera follows you until you drag the map
 const stamping = ref(false)
@@ -571,17 +565,17 @@ watch(colorTheme, () => {
 	if (map) setQuestColors(map, colorTheme.value === 'theme')
 })
 
-onMounted(async () => {
-	ui.loadWeather(1.2897, 103.8501) // fills ui.haze and ui.lightning (it handles its own errors)
-	try {
-		const res = await axios.get("https://api.open-meteo.com/v1/forecast?latitude=1.2897&longitude=103.8501&current=temperature_2m,rain,uv_index")
-		weather_data.value = res.data
-	} catch (err) {
-		console.error(err)
-	}
+const WEATHER_REFRESH_MS = 2 * 60000 // lightning changes fast; the weather service caches each feed, so this is cheap
+let weatherTimer = null
+
+onMounted(() => {
+	const refreshWeather = () => ui.loadWeather(1.2897, 103.8501) // fills ui.weather, ui.haze and ui.lightning (it handles its own errors)
+	refreshWeather()
+	weatherTimer = setInterval(refreshWeather, WEATHER_REFRESH_MS)
 })
 
 onUnmounted(() => {
+	clearInterval(weatherTimer)
 	cancelAnimationFrame(raf)
 	clearTimeout(noFixTimer)
 	clearTimeout(retryTimer)
@@ -596,24 +590,6 @@ onUnmounted(() => {
 <template>
 	<div ref="el" class="quest-map"></div>
 
-	<div id="top-left" class="badge rounded-pill text-bg-warning">
-		<img id="img-pill" src="/brand/zoot-badge-192.png" alt="" width="25" height="25">
-		Singapore
-	</div>
-
-	<div id="top-left2" class="badge rounded-pill text-bg-warning">
-		<span class="wx-item bi bi-sun-fill" title="Temperature">{{ weather_data?.current?.temperature_2m }}°C</span>
-		<span class="wx-item bi bi-cloud-rain-heavy-fill" title="Rainfall now">{{ weather_data?.current?.rain }} mm</span>
-		<span v-if="haze" class="wx-item bi bi-wind" :title="`PSI ${haze.psi} (${haze.label})`">
-			{{ haze.psi }}<span class="psi-dot" :class="`psi-${haze.level}`"></span>
-		</span>
-		<span v-if="lightningNearby" class="wx-item bi bi-lightning-charge-fill"
-			:title="`Lightning ${ui.shownLightning.nearestKm} km away`"></span>
-	</div>
-
-
-	<button id="top-left3" @click="toggleDemo" class="btn btn-warning rounded-pill">{{ demo ? 'Use real GPS' : 'Enable Demo - Walk' }}</button>
-
 	<div id="top-right" class="badge rounded-4 text-bg-warning" :class="timeLevel" role="timer">
 		<span class="bi-airplane-fill"> &nbsp; Time to Travel</span>
 		<br>
@@ -623,7 +599,7 @@ onUnmounted(() => {
 
 	<button id="TestRoute" class="btn btn-warning rounded-pill" @click="showRouteTo([103.8607, 1.2834])">Test Route (MBS)</button>
 
-	<button id="MoreInfo" class="map-btn" type="button" @click="SideInfo = !SideInfo" aria-label="Map tools"
+	<button id="MoreInfo" class="map-btn" :class="{ open: SideInfo }" type="button" @click="SideInfo = !SideInfo" aria-label="Map tools"
 		title="Map tools">
 		<i class="bi bi-list"></i>
 	</button>
@@ -718,6 +694,20 @@ onUnmounted(() => {
 		</div>
 	</div>
 
+	<!-- Top-left column: one flex column so every chip (and the demo panel) is the same distance apart -->
+	<div id="top-left-stack">
+		<div id="top-left" class="badge rounded-pill text-bg-warning">
+			<img id="img-pill" src="/brand/zoot-badge-192.png" alt="" width="25" height="25">
+			Singapore
+		</div>
+
+		<!-- The weather chip and the GPS button share one grid column, so they are the same width -->
+		<div id="chip-col">
+			<div id="top-left2"><WeatherChip /></div>
+
+			<button id="top-left3" @click="toggleDemo" class="btn btn-warning rounded-pill" :class="{ 'demo-on': demo }">{{ demo ? 'Use Real GPS' : 'Enable Demo - Walk' }}</button>
+		</div>
+
 	<div v-if="demo" id="demo-controls" class="rounded-4">
 		<div class="demo-row">
 			<span class="demo-label">Speed</span>
@@ -743,6 +733,7 @@ onUnmounted(() => {
 				stop</button>
 		</div>
 		<div class="demo-hint">Tap the map to walk there.</div>
+	</div>
 	</div>
 
 	<template v-if="helpOpen">
@@ -806,50 +797,95 @@ onUnmounted(() => {
 	inset: 0;
 }
 
-#top-left {
+#top-left-stack {
 	position: absolute;
 	top: 12px;
 	left: 12px;
 	z-index: 1;
+	display: flex;
+	flex-direction: column;
+	align-items: flex-start;
+	gap: 10px; /* the one gap between every chip / panel in the column */
+}
+
+/* Singapore badge: natural size */
+#top-left {
 	font-size: 15px;
 	padding-right: 15px;
-	border-color: black;
-	border: 3px solid;
+}
+
+/* One column as wide as the widest of the weather chip / GPS button; they stretch to fill it */
+#chip-col {
+	display: grid;
+	grid-template-columns: max-content;
+	gap: 10px;
 }
 
 #img-pill {
 	margin-right: 5px;
 }
 
-#top-left2 {
-	position: absolute;
-	top: 60px;
-	left: 12px;
-	z-index: 1;
-	font-size: 15px;
-	border-color: black;
-	border: 3px solid;
-	display: flex; /* lay items out in a row */
-	align-items: center;
-	gap: 14px; /* space between the temperature, rain, PSI and bolt */
+#top-left2 :deep(.wx) {
+	box-shadow: none; /* the chip's offset shadow looked like a second pill behind it */
 }
 
-/* Each item: icon and text with a small gap between them. */
-.wx-item {
-	display: inline-flex;
-	align-items: center;
-	gap: 5px;               /* space between an icon and its number */
-}
-
-
+/* The global .btn style upper-cases button text; show this one as typed, like the other chips */
 #top-left3 {
-	position: absolute;
-	top: 100px;
-	left: 12px;
-	z-index: 1;
-	font-size: 10px;
-	border: 3px solid;
-	padding: 5px;
+	text-transform: none;
+	letter-spacing: normal;
+}
+
+/* Demo-Walk on: take the demo panel's dark background (yellow text so it stays readable) */
+#top-left3.demo-on {
+	background-color: var(--zt-black) !important;
+	color: var(--zt-yellow);
+}
+
+/* Same size for the weather chip and the GPS button: same height, same font size, content centred */
+#top-left2 :deep(.wx),
+#top-left3 {
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	justify-self: stretch;
+	height: 44px;
+	padding-top: 0;
+	padding-bottom: 0;
+	font-size: 15px;
+	line-height: 1;
+}
+
+/* Before the forecast loads the chip renders nothing; don't leave an empty grid row (and a double gap) */
+#top-left2:empty { display: none; }
+
+/* The weather chip's own smaller sizes: bring its text and icons up to the same 15px */
+#top-left2 :deep(.item) { font-size: 15px; }
+#top-left2 :deep(.item .bi) { font-size: 1.1em; }
+#top-left2 :deep(.item .face) { width: 1.2em; height: 1.2em; font-size: 1.2em; }
+
+/* One look for every HUD chip: same yellow (--zt-yellow, not Bootstrap's #ffc107), black text,
+   3px black outline, same font family and weight. The red/amber timer alert below still overrides the fill. */
+#top-left,
+#top-left2 :deep(.wx),
+#top-left3,
+#top-right,
+#TestRoute {
+	background-color: var(--zt-yellow) !important;
+	color: #000;
+	border: 3px solid #000;
+	font-family: inherit;
+	font-weight: 700;
+}
+
+/* The two buttons take their fill/outline from Bootstrap variables, so set those too (keeps a hover state) */
+#top-left3,
+#TestRoute {
+	--bs-btn-bg: var(--zt-yellow);
+	--bs-btn-border-color: #000;
+	--bs-btn-hover-bg: var(--zt-yellow-soft);
+	--bs-btn-hover-border-color: #000;
+	--bs-btn-active-bg: var(--zt-yellow-soft);
+	--bs-btn-active-border-color: #000;
 }
 
 #top-right {
@@ -859,7 +895,6 @@ onUnmounted(() => {
 	padding: 14px;
 	line-height: 1.6;
 	text-align: left;
-	border: 4px solid;
 }
 
 .time_left_from_trip {
@@ -894,12 +929,27 @@ onUnmounted(() => {
 	cursor: pointer;
 }
 
+/* Menu button: the chips' yellow with a black outline and black shadow when closed;
+   the demo panel's dark look with a yellow outline and yellow shadow while the menu is open */
+#MoreInfo {
+	background: var(--zt-yellow);
+	color: #000;
+	border: 3px solid #000;
+	box-shadow: 4px 4px 0 #000;
+}
+
+#MoreInfo.open {
+	background: var(--zt-black);
+	color: var(--zt-yellow);
+	border-color: var(--zt-yellow);
+	box-shadow: 4px 4px 0 var(--zt-yellow);
+}
+
 #TestRoute {
 	position: absolute;
 	top: 150px;
 	right: 12px;
 	z-index: 1;
-	color: black;
 }
 
 /* The map buttons slide open from the hamburger button. */
@@ -1033,10 +1083,6 @@ onUnmounted(() => {
 }
 
 #demo-controls {
-	position: absolute;
-	top: 140px;
-	left: 12px;
-	z-index: 1;
 	background: var(--zt-black);
 	border: 4px solid var(--zt-yellow);
 	padding: 12px 16px;
@@ -1283,12 +1329,6 @@ onUnmounted(() => {
 	background: rgba(255, 204, 0, 0.45);
 	animation: zt-player-pulse 1.8s ease-out infinite;
 }
-
-.psi-dot { display: inline-block; width: 9px; height: 9px; border-radius: 50%; border: 1.5px solid #111; margin-left: 2px; }
-.psi-good { background: #2e9e5b; }
-.psi-moderate { background: #f5f5f5; }   /* white dot with a dark ring reads on yellow */
-.psi-unhealthy { background: #e07a1f; }
-.psi-very-unhealthy, .psi-hazardous { background: #d6322e; }
 
 @keyframes zt-player-pulse {
 	from {
