@@ -5,6 +5,7 @@ import { useUiStore } from '../../model/stores/ui.js'
 import { useUserStore } from '../../model/stores/user.js'
 import { usePassportStore, CHOP_TARGET } from '../../model/stores/passport.js'
 import { AREAS } from '../../model/data/origins.js'
+import { chopLabel } from '../gl/pageArt.js'
 
 // Pop-up after a stamp, or after returning to the airport/hotel.
 const ui = useUiStore()
@@ -23,7 +24,9 @@ function close() {
   ui.celebrate(null)
 }
 
+// Opens the passport and flips through to this place's page, where the new stamp slams in
 function goToPassport() {
+  passport.openTo = celebration.value?.place?.id || null
   close()
   router.push('/passport')
 }
@@ -42,9 +45,10 @@ function goToPassport() {
         <template v-else>
           <div class="chop-stage mb-2">
             <div class="splat"></div>
-            <div class="chop" :style="{ '--ink': ink }">
+            <!-- The place's own stamp; the area chop only once it's earned -->
+            <div class="chop" :class="{ earned: celebration.chopEarned }" :style="{ '--ink': ink }">
               <span class="glyph">{{ glyph }}</span>
-              <span class="ring-text">{{ celebration.area }}</span>
+              <span class="ring-text">{{ celebration.chopEarned ? celebration.area : chopLabel(celebration.place?.name || '', celebration.area) }}</span>
             </div>
           </div>
           <h2 class="zt-display title mb-1">{{ celebration.place?.name }}</h2>
@@ -54,7 +58,7 @@ function goToPassport() {
           <p v-else-if="celebration.area && areaCount < CHOP_TARGET" class="small text-muted mb-3">{{ areaCount }} / {{ CHOP_TARGET }} places toward the {{ celebration.area }} chop</p>
         </template>
         <div class="d-flex gap-2 justify-content-center">
-          <button v-if="celebration.chopEarned" class="btn btn-soft" @click="goToPassport"><i class="bi bi-journal-bookmark-fill"></i> See chop</button>
+          <button v-if="!celebration.returned" class="btn btn-soft" @click="goToPassport"><i class="bi bi-journal-bookmark-fill"></i> {{ celebration.chopEarned ? 'See chop' : 'See in passport' }}</button>
           <button class="btn btn-primary px-4" @click="close" autofocus>Nice!</button>
         </div>
       </div>
@@ -76,7 +80,8 @@ function goToPassport() {
 }
 [data-bs-theme='dark'] .chop { background: var(--zt-yellow-pale); }
 .chop .glyph { font-size: 46px; font-weight: 700; line-height: 1; font-family: var(--zt-font-head); }
-.chop .ring-text { position: absolute; bottom: 14px; font-size: 10px; font-weight: 800; letter-spacing: 0.12em; text-transform: uppercase; }
+.chop .ring-text { position: absolute; bottom: 14px; max-width: 78%; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; font-size: 10px; font-weight: 800; letter-spacing: 0.12em; text-transform: uppercase; }
+.chop.earned { width: 136px; height: 136px; border-width: 8px; }
 .splat { width: 150px; height: 150px; border-radius: 50%; background: var(--zt-yellow); border: var(--zt-bw) solid #111; animation: splat 0.5s 0.25s ease-out both; }
 @keyframes slam { 0% { transform: scale(2.6) rotate(-30deg); opacity: 0; } 60% { transform: scale(0.92) rotate(-10deg); opacity: 1; } 100% { transform: scale(1) rotate(-12deg); } }
 @keyframes splat { from { transform: scale(0.4); opacity: 0; } to { transform: scale(1); opacity: 1; } }
