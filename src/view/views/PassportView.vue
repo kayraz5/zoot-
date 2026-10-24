@@ -11,6 +11,7 @@ import { useUserStore } from '../../model/stores/user.js'
 import { useMissionStore } from '../../model/stores/mission.js'
 import { DEFAULT_COVER } from '../../model/services/brand.js'
 import { getDb } from '../../model/services/db/index.js'
+import entrySnapshot from '../../model/data/sgEntrySnapshot.js'
 
 // Passport page: flipbook-vue turns the pages, and a Three.js stamp slams newly earned area chops
 const passport = usePassportStore()
@@ -153,6 +154,7 @@ function paint(i, ctx) {
       stamps: passport.stampedIds.size,
       chops: passport.chopCount,
       color: profile.cover_color,
+      nationality: entrySnapshot.iso3[passport.nationality] || null, // set in the profile's entry check
       entry: entry.value
     })
   }
@@ -288,7 +290,7 @@ async function loadMissions() {
 
 // Stamps, profile or badges can arrive after the pages were first drawn
 watch(
-  () => [passport.stamps.length, passport.seen.size, user.profile, catalog.value, badges.value, entry.value],
+  () => [passport.stamps.length, passport.seen.size, user.profile, catalog.value, badges.value, entry.value, passport.nationality],
   async () => {
     if (!pages.value.length || busy.value) return
     await repaintAll()

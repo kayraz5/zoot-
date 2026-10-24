@@ -211,8 +211,9 @@ export function drawCover(ctx, { color = DEFAULT_COVER, name = 'Field Traveller'
   ctx.strokeRect(5, 5, PAGE_W - 10, PAGE_H - 10)
 }
 
-// Identity page. `entry` ({ yymmdd, code }) is the latest trip, for the machine-readable line, or null
-export function drawIdentity(ctx, { name, style, level, title, xp, stamps, chops, color, entry = null }) {
+// Identity page. For the machine-readable line: `nationality` is the passport country (3-letter code, e.g. DNK)
+// and `entry` ({ yymmdd, code }) the latest trip; either can be null
+export function drawIdentity(ctx, { name, style, level, title, xp, stamps, chops, color, nationality = null, entry = null }) {
   paper(ctx, '#fff8dc', true)
   ctx.fillStyle = INK
   ctx.textAlign = 'left'
@@ -270,12 +271,15 @@ export function drawIdentity(ctx, { name, style, level, title, xp, stamps, chops
   ctx.fillStyle = BRAND.yellow
   ctx.fillRect(0, PAGE_H - 150, PAGE_W, 110)
   ctx.fillStyle = INK
-  ctx.font = '600 21px "Courier New", monospace'
-  const mrzName = (name || 'TRAVELLER').toUpperCase().replace(/[^A-Z]/g, '<').slice(0, 20)
-  ctx.fillText(`P<ZOT${mrzName}`.padEnd(34, '<'), 30, PAGE_H - 110)
-  // Level, XP, then the latest entry: SIN + YYMMDD, and where you came in (e.g. CHANGIT3)
+  // 40 characters a line (a real passport's are 44)
+  const MRZ_WIDTH = 40
+  ctx.font = '600 19px "Courier New", monospace'
+  const mrzName = (name || 'TRAVELLER').toUpperCase().replace(/[^A-Z]/g, '<').slice(0, MRZ_WIDTH - 5)
+  ctx.fillText(`P<ZOT${mrzName}`.padEnd(MRZ_WIDTH, '<'), 30, PAGE_H - 110)
+  // Nationality (like a real passport's second line), level, XP, then the latest entry: SIN + YYMMDD and where you came in
   const mrzEntry = entry ? `SIN${entry.yymmdd}<<${entry.code.slice(0, 8)}` : 'SIN'
-  ctx.fillText(`L${String(level).padStart(2, '0')}<<XP${String(xp).padStart(6, '0')}<<${mrzEntry}`.padEnd(34, '<').slice(0, 34), 30, PAGE_H - 74)
+  const mrzLine = `${nationality || '<<<'}<<L${String(level).padStart(2, '0')}<<XP${String(xp).padStart(6, '0')}<<${mrzEntry}`
+  ctx.fillText(mrzLine.padEnd(MRZ_WIDTH, '<').slice(0, MRZ_WIDTH), 30, PAGE_H - 74)
   pageNumber(ctx, 1, true)
 }
 
