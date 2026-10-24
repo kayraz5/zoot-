@@ -1,3 +1,5 @@
+<!-- EDITOR: KAYRA -->
+
 <script setup>
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
@@ -34,20 +36,15 @@ const step = ref(1)
 const STEPS = ['Where & when', 'What you like', 'Your style']
 const showStep = (n) => wide.value || step.value === n
 
-// First-time planning (no mission yet) is a focused flow: hide the bottom nav, offer Exit instead.
-const firstTime = ref(false)
+// Planning is a focused flow: no bottom nav, a back arrow to Home instead. Set during setup
+// (not after an async check) so the nav never flashes in and out when the page opens.
+ui.navHidden = true
 
-onMounted(async () => {
+onMounted(() => {
 	wideQuery?.addEventListener('change', onWide)
 	if (!ui.weather) ui.loadWeather()
 	ui.loadAdvisories?.()
 	prePickInterests()
-	try {
-		firstTime.value = !(await mission.loadActive())
-	} catch {
-		firstTime.value = false
-	}
-	ui.navHidden = firstTime.value
 })
 onBeforeUnmount(() => {
 	wideQuery?.removeEventListener('change', onWide)
@@ -57,7 +54,7 @@ onBeforeUnmount(() => {
 // ── Time budget ────────────────────────────────────────────────────────
 const budget = computed(() => {
 	tick.value // re-evaluate as the clock moves
-	return computeBudget({ origin: trip.origin, startMs: trip.startMs, mustReturnMs: trip.mustReturnMs, cleared: d.cleared })
+	return computeBudget({ origin: trip.origin, startMs: trip.startMs, mustReturnMs: trip.mustReturnMs, cleared: trip.cleared })
 })
 const tooShort = computed(() => budget.value.usable_min < 60)
 const bufferMin = computed(() => budget.value.reentry_min + budget.value.safety_min + budget.value.exit_min)
@@ -80,8 +77,6 @@ const sameDay = computed(() => arrivalDay.value === departureDay.value)
 const editingLayover = ref(false)
 const showLayoverDialog = computed(() => !d.layoverSet || editingLayover.value)
 
-// ── Passport / entry ───────────────────────────────────────────────────
-
 // ── Start time (More options): at landing, or a later time inside the layover ──
 const startMinLocal = computed(() => (tick.value, toSgLocalInput(Math.max(trip.arrivalMs, now()))))
 const startMaxLocal = computed(() => toSgLocalInput(trip.mustReturnMs - 60 * 60000))
@@ -95,15 +90,19 @@ const terminals = computed(() =>
 	TERMINAL_ORDER.map((id) => ORIGINS.find((o) => o.id === id)).filter(Boolean)
 		.map((o) => ({ ...o, tile: o.id === 'jewel' ? 'Jewel' : o.short.replace('Changi ', '') }))
 )
+/** Set when the origin came from "My location"; that tile is then the selected one. */
+const viaLocation = ref(false)
 function pickOrigin(id) {
 	d.originId = id
-	if (id === 'jewel') d.cleared = true // Jewel is landside: immigration is already done
+	viaLocation.value = false
 }
+const nearTile = computed(() => terminals.value.find((o) => o.id === d.originId)?.tile)
 
 const locating = ref(false)
 function useMyLocation() {
 	if (!navigator.geolocation) return ui.toast('Location is not available on this device. Pick your terminal instead.', 'warning')
 	locating.value = true
+	viaLocation.value = false
 	navigator.geolocation.getCurrentPosition(
 		(pos) => {
 			locating.value = false
@@ -114,7 +113,7 @@ function useMyLocation() {
 				return
 			}
 			pickOrigin(nearest.o.id)
-			ui.toast(`Starting from ${nearest.o.label}.`, 'success')
+			viaLocation.value = true
 		},
 		() => {
 			locating.value = false
@@ -192,9 +191,12 @@ function next() {
 	step.value = Math.min(3, step.value + 1)
 	window.scrollTo?.({ top: 0 })
 }
+/** Header back arrow: previous step on phones, otherwise out to Home. */
 function back() {
-	step.value = Math.max(1, step.value - 1)
+	if (!wide.value && step.value > 1) step.value -= 1
+	else router.push('/')
 }
+const backLabel = computed(() => (!wide.value && step.value > 1 ? 'Previous step' : 'Back to home'))
 
 async function submit() {
 	if (!canBuild.value) return
@@ -216,10 +218,9 @@ async function submit() {
 		<!-- Header: title, step progress on phones -->
 		<header class="mb-3">
 			<div class="d-flex align-items-center gap-2">
-				<button v-if="!wide && step > 1" type="button" class="icon-btn" aria-label="Back" @click="back"><i class="bi bi-chevron-left"></i></button>
+				<button type="button" class="icon-btn" :aria-label="backLabel" :title="backLabel" @click="back"><i class="bi bi-chevron-left"></i></button>
 				<h1 class="zt-display mb-0 flex-grow-1 plan-title">Plan a layover</h1>
 				<span v-if="!wide && step > 1 && d.layoverSet" class="zt-pill left-pill"><i class="bi bi-clock"></i> {{ hm(budget.usable_min, false) }} left</span>
-				<RouterLink v-if="firstTime" to="/" class="exit-link tiny fw-800" aria-label="Exit planning"><i class="bi bi-x-lg"></i> Exit</RouterLink>
 			</div>
 			<template v-if="!wide">
 				<div class="steps mt-2" role="progressbar" :aria-valuenow="step" aria-valuemin="1" aria-valuemax="3">
@@ -272,14 +273,16 @@ async function submit() {
 
 					<section class="zt-card p-3">
 						<div class="label">Starting from</div>
-						<button type="button" class="field-btn mb-2" :disabled="locating" @click="useMyLocation">
-							<i class="bi" :class="locating ? 'bi-hourglass-split' : 'bi-crosshair'"></i>
-							<span class="flex-grow-1 text-start fw-800">{{ locating ? 'Finding you…' : 'Use my location' }}</span>
-							<span class="tiny text-muted">Not sure? Start here</span>
-						</button>
 						<div class="terminal-grid">
-							<button v-for="o in terminals" :key="o.id" type="button" class="terminal" :class="{ active: d.originId === o.id, jewel: o.id === 'jewel' }"
-								:aria-pressed="d.originId === o.id" @click="pickOrigin(o.id)">
+							<!-- "My location" is a tile like the terminals; it snaps to the nearest one. -->
+							<button type="button" class="terminal locate" :class="{ active: viaLocation }" :disabled="locating"
+								:aria-pressed="viaLocation" @click="useMyLocation">
+								<i class="bi" :class="locating ? 'bi-hourglass-split' : 'bi-crosshair'"></i>
+								<span>{{ locating ? 'Locating' : 'My location' }}</span>
+								<small v-if="viaLocation && nearTile">Near {{ nearTile }}</small>
+							</button>
+							<button v-for="o in terminals" :key="o.id" type="button" class="terminal" :class="{ active: !viaLocation && d.originId === o.id }"
+								:aria-pressed="!viaLocation && d.originId === o.id" @click="pickOrigin(o.id)">
 								<i class="bi" :class="o.id === 'jewel' ? 'bi-gem' : 'bi-airplane-engines'"></i>
 								<span>{{ o.tile }}</span>
 							</button>
@@ -437,10 +440,6 @@ async function submit() {
 					</select>
 				</div>
 			</div>
-			<div class="form-check form-switch mt-3 mb-0">
-				<input id="cleared" v-model="d.cleared" class="form-check-input" type="checkbox" role="switch" />
-				<label class="form-check-label small fw-bold" for="cleared">Already through immigration (skip the 30 min exit buffer)</label>
-			</div>
 		</Teleport>
 
 		<div v-if="planning" class="planning-overlay" role="alert" aria-live="assertive">
@@ -494,8 +493,6 @@ async function submit() {
 .layover-meta { display: flex; flex-wrap: wrap; column-gap: 14px; row-gap: 2px; color: var(--zt-muted); font-weight: 700; }
 .layover-meta > span { white-space: nowrap; }
 .layover-meta .bi { margin-right: 3px; }
-.exit-link { color: var(--zt-ink); text-decoration: none; white-space: nowrap; }
-.exit-link:hover { color: var(--zt-pink); }
 
 /* "You have" card */
 .have-card {
@@ -511,16 +508,19 @@ async function submit() {
 .share span { display: block; height: 100%; background: #111; border-radius: 999px; }
 
 /* Terminals */
-.terminal-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; }
-.is-wide .terminal-grid { grid-template-columns: repeat(5, 1fr); }
+/* My location + T1–T4 + Jewel: 3×2 on phones, one row of 6 on wide screens. */
+.terminal-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+.is-wide .terminal-grid { grid-template-columns: repeat(6, 1fr); }
 .terminal {
-	display: flex; flex-direction: column; align-items: center; gap: 2px; padding: 10px 4px;
+	display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px; padding: 10px 4px; min-height: 64px;
 	border: 2px solid var(--zt-line); border-radius: 14px; background: var(--zt-card); color: var(--zt-ink);
 	font-weight: 800; font-size: 0.72rem; text-transform: uppercase;
 }
 .terminal i { font-size: 1.1rem; }
-.terminal.jewel { grid-column: 1 / -1; flex-direction: row; justify-content: center; gap: 6px; }
-.is-wide .terminal.jewel { grid-column: auto; flex-direction: column; gap: 2px; }
+.terminal small { font-size: 0.62rem; font-weight: 700; text-transform: none; opacity: 0.8; }
+.terminal.locate { border-style: dashed; }
+.terminal.locate.active { border-style: solid; }
+.terminal:disabled { opacity: 0.7; }
 .terminal.active { background: var(--zt-yellow); color: #111; box-shadow: 0 3px 0 var(--zt-shadow-color); transform: translateY(-2px); }
 
 /* Interest tiles and style cards */
