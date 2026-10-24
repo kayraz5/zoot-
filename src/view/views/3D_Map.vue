@@ -11,21 +11,33 @@ setWorkerUrl(maplibreWorkerUrl)
 import axios from 'axios'
 import destination from '@turf/destination'
 import { point } from '@turf/helpers'
-import AppNav from '../components/AppNav.vue'
+import { AxiosError } from 'axios'
+import { createPlaceMarker, removePlaceMarker } from '../components/placeMarker.js'
+import places from '../../model/data/places.sg.json'
+import { PinLayer } from '../gl/pinPoint.js'
+// CHANGE: the mission-status card (the "No active quest" / "Quest complete" /
+// "Heading to a stop" box) moved into its own file, MissionInfoCard.vue, so it's
+// easier to find and edit on its own instead of being buried in this file's
+// template. It's just markup + styling — all the mission/GPS data it needs
+// (mission, next, distance, guidance, etc.) still lives here and gets passed down
+// as props, since this file needs those same values for drawing the map too.
+import MissionInfoCard from '../components/MissionInfoCard.vue'
+// CHANGE: the ~70 lines of "mission state" computed values (m, next, here, check,
+// liveTravel, distance, guidance, lateBy, stopNumber, countdown, leaveBy, the time
+// -critical/-warning flags, HOME_RADIUS_M, modeIcon, formatDist) moved into this
+// composable — a plain function both this file and, later, any other view can call.
+// It can't live inside MissionInfoCard.vue itself: the map-drawing code below
+// (drawMission/drawFence/drawRoute/nearNext/etc.) needs those exact same values,
+// and a parent component can't reach into a child's internals to get them back out.
+import { useMissionNav } from '../composables/useMissionNav.js'
 import { useMissionStore } from '../../model/stores/mission.js'
 import { useUiStore } from '../../model/stores/ui.js'
+import { geo, hasFix, startGps, setFake, teleport } from '../../model/services/geo.js'
+import { distanceM } from '../../model/services/travel.js'
+import { addQuestLayers, createPlayerMarker, setFence, setQuestColors, syncStopMarkers, straight } from '../map/questLayers.js'
 import { loadCatalog } from '../../model/services/catalog.js'
-import { geo, startGps, setFake, teleport, hasFix } from '../../model/services/geo.js'
-import { checkInStatus } from '../../model/services/checkin.js'
-import { travel, distanceM } from '../../model/services/travel.js'
 import { formatTime } from '../../model/services/hours.js'
-import { tick } from '../../model/services/clock.js'
-import { getWalkRoute } from '../../model/services/walkRoute.js'
-import { addQuestLayers, setQuestColors, setRoute, setFence, syncStopMarkers, createPlayerMarker, straight } from '../map/questLayers.js'
 import { describePsi } from '../../model/services/weather.js'
-import { removePlaceMarker } from '../components/placeMarker.js'
-import { PinLayer } from '../gl/pinPoint.js'
-import QuestCoopChip from '../components/QuestCoopChip.vue'
 
 const ORS_API_KEY = "eyJvcmciOiI1YjNjZTM1OTc4NTExMTAwMDFjZjYyNDgiLCJpZCI6IjdiZWU2YWY0OGY3NDQ4NjA5MGJiNjUwZTVkZjg5NTAwIiwiaCI6Im11cm11cjY0In0="
 const el = ref(null)
@@ -41,16 +53,45 @@ const colorTheme = ref('theme')
 const colorblind = ref(false)
 const SideInfo = ref(false)
 
-async function fetchRoute(start, end) {
-  const URL = `https://api.openrouteservice.org/v2/directions/foot-walking?api_key=${ORS_API_KEY}&start=${start[0]},${start[1]}&end=${end[0]},${end[1]}`
-  const response = await axios.get(URL)
-  return response.data.features[0].geometry
+// Bottom nav — inlined here (not the shared AppNav.vue) so it can be tweaked
+// just for this view without touching the component other pages may use.
+const navItems = [
+  { to: '/map', icon: 'bi-geo-alt-fill', label: 'Map' },
+  { to: '/mission', icon: 'bi-signpost-split-fill', label: 'Mission' },
+  { to: '/passport', icon: 'bi-journal-bookmark-fill', label: 'Passport' },
+  { to: '/me', icon: 'bi-person-circle', label: 'Me' }
+]
+
+// CHANGE: added a cache in front of the OpenRouteService call.
+// Why: this ORS key's free tier only allows 200 requests/day. Once the mission
+// routing (refreshLiveRoute + refreshPlanned, below) started calling fetchRoute()
+// too — refetching every ~3s while you walk, and again on every stamp/skip/replan —
+// that quota drained in minutes. Every failed request is silently caught and falls
+// back to a straight line (see drawRoute()), which is the "straight line instead of
+// roads" behaviour you were seeing. Caching by the exact [start,end] pair means the
+// same two points are only ever fetched from ORS once, no matter how many times
+// refreshPlanned()/refreshLiveRoute() ask for them again.
+const routeCache = new Map()
+function fetchRoute(start, end) {
+  const key = `${start[0].toFixed(5)},${start[1].toFixed(5)}|${end[0].toFixed(5)},${end[1].toFixed(5)}`
+  if (!routeCache.has(key)) {
+    const URL = `https://api.openrouteservice.org/v2/directions/foot-walking?api_key=${ORS_API_KEY}&start=${start[0]},${start[1]}&end=${end[0]},${end[1]}`
+    const job = axios.get(URL)
+      .then((response) => response.data.features[0].geometry)
+      .catch((err) => {
+        routeCache.delete(key) // don't remember a failed/rate-limited call — let the next attempt try again
+        throw err
+      })
+    routeCache.set(key, job)
+  }
+  return routeCache.get(key)
 }
 function getCurrentPosition() {
   return new Promise((resolve, reject) => { // call resolve, and if there's a value from pos, then resolve value
     navigator.geolocation.getCurrentPosition( // would be the current location cords, else will fall back into the error
       (pos) => resolve([pos.coords.longitude, pos.coords.latitude]),
-      reject
+      reject,
+      { timeout: 8000 } // CHANGE: added — without this, a device/browser that never gets a GPS fix just hangs forever, silently
     )
   })
 }
@@ -100,71 +141,13 @@ const plannedSegments = ref([]) // street routes between the later stops
 const markers = new Map()
 let player = null
 
-const HOME_RADIUS_M = 300 // "back at the airport/hotel" counts within this distance
-const modeIcon = { walk: 'bi-person-walking', mrt: 'bi-train-front-fill', taxi: 'bi-taxi-front-fill' }
+const {
+  HOME_RADIUS_M, modeIcon,
+  demo, m, next, here, check, lateBy, liveTravel, distance, stopNumber, guidance,
+  countdown, leaveBy, isTimeCritical, isTimeWarning,
+  formatDist
+} = useMissionNav()
 
-const demo = computed(() => geo.fake) // Demo-Walk = fake GPS you move with WASD / taps
-const m = computed(() => store.mission)
-const next = computed(() => store.nextLeg)
-const here = computed(() => (hasFix() ? { lat: geo.lat, lng: geo.lng } : null))
-const opts = computed(() => ({ maxWalk: m.value?.prefs?.maxWalk, style: m.value?.style }))
-
-const liveTravel = computed(() => (next.value && here.value ? travel(here.value, next.value, opts.value) : null))
-const distance = computed(() => (next.value && here.value ? distanceM(here.value, next.value) : null))
-
-/** Can you stamp right now? Visits use the real check-in rules; the trip home uses a wider radius. */
-const check = computed(() => {
-	tick.value
-	const n = next.value
-	if (!n) return null
-	if (n.kind === 'return') {
-		if (!here.value) return { ok: false, message: 'Waiting for GPS…' }
-		const d = distanceM(here.value, n)
-		return d <= HOME_RADIUS_M
-			? { ok: true, message: `You're back at ${n.name}. Check in to finish the quest.` }
-			: { ok: false, message: `${formatDist(d)} from ${n.name}. Get within ${HOME_RADIUS_M} m to finish.` }
-	}
-	return checkInStatus({ place: n, position: here.value ? { ...here.value, accuracy: geo.accuracy } : null, fake: geo.fake })
-})
-
-/** Minutes you'd arrive after the planned time if you set off now (negative = early). */
-const lateBy = computed(() => {
-	if (!next.value || !liveTravel.value) return null
-	const eta = tick.value + liveTravel.value.minutes * 60000
-	return Math.round((eta - Date.parse(next.value.arrive_iso)) / 60000)
-})
-
-/** The next instruction: a street turn when walking, the MRT/taxi hop otherwise. */
-const guidance = computed(() => {
-	const t = liveTravel.value
-	if (!t || !here.value) return null
-	if (t.mode !== 'walk') return { icon: modeIcon[t.mode], text: t.detail }
-	if (distance.value < 40) return { icon: 'bi-flag-fill', text: "You're there. Look around for the spot." }
-	const lr = liveRoute.value
-	if (!lr || lr.to !== next.value) return { icon: 'bi-person-walking', text: `Walk ${formatDist(distance.value)} to the stop` }
-	const step = lr.steps.find((s, i) => i > 0 && s.text !== 'Arrive at the stop' && distanceM(here.value, s.at) > 10)
-	if (!step) return { icon: 'bi-flag-fill', text: `Straight on, ${formatDist(distance.value)} to go` }
-	return { icon: step.icon, text: `In ${formatDist(distanceM(here.value, step.at))}: ${step.text}` }
-})
-
-const countdown = computed(() => {
-	if (!store.mustReturnMs) return null
-	const s = Math.max(0, Math.floor((store.mustReturnMs - tick.value) / 1000))
-	return `${Math.floor(s / 3600)}:${String(Math.floor((s % 3600) / 60)).padStart(2, '0')}:${String(s % 60).padStart(2, '0')}`
-})
-const leaveBy = computed(() => {
-	tick.value
-	return m.value && next.value ? store.leaveBy()?.ms ?? null : null
-})
-const timeLevel = computed(() => {
-	const min = (store.mustReturnMs - tick.value) / 60000
-	return min < 45 ? 'red' : min < 90 ? 'amber' : ''
-})
-
-function formatDist(meters) {
-	if (meters == null) return ''
-	return meters >= 1000 ? `${(meters / 1000).toFixed(1)} km` : `${Math.round(meters / 10) * 10} m`
-}
 
 // ── Drawing ──────────────────────────────────────────────────────────────
 function drawMission() {
@@ -181,19 +164,44 @@ function drawFence() {
 	setFence(map, n, radius, !!check.value?.ok)
 }
 
-/** You → next stop (bold, live) + every later pending leg (faded). */
+/** You → next stop + every later pending leg, drawn the same way as the Test Route (MBS) button: one plain pink line via fetchRoute(). */
 function drawRoute() {
-	if (!mapReady.value) return
-	const segs = []
-	const n = next.value
-	if (n) {
-		const from = here.value || previousPoint(n)
-		const lr = liveRoute.value
-		const mode = liveTravel.value?.mode || n.travel_mode
-		const coords = lr && lr.to === n && mode === 'walk' ? [[from.lng, from.lat], ...lr.coords] : straight(from, n)
-		segs.push({ coords, mode, active: true })
-	}
-	setRoute(map, [...segs, ...plannedSegments.value])
+  if (!mapReady.value) return
+  const segs = []
+  const n = next.value
+  if (n) {
+    const from = here.value || previousPoint(n)
+    const lr = liveRoute.value
+    // CHANGE: this ternary is the "straight line" fallback. `lr` (liveRoute) only gets
+    // set once refreshLiveRoute()'s fetchRoute() call has resolved with real road
+    // geometry — until then (or if that fetch fails), we draw straight(from, n), a
+    // literal two-point line, just so the map always shows *something* while waiting.
+    const coords = lr && lr.to === n ? [[from.lng, from.lat], ...lr.coords] : straight(from, n)
+    segs.push(coords)
+  }
+  for (const seg of plannedSegments.value) segs.push(seg.coords)
+
+  const data = {
+    type: 'FeatureCollection',
+    features: segs.map((coords) => ({ type: 'Feature', geometry: { type: 'LineString', coordinates: coords }, properties: {} }))
+  }
+
+  if (map.getSource('mission-route')) {
+    map.getSource('mission-route').setData(data)
+  } else {
+    map.addSource('mission-route', { type: 'geojson', data })
+    map.addLayer({
+      id: 'mission-route-line',
+      type: 'line',
+      source: 'mission-route',
+      layout: { 'line-join': 'round', 'line-cap': 'round' },
+      paint: {
+        'line-color': '#ff1dce',
+        'line-width': 5,
+        'line-opacity': 0.9
+      }
+    })
+  }
 }
 
 /** Where the traveller was before `leg`: the leg before it, or the trip origin. */
@@ -205,69 +213,53 @@ function previousPoint(leg) {
 
 /** Street routes between later stops (only walking legs need the router; MRT/taxi stay straight). */
 async function refreshPlanned() {
-	const pending = store.legs.filter((l) => l.status === 'pending')
-	const segs = []
-	for (let i = 1; i < pending.length; i++) {
-		const a = pending[i - 1]
-		const b = pending[i]
-		const r = b.travel_mode === 'walk' ? await getWalkRoute(a, b) : null
-		segs.push({ coords: r ? r.coords : straight(a, b), mode: b.travel_mode, active: false })
-	}
-	plannedSegments.value = segs
-	drawRoute()
+  const pending = store.legs.filter((l) => l.status === 'pending')
+  const segs = []
+  for (let i = 1; i < pending.length; i++) {
+    const a = pending[i - 1]
+    const b = pending[i]
+    // CHANGE: .catch(() => null) means a failed/rate-limited fetchRoute() call (see the
+    // cache + comment on fetchRoute() above) quietly falls back to straight(a, b)
+    // instead of breaking the page — that fallback is what a "straight line" segment is.
+    const geometry = b.travel_mode === 'walk' ? await fetchRoute([a.lng, a.lat], [b.lng, b.lat]).catch(() => null) : null
+    segs.push({ coords: geometry ? geometry.coordinates : straight(a, b), mode: b.travel_mode, active: false })
+  }
+  plannedSegments.value = segs
+  drawRoute()
 }
 
 let lastRouteAt = 0
 let retryTimer = 0
 async function refreshLiveRoute(force = false) {
-	clearTimeout(retryTimer)
-	const n = next.value
-	if (!n || !here.value || liveTravel.value?.mode !== 'walk') {
-		liveRoute.value = null
-		return drawRoute()
-	}
-	const lr = liveRoute.value
-	const moved = lr ? distanceM(lr.from, here.value) : Infinity
-	if (!force && lr?.to === n && moved < 25) return drawRoute()
-	// Moving fast (demo 20×): at most one router call every 3 s, but always catch up once you stop.
-	const wait = 3000 - (Date.now() - lastRouteAt)
-	if (!force && wait > 0) {
-		retryTimer = setTimeout(() => refreshLiveRoute(), wait)
-		return drawRoute()
-	}
-	lastRouteAt = Date.now()
-	const from = { ...here.value }
-	const r = await getWalkRoute(from, n)
-	if (r && next.value === n) liveRoute.value = { ...r, from, to: n }
-	drawRoute()
+  clearTimeout(retryTimer)
+  const n = next.value
+  if (!n || !here.value || liveTravel.value?.mode !== 'walk') {
+    liveRoute.value = null
+    return drawRoute()
+  }
+  const lr = liveRoute.value
+  const moved = lr ? distanceM(lr.from, here.value) : Infinity
+  if (!force && lr?.to === n && moved < 25) return drawRoute()
+  // Moving fast (demo 20×): at most one router call every 3 s, but always catch up once you stop.
+  const wait = 3000 - (Date.now() - lastRouteAt)
+  if (!force && wait > 0) {
+    retryTimer = setTimeout(() => refreshLiveRoute(), wait)
+    return drawRoute()
+  }
+  lastRouteAt = Date.now()
+  const from = { ...here.value }
+  // CHANGE: same fallback pattern as refreshPlanned() above — if this fails, geometry
+  // is null, liveRoute.value never gets set, and drawRoute() draws a straight line
+  // for this leg until a later call succeeds (now much rarer thanks to the cache).
+  const geometry = await fetchRoute([from.lng, from.lat], [n.lng, n.lat]).catch(() => null)
+  if (geometry && next.value === n) liveRoute.value = { coords: geometry.coordinates, from, to: n }
+  drawRoute()
 }
 
 // ── Camera ───────────────────────────────────────────────────────────────
 function flyTo(p, zoom = 17) {
 	map?.flyTo({ center: [p.lng, p.lat], zoom, duration: 1200 })
 	following.value = false
-}
-
-function recenter() {
-	following.value = true
-	if (!geo.fake) startGps()
-	if (here.value) map.easeTo({ center: [here.value.lng, here.value.lat], zoom: 17, duration: 800 })
-	else ui.toast('Waiting for GPS… Allow location access, or turn on Demo-Walk.', 'dark')
-}
-
-/** Fit you + every remaining stop on screen, leaving room for the stop card. */
-function overview() {
-	// The trip home is usually far (the airport), so leave it out unless it's the last thing left.
-	const ahead = store.legs.filter((l) => l.status === 'pending')
-	const pts = [here.value, ...(ahead.length > 1 ? ahead.filter((l) => l.kind === 'visit') : ahead)].filter(Boolean)
-	if (!pts.length && m.value) pts.push(m.value.origin)
-	if (!pts.length) return
-	const lngs = pts.map((p) => p.lng)
-	const lats = pts.map((p) => p.lat)
-	following.value = false
-	map.fitBounds([[Math.min(...lngs), Math.min(...lats)], [Math.max(...lngs), Math.max(...lats)]], {
-		padding: { top: 140, bottom: 300, left: 60, right: 100 }, maxZoom: 16.5, duration: 1000
-	})
 }
 
 // ── Stamping & help ──────────────────────────────────────────────────────
@@ -306,6 +298,7 @@ function bearingDeg(a, b) {
 	const x = Math.cos(r(a.lat)) * Math.sin(r(b.lat)) - Math.sin(r(a.lat)) * Math.cos(r(b.lat)) * Math.cos(r(b.lng - a.lng))
 	return (Math.atan2(y, x) * 180) / Math.PI
 }
+
 function offsetFrom(p, bearing, meters) {
 	const [lng, lat] = destination(point([p.lng, p.lat]), meters / 1000, bearing, { units: 'kilometers' }).geometry.coordinates
 	return { lat, lng }
@@ -423,12 +416,42 @@ function GoTo3D() {
 }
 
 function View(x) {
-	if (x) {
-		GoToFlat()
-	}
-	else {
-		GoTo3D()
-	}
+  if (x) {
+    GoToFlat()
+  }
+  else{
+    GoTo3D()
+  }
+}
+
+// CHANGE: previously, any failure here — location permission denied, GPS
+// unavailable, the new 8s timeout above firing — was an *unhandled promise
+// rejection*: no error shown anywhere, map just doesn't move. That's exactly
+// what "the button does nothing" looks like from the outside. Now it's wrapped
+// in try/catch, logs the real browser error to the console, and (for an actual
+// button click) shows a toast so it's obvious *why* it failed instead of
+// looking broken. `notifyOnFail` is false for the automatic on-load call below,
+// so you don't get a toast before you've even looked at the map.
+async function CenterOnMe(notifyOnFail = true) {
+  try {
+    const current2 = await getCurrentPosition()
+    map.flyTo({
+      center: current2,
+      zoom: 18,
+      duration: 1500,
+    })
+  } catch (err) {
+    console.error('CenterOnMe: could not get your location', err)
+    if (notifyOnFail) ui.toast('Could not get your location. Check this site is allowed to use your location.', 'warning', 4500)
+  }
+}
+
+function ZoomOut() {
+  map.zoomTo(12, { duration: 1500 })
+}
+
+function ZoomIn() {
+  map.zoomIn({ duration: 1500 })
 }
 
 function RemoveBuildings(show) {
@@ -528,42 +551,41 @@ function ApplyColorblindMode(enabled) {
 }
 
 onMounted(() => {
-	map = new MapLibreMap({
-		container: el.value,
-		style: 'https://tiles.openfreemap.org/styles/liberty',
-		center: [103.8198, 1.3521], // Singapore
-		zoom: 16.5,
-		pitch: 56,
-		bearing: -18,
-		maxPitch: 72,
-		minZoom: 10,
-		attributionControl: { compact: true },
-		canvasContextAttributes: { antialias: true },
-		pixelRatio: Math.min(window.devicePixelRatio || 1, 2)
-	})
+  map = new MapLibreMap({
+    container: el.value,
+    style: 'https://tiles.openfreemap.org/styles/liberty',
+    center: [103.8198, 1.3521], // Singapore
+    zoom: 16.5,
+    pitch: 56,
+    bearing: -18,
+    maxPitch: 72,
+    minZoom: 10,
+    attributionControl: { compact: true },
+    canvasContextAttributes: { antialias: true },
+    pixelRatio: Math.min(window.devicePixelRatio || 1, 2)
+  })
 
-	map.on('load', async () => {
-		applyMapColors()
-		addQuestLayers(map)
-		setQuestColors(map, colorTheme.value === 'theme')
-		player = createPlayerMarker(map)
-		map.addLayer(new PinLayer({ id: 'mbs-pin', lng: 103.8607, lat: 1.2830 }))
-		mapReady.value = true
-		await store.loadActive()
-		// "On map" from the mission list jumps to that stop; otherwise start on you, or on the whole quest.
-		const focus = store.legs.find((l) => String(l.seq) === String(route.query.focus))
-		if (focus) flyTo(focus)
-		else if (here.value) map.jumpTo({ center: [here.value.lng, here.value.lat], zoom: 17 })
-		else if (store.nextLeg) map.jumpTo({ center: [store.nextLeg.lng, store.nextLeg.lat], zoom: 16 })
-		else overview()
-	})
-	// Dragging the map stops the camera from snapping back to you until you press the crosshair.
-	map.on('dragstart', (e) => { if (e.originalEvent) following.value = false })
-	// Demo-Walk: tap anywhere to walk there instantly.
-	map.on('click', (e) => {
-		if (!geo.fake) return
-		teleport({ lat: e.lngLat.lat, lng: e.lngLat.lng })
-	})
+  map.on('load', applyMapColors)
+  map.on('load', () => {
+    // Creates the zt-route/zt-fence sources+layers and the "you are here" marker, then
+    // flips mapReady so drawMission()/drawRoute()/drawFence() and the follow-camera
+    // watcher (which all bail out while !mapReady) actually start running.
+    addQuestLayers(map)
+    player = createPlayerMarker(map)
+    mapReady.value = true
+  })
+  map.on('load', CenterOnMe)
+  map.on('load', () => {
+    map.addLayer(new PinLayer({ id: 'mbs-pin', lng: 103.8607, lat: 1.2830 }))
+  })
+
+  
+  onUnmounted(() => {
+  placeMarkers.forEach(removePlaceMarker)
+  map?.remove()
+})
+
+
 })
 
 watch(colorTheme, () => {
@@ -594,210 +616,142 @@ onUnmounted(() => {
 </script>
 
 <template>
-	<div ref="el" class="quest-map"></div>
+  <div ref="el" class="quest-map"></div>
 
-	<div id="top-left" class="badge rounded-pill text-bg-warning">
-		<img id="img-pill" src="/brand/zoot-badge-192.png" alt="" width="25" height="25">
-		Singapore
-	</div>
+  <div id="top-left" class="badge rounded-pill text-bg-warning">
+    <img id="img-pill" src="/brand/zoot-badge-192.png" alt="" width="25" height="25">
+    Singapore
+  </div>
 
-	<div id="top-left2" class="badge rounded-pill text-bg-warning">
-		<span class="wx-item bi bi-sun-fill" title="Temperature">{{ weather_data?.current?.temperature_2m }}°C</span>
-		<span class="wx-item bi bi-cloud-rain-heavy-fill" title="Rainfall now">{{ weather_data?.current?.rain }} mm</span>
-		<span v-if="haze" class="wx-item bi bi-wind" :title="`PSI ${haze.psi} (${haze.label})`">
-			{{ haze.psi }}<span class="psi-dot" :class="`psi-${haze.level}`"></span>
-		</span>
-		<span v-if="lightningNearby" class="wx-item bi bi-lightning-charge-fill"
-			:title="`Lightning ${ui.shownLightning.nearestKm} km away`"></span>
-	</div>
+  <div id="top-left2" class="badge rounded-pill text-bg-warning">
+    <span class="bi bi-sun-fill">{{ weather_data?.current?.temperature_2m }}C</span>
+    <span class="bi bi-cloud-rain-heavy-fill">&nbsp;{{ weather_data?.current?.rain }}</span>
+  </div>
 
+  <button id="top-left3" @click="toggleDemo" class="btn btn-warning rounded-pill">{{ demo ? 'Use real GPS' : 'Enable Demo-Walk' }}</button>
 
-	<button id="top-left3" @click="toggleDemo" class="btn btn-warning rounded-pill">{{ demo ? 'Use real GPS' : 'Enable Demo - Walk' }}</button>
+  <div id="right-stack">
+    <!-- CHANGE: was :class="timeLevel" (one computed string). Now each class is wired
+         to its own named boolean, so it's explicit right here which condition turns
+         red/amber on, instead of having to go read the ternary in the script. -->
+    <div id="top-right" class="badge rounded-4 text-bg-warning" :class="{ red: isTimeCritical, amber: isTimeWarning }" role="timer">
+      <span class="bi-airplane-fill"> &nbsp; Time to Travel</span>
+      <br>
+      <div class="time_left_from_trip mono">{{ countdown || '--:--:--' }}</div>
+      <div class="time_back_from_trip">{{ leaveBy ? `Head back by ${formatTime(leaveBy)}` : m ? 'Quest complete' : 'No active quest' }}</div>
+    </div>
 
-	<div id="top-right" class="badge rounded-4 text-bg-warning" :class="timeLevel" role="timer">
-		<span class="bi-airplane-fill"> &nbsp; Time to Travel</span>
-		<br>
-		<div class="time_left_from_trip mono">{{ countdown || '--:--:--' }}</div>
-		<div class="time_back_from_trip">{{ leaveBy ? `Head back by ${formatTime(leaveBy)}` : m ? 'Quest complete' : 'Noactive quest' }}</div>
-	</div>
+    <button id="TestRoute" class="btn btn-warning rounded-pill" @click="showRouteTo([103.8607, 1.2834])">Test Route (MBS)</button>
 
-	<button id="TestRoute" class="btn btn-warning rounded-pill" @click="showRouteTo([103.8607, 1.2834])">Test Route (MBS)</button>
+    <div id="MoreInfo" class="map-btn" @click="SideInfo = !SideInfo">
+      <i class="bi bi-list"></i>
+    </div>
 
-	<button id="MoreInfo" class="map-btn" type="button" @click="SideInfo = !SideInfo" aria-label="Map tools"
-		title="Map tools">
-		<i class="bi bi-list"></i>
-	</button>
+    <div class="map-tools" :class="{ open: SideInfo }">
+      <div id="zoom" class="map-btn" v-on:click="ZoomIn()">
+        <i class="bi bi-zoom-in"></i>
+      </div>
 
-	<div class="map-tools" :class="{ open: SideInfo }">
-		<button id="zoom" class="map-btn" type="button" @click="next && flyTo(next)" :disabled="!next"
-			aria-label="Zoom to next stop" title="Zoom to next stop">
-			<i class="bi bi-zoom-in"></i>
-		</button>
+      <div id="outlook" class="map-btn" v-on:click="ZoomOut()">
+        <i class="bi bi-arrows-fullscreen"></i>
+      </div>
 
-		<button id="outlook" class="map-btn" type="button" @click="overview" aria-label="Show whole quest"
-			title="Show whole quest">
-			<i class="bi bi-arrows-fullscreen"></i>
-		</button>
+      <div id="RealGps" class="map-btn" v-on:click="CenterOnMe()">
+        <i class="bi bi-crosshair"></i>
+      </div>
 
-		<button id="RealGps" class="map-btn" :class="{ active: following }" type="button" @click="recenter"
-			aria-label="Follow my location" title="Follow my location">
-			<i class="bi bi-crosshair"></i>
-		</button>
+      <div id="TopView" class="map-btn" v-on:click="Go3D = !Go3D, View(Go3D)">
+        <i class="bi-map"></i>
+      </div>
+    </div>
+  </div>
 
-		<button id="TopView" class="map-btn" type="button" v-on:click="Go3D = !Go3D, View(Go3D)"
-			aria-label="Toggle top-down view" title="Toggle top-down view">
-			<i class="bi-map"></i>
-		</button>
-	</div>
+  <!-- CHANGE: this used to be ~55 lines of inline markup. Now it's the MissionInfoCard
+       component (imported above) — all the data it needs is passed as props, and its
+       button clicks come back up as events, which we handle the same way the inline
+       @click handlers used to (router.push, MapStyle toggle, stampNext, etc). -->
+  <MissionInfoCard
+    :mission="m"
+    :next="next"
+    :stop-number="stopNumber"
+    :live-travel="liveTravel"
+    :distance="distance"
+    :late-by="lateBy"
+    :guidance="guidance"
+    :check="check"
+    :stamping="stamping"
+    :stamped-count="store.stampedCount"
+    :total-visits="store.visitLegs.length"
+    :mode-icon="modeIcon"
+    :format-dist="formatDist"
+    @plan="router.push('/plan')"
+    @open-passport="router.push('/passport')"
+    @stamp="stampNext"
+    @change-map-style="MapStyle = !MapStyle"
+    @need-help="helpOpen = true"
+  />
 
-	<div id="CenterInfo" class="rounded-4">
-		<!-- Social quest: "With Mei until 15:40", Go solo, members' live locations -->
-		<QuestCoopChip :get-map="() => (mapReady ? map : null)" />
-		<!-- No quest yet -->
-		<div v-if="!m" class="row align-items-center">
-			<div class="col-12">
-				<div class="stop-meta">No active quest</div>
-				<div class="stop-title">Plan a layover first</div>
-				<div class="stop-near">Your stops, route and stamps show up here once you build a quest.</div>
-				<button class="btn btn-warning btn-sm mt-3" @click="router.push('/plan')"><i class="bi bi-magic"></i>
-					Plan a layover</button>
-			</div>
-		</div>
+  <div v-if="demo" id="demo-controls" class="rounded-4">
+    <div class="demo-row">
+      <span class="demo-label">Speed</span>
+      <button class="btn rounded-pill btn-sm" :class="speed === 1 ? 'btn-warning' : 'btn-outline-warning'" @click="speed = 1">1x</button>
+      <button class="btn rounded-pill btn-sm" :class="speed === 6 ? 'btn-warning' : 'btn-outline-warning'" @click="speed = 6">6x</button>
+      <button class="btn rounded-pill btn-sm" :class="speed === 20 ? 'btn-warning' : 'btn-outline-warning'" @click="speed = 20">20x</button>
+    </div>
+    <div class="demo-row">
+      <span class="demo-label">WASD movement</span>
+      <button class="btn rounded-pill btn-sm" :class="wasd === true ? 'btn-warning' : 'btn-outline-warning'" @click="wasd = true">Yes</button>
+      <button class="btn rounded-pill btn-sm" :class="wasd === false ? 'btn-warning' : 'btn-outline-warning'" @click="wasd = false">No</button>
+    </div>
+    <div class="demo-row">
+      <span class="demo-label">CheckPoint</span>
+      <button class="btn rounded-pill btn-sm btn-outline-warning" :disabled="!next" @click="jumpTo(200)">Near</button>
+      <button class="btn rounded-pill btn-sm btn-outline-warning" :disabled="!next" @click="jumpTo(25)">At stop</button>
+    </div>
+    <div class="demo-hint">Tap the map to walk there.</div>
+  </div>
 
-		<!-- Every stop done and back home -->
-		<div v-else-if="!next" class="row align-items-center">
-			<div class="col-12">
-				<div class="stop-meta">Quest complete &middot; {{ store.stampedCount }}/{{ store.visitLegs.length }}
-					stamped</div>
-				<div class="stop-title">{{ m.title }}</div>
-				<div class="stop-near">Nice run. Your chops are in the passport.</div>
-				<button class="btn btn-warning btn-sm mt-3" @click="router.push('/passport')"><i class="bi bi-book"></i>
-					Open passport</button>
-			</div>
-		</div>
+  <template v-if="helpOpen">
+    <div class="map-backdrop" @click="helpOpen = false"></div>
+    <div id="HelpPop" class="rounded-4" role="dialog" aria-label="Need help?">
+      <div class="demo-label mb-2">Change the plan</div>
+      <p class="help-note">Stamped stops stay. Only the stops ahead get rewritten from where you are now.</p>
+      <button class="btn btn-warning btn-sm w-100 mb-2" :disabled="store.status === 'planning'" @click="replan('behind')"><i class="bi bi-hourglass-split"></i> I'm behind schedule</button>
+      <button class="btn btn-warning btn-sm w-100 mb-2" :disabled="store.status === 'planning'" @click="replan('less-walking')"><i class="bi bi-person-walking"></i> Less walking</button>
+      <button class="btn btn-warning btn-sm w-100 mb-2" :disabled="store.status === 'planning' || next?.kind !== 'visit'" @click="replan('swap')"><i class="bi bi-shuffle"></i> Swap this stop</button>
+      <button class="btn btn-warning btn-sm w-100 mb-2" :disabled="store.status === 'planning'" @click="replan('rain')"><i class="bi bi-cloud-rain-heavy-fill"></i> It's raining</button>
+      <button class="btn btn-outline-warning btn-sm w-100 mb-2" :disabled="next?.kind !== 'visit'" @click="skipNext"><i class="bi bi-skip-forward-fill"></i> Skip this stop</button>
+      <button class="btn btn-outline-warning btn-sm w-100" @click="router.push(m ? `/mission/${m.id}` : '/plan')"><i class="bi bi-list-ol"></i> See full itinerary</button>
+      <div v-if="store.status === 'planning'" class="help-note mt-2">{{ store.statusText || 'Replanning…' }}</div>
+    </div>
+  </template>
 
-		<!-- Heading to a stop (or home) -->
-		<div v-else class="row align-items-center">
-			<div class="col-7 col-sm-8">
-				<div class="stop-meta">
-					<template v-if="next.kind !== 'visit'">Head home &middot; </template>
-					<span class="bi" :class="modeIcon[liveTravel?.mode || next.travel_mode]"></span> {{
-						liveTravel?.minutes ??
-						next.travel_min }} min
-					<template v-if="next.kind === 'visit'"> &middot; Stay {{ next.stay_min }} min</template>
-				</div>
-				<div class="stop-title">{{ next.name }}</div>
-				<div class="stop-dist">
-					<template v-if="distance != null">{{ formatDist(distance) }} &middot; </template>
-					<span v-if="lateBy == null" class="muted">locating you…</span>
-					<span v-else-if="lateBy > 0" class="behind">{{ lateBy }} min behind plan</span>
-					<span v-else class="ontime">on time</span>
-				</div>
-				<div v-if="guidance" class="stop-guide"><i class="bi" :class="guidance.icon"></i> {{ guidance.text }}
-				</div>
-				<div class="stop-near">{{ check?.message }}</div>
-			</div>
-			<div class="col-5 col-sm-4 d-flex justify-content-end">
-				<button class="stamp-btn" :class="{ ready: check?.ok }" :disabled="stamping" @click="stampNext"
-					:aria-label="next.kind === 'return' ? 'Check in back home' : `Stamp ${next.name}`">
-					<span class="stamp-circle"><i class="bi"
-							:class="next.kind === 'return' ? 'bi-house-check-fill' : 'bi-patch-check-fill'"></i></span>
-					<span class="stamp-label">{{ stamping ? '…' : next.kind === 'return' ? "I'm back" : 'Stamp'
-						}}</span>
-				</button>
-			</div>
+  <div v-if="MapStyle" class="map-backdrop" @click="MapStyle = false"></div>
 
-			<div class="d-flex flex-wrap">
-				<button id="ChangeMap" class="btn btn-sm bg-warning" @click="MapStyle = !MapStyle">
-					<i class="bi bi-map"></i> Change Map Style
-				</button>
-				<button id="NeedHelp" class="btn btn-sm bg-danger" @click="helpOpen = true">
-					<i class="bi bi-question-circle-fill"></i> Need help?
-				</button>
-			</div>
-		</div>
-	</div>
+  <div id="MapPop" class="rounded-4" v-if="MapStyle">
+    <div class="demo-row">
+      <span class="demo-label">3D Mode</span>
+      <button class="btn rounded-pill btn-sm" :class="is3D === true ? 'btn-warning' : 'btn-outline-warning'" @click="is3D = true, RemoveBuildings(is3D) ">On</button>
+      <button class="btn rounded-pill btn-sm" :class="is3D === false ? 'btn-warning' : 'btn-outline-warning'" @click="is3D = false, RemoveBuildings(is3D)">Off</button>
+    </div>
+    <div class="demo-row">
+      <span class="demo-label">Color Theme</span>
+      <button class="btn rounded-pill btn-sm" :class="colorTheme === 'theme' ? 'btn-warning' : 'btn-outline-warning'" @click="colorTheme = 'theme'">Zoot</button>
+      <button class="btn rounded-pill btn-sm" :class="colorTheme === 'simple' ? 'btn-warning' : 'btn-outline-warning'" @click="colorTheme = 'simple'">Simple</button>
+    </div>
+    <div class="demo-row">
+      <span class="demo-label">Colorblind Mode</span>
+      <button class="btn rounded-pill btn-sm" :class="colorblind === true ? 'btn-warning' : 'btn-outline-warning'" @click="colorblind = true, ApplyColorblindMode(colorblind)">On</button>
+      <button class="btn rounded-pill btn-sm" :class="colorblind === false ? 'btn-warning' : 'btn-outline-warning'" @click="colorblind = false, ApplyColorblindMode(colorblind)">Off</button>
+    </div>
+  </div>
 
-	<div v-if="demo" id="demo-controls" class="rounded-4">
-		<div class="demo-row">
-			<span class="demo-label">Speed</span>
-			<button class="btn rounded-pill btn-sm" :class="speed === 1 ? 'btn-warning' : 'btn-outline-warning'"
-				@click="speed = 1">1&times;</button>
-			<button class="btn rounded-pill btn-sm" :class="speed === 6 ? 'btn-warning' : 'btn-outline-warning'"
-				@click="speed = 6">6&times;</button>
-			<button class="btn rounded-pill btn-sm" :class="speed === 20 ? 'btn-warning' : 'btn-outline-warning'"
-				@click="speed = 20">20&times;</button>
-		</div>
-		<div class="demo-row">
-			<span class="demo-label">WASD movement</span>
-			<button class="btn rounded-pill btn-sm" :class="wasd === true ? 'btn-warning' : 'btn-outline-warning'"
-				@click="wasd = true">Yes</button>
-			<button class="btn rounded-pill btn-sm" :class="wasd === false ? 'btn-warning' : 'btn-outline-warning'"
-				@click="wasd = false">No</button>
-		</div>
-		<div class="demo-row">
-			<span class="demo-label">CheckPoint</span>
-			<button class="btn rounded-pill btn-sm btn-outline-warning" :disabled="!next"
-				@click="jumpTo(200)">Near</button>
-			<button class="btn rounded-pill btn-sm btn-outline-warning" :disabled="!next" @click="jumpTo(25)">At
-				stop</button>
-		</div>
-		<div class="demo-hint">Tap the map to walk there.</div>
-	</div>
-
-	<template v-if="helpOpen">
-		<div class="map-backdrop" @click="helpOpen = false"></div>
-		<div id="HelpPop" class="rounded-4" role="dialog" aria-label="Need help?">
-			<div class="demo-label mb-2">Change the plan</div>
-			<p class="help-note">Stamped stops stay. Only the stops ahead get rewritten from where you are now.</p>
-			<button class="btn btn-warning btn-sm w-100 mb-2" :disabled="store.status === 'planning'"
-				@click="replan('behind')"><i class="bi bi-hourglass-split"></i> I'm behind schedule</button>
-			<button class="btn btn-warning btn-sm w-100 mb-2" :disabled="store.status === 'planning'"
-				@click="replan('less-walking')"><i class="bi bi-person-walking"></i> Less walking</button>
-			<button class="btn btn-warning btn-sm w-100 mb-2"
-				:disabled="store.status === 'planning' || next?.kind !== 'visit'" @click="replan('swap')"><i
-					class="bi bi-shuffle"></i> Swap this stop</button>
-			<button class="btn btn-warning btn-sm w-100 mb-2" :disabled="store.status === 'planning'"
-				@click="replan('rain')"><i class="bi bi-cloud-rain-heavy-fill"></i> It's raining</button>
-			<button class="btn btn-outline-warning btn-sm w-100 mb-2" :disabled="next?.kind !== 'visit'"
-				@click="skipNext"><i class="bi bi-skip-forward-fill"></i> Skip this stop</button>
-			<button class="btn btn-outline-warning btn-sm w-100"
-				@click="router.push(m ? `/mission/${m.id}` : '/plan')"><i class="bi bi-list-ol"></i> See full
-				itinerary</button>
-			<div v-if="store.status === 'planning'" class="help-note mt-2">{{ store.statusText || 'Replanning…' }}</div>
-		</div>
-	</template>
-
-	<div v-if="MapStyle" class="map-backdrop" @click="MapStyle = false"></div>
-
-	<div id="MapPop" class="rounded-4" v-if="MapStyle">
-		<div class="demo-row">
-			<span class="demo-label">3D Mode</span>
-			<button class="btn rounded-pill btn-sm" :class="is3D === true ? 'btn-warning' : 'btn-outline-warning'"
-				@click="is3D = true, RemoveBuildings(is3D)">On</button>
-			<button class="btn rounded-pill btn-sm" :class="is3D === false ? 'btn-warning' : 'btn-outline-warning'"
-				@click="is3D = false, RemoveBuildings(is3D)">Off</button>
-		</div>
-		<div class="demo-row">
-			<span class="demo-label">Color Theme</span>
-			<button class="btn rounded-pill btn-sm"
-				:class="colorTheme === 'theme' ? 'btn-warning' : 'btn-outline-warning'"
-				@click="colorTheme = 'theme'">Zoot</button>
-			<button class="btn rounded-pill btn-sm"
-				:class="colorTheme === 'simple' ? 'btn-warning' : 'btn-outline-warning'"
-				@click="colorTheme = 'simple'">Simple</button>
-		</div>
-		<div class="demo-row">
-			<span class="demo-label">Colorblind Mode</span>
-			<button class="btn rounded-pill btn-sm" :class="colorblind === true ? 'btn-warning' : 'btn-outline-warning'"
-				@click="colorblind = true, ApplyColorblindMode(colorblind)">On</button>
-			<button class="btn rounded-pill btn-sm"
-				:class="colorblind === false ? 'btn-warning' : 'btn-outline-warning'"
-				@click="colorblind = false, ApplyColorblindMode(colorblind)">Off</button>
-		</div>
-	</div>
-
-	<AppNav />
+  <nav class="map-nav zt-glass" aria-label="Main">
+    <RouterLink v-for="i in navItems" :key="i.to" :to="i.to">
+      <i class="bi" :class="i.icon" aria-hidden="true"></i>
+      <span>{{ i.label }}</span>
+    </RouterLink>
+  </nav>
 </template>
 
 <style scoped>
@@ -807,64 +761,67 @@ onUnmounted(() => {
 }
 
 #top-left {
-	position: absolute;
-	top: 12px;
-	left: 12px;
-	z-index: 1;
-	font-size: 15px;
-	padding-right: 15px;
-	border-color: black;
-	border: 3px solid;
+  position: absolute;
+  top: clamp(8px, 3vw, 12px);
+  left: clamp(8px, 3vw, 12px);
+  z-index: 1;
+  font-size: clamp(12px, 3.6vw, 15px);
+  padding-right: clamp(10px, 3.6vw, 15px);
+  border-color: black;
+  border: clamp(2px, 0.7vw, 3px) solid;
 }
 
 #img-pill {
-	margin-right: 5px;
+  margin-right: 5px;
+  width: clamp(20px, 6vw, 25px);
+  height: clamp(20px, 6vw, 25px);
 }
 
 #top-left2 {
-	position: absolute;
-	top: 60px;
-	left: 12px;
-	z-index: 1;
-	font-size: 15px;
-	border-color: black;
-	border: 3px solid;
-	display: flex; /* lay items out in a row */
-	align-items: center;
-	gap: 14px; /* space between the temperature, rain, PSI and bolt */
+  position: absolute;
+  top: clamp(44px, 14vw, 60px);
+  left: clamp(8px, 3vw, 12px);
+  z-index: 1;
+  font-size: clamp(12px, 3.6vw, 15px);
+  border-color: black;
+  border: clamp(2px, 0.7vw, 3px) solid;
 }
-
-/* Each item: icon and text with a small gap between them. */
-.wx-item {
-	display: inline-flex;
-	align-items: center;
-	gap: 5px;               /* space between an icon and its number */
-}
-
 
 #top-left3 {
-	position: absolute;
-	top: 100px;
-	left: 12px;
-	z-index: 1;
-	font-size: 10px;
-	border: 3px solid;
-	padding: 5px;
+  position: absolute;
+  top: clamp(72px, 24vw, 100px);
+  left: clamp(8px, 3vw, 12px);
+  z-index: 1;
+  font-size: clamp(8px, 2.4vw, 10px);
+  border: clamp(2px, 0.7vw, 3px) solid;
+  padding: clamp(3px, 1.2vw, 5px);
+}
+
+#right-stack {
+  position: absolute;
+  top: clamp(8px, 3vw, 12px);
+  right: clamp(8px, 3vw, 12px);
+  z-index: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: clamp(10px, 3vw, 16px);
 }
 
 #top-right {
-	position: absolute;
-	top: 12px;
-	right: 12px;
-	padding: 14px;
-	line-height: 1.6;
-	text-align: left;
-	border: 4px solid;
+  padding: clamp(8px, 3.4vw, 14px);
+  line-height: 1.6;
+  text-align: left;
+  border: clamp(2px, 1vw, 4px) solid;
+}
+
+#TestRoute {
+  color: black;
 }
 
 .time_left_from_trip {
-	font-size: 30px;
-	text-align: left;
+  font-size: clamp(20px, 7vw, 30px);
+  text-align: left;
 }
 
 #NeedHelp {
@@ -878,36 +835,32 @@ onUnmounted(() => {
 
 
 .map-btn {
-	position: absolute;
-	z-index: 1;
-	width: 60px;
-	height: 60px;
-	display: flex;
-	align-items: center;
-	justify-content: center;
-	font-size: 24px;
-	color: var(--zt-yellow-pale);
-	background: var(--zt-black);
-	border: 4px solid var(--zt-yellow);
-	border-radius: var(--zt-radius);
-	box-shadow: var(--zt-shadow);
-	cursor: pointer;
-}
-
-#TestRoute {
-	position: absolute;
-	top: 150px;
-	right: 12px;
-	z-index: 1;
-	color: black;
+  z-index: 1;
+  width: clamp(46px, 14vw, 60px);
+  height: clamp(46px, 14vw, 60px);
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: clamp(18px, 5.6vw, 24px);
+  color: var(--zt-yellow-pale);
+  background: var(--zt-black);
+  border: clamp(2px, 1vw, 4px) solid var(--zt-yellow);
+  border-radius: var(--zt-radius);
+  box-shadow: var(--zt-shadow);
+  cursor: pointer;
 }
 
 /* The map buttons slide open from the hamburger button. */
 .map-tools {
-	opacity: 0;
-	transform: translateY(-12px);
-	pointer-events: none;
-	transition: opacity 0.25s ease, transform 0.25s ease;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: clamp(10px, 3vw, 16px);
+  opacity: 0;
+  transform: translateY(-12px);
+  pointer-events: none;
+  transition: opacity 0.25s ease, transform 0.25s ease;
 }
 
 .map-tools.open {
@@ -916,130 +869,17 @@ onUnmounted(() => {
 	pointer-events: auto;
 }
 
-#zoom {
-	top: 425px;
-	right: 12px;
-}
-
-#outlook {
-	top: 350px;
-	right: 12px;
-}
-
-#RealGps {
-	top: 275px;
-	right: 12px;
-}
-
-#TopView {
-	top: 500px;
-	right: 12px;
-}
-
-#MoreInfo {
-	top: 200px;
-	right: 12px;
-	z-index: 1;
-}
-
-#CenterInfo {
-	position: absolute;
-	left: 50%;
-	transform: translateX(-50%);
-	bottom: 96px;
-	max-width: 600px;
-	width: 90%;
-	z-index: 1;
-	text-align: left;
-	background: var(--zt-black);
-	border: 4px solid var(--zt-yellow);
-	box-shadow: var(--zt-shadow);
-	padding: 18px 20px;
-}
-
-.stop-meta {
-	color: var(--zt-yellow-pale);
-	opacity: 0.7;
-	font-size: 0.75rem;
-	font-weight: 800;
-	text-transform: uppercase;
-	letter-spacing: 0.05em;
-}
-
-.stop-title {
-	color: var(--zt-yellow-pale);
-	font-size: 1.6rem;
-	font-weight: 800;
-	margin: 2px 0;
-}
-
-.stop-dist {
-	font-size: 0.9rem;
-	color: var(--zt-yellow-pale);
-}
-
-.stop-dist .behind {
-	color: var(--zt-orange);
-	font-weight: 700;
-}
-
-.stop-near {
-	font-size: 0.8rem;
-	color: var(--zt-yellow-pale);
-	opacity: 0.7;
-	margin-top: 6px;
-}
-
-.stamp-btn {
-	width: 100px;
-	height: 100px;
-	border-radius: 50%;
-	border: 4px solid var(--zt-yellow);
-	background: transparent;
-	display: flex;
-	flex-direction: column;
-	align-items: center;
-	justify-content: center;
-	gap: 4px;
-	cursor: pointer;
-}
-
-.stamp-circle {
-	width: 42px;
-	height: 42px;
-	border-radius: 50%;
-	background: var(--zt-yellow-pale);
-	color: var(--zt-black);
-	display: flex;
-	align-items: center;
-	justify-content: center;
-	font-size: 20px;
-}
-
-.stamp-label {
-	color: var(--zt-yellow-pale);
-	font-size: 0.7rem;
-	font-weight: 800;
-	text-transform: uppercase;
-	letter-spacing: 0.05em;
-}
-
-#ChangeMap {
-	color: black;
-	text-align: left;
-	width: fit-content;
-	border-radius: 13px;
-	margin-top: 10px;
-}
+/* CHANGE: #CenterInfo, .stop-*, .stamp-*, #ChangeMap moved to MissionInfoCard.vue
+   (its own <style scoped>) along with the markup that used them. */
 
 #demo-controls {
-	position: absolute;
-	top: 140px;
-	left: 12px;
-	z-index: 1;
-	background: var(--zt-black);
-	border: 4px solid var(--zt-yellow);
-	padding: 12px 16px;
+  position: absolute;
+  top: clamp(100px, 32vw, 140px);
+  left: clamp(8px, 3vw, 12px);
+  z-index: 1;
+  background: var(--zt-black);
+  border: clamp(2px, 1vw, 4px) solid var(--zt-yellow);
+  padding: clamp(8px, 3vw, 12px) clamp(10px, 3.8vw, 16px);
 }
 
 .demo-row {
@@ -1053,13 +893,13 @@ onUnmounted(() => {
 }
 
 .demo-label {
-	color: var(--zt-yellow-pale);
-	font-size: 0.75rem;
-	font-weight: 800;
-	text-transform: uppercase;
-	letter-spacing: 0.05em;
-	margin-right: 4px;
-	min-width: 110px;
+  color: var(--zt-yellow-pale);
+  font-size: clamp(0.65rem, 2.4vw, 0.75rem);
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  margin-right: 4px;
+  min-width: clamp(80px, 26vw, 110px);
 }
 
 .map-backdrop {
@@ -1072,15 +912,15 @@ onUnmounted(() => {
 }
 
 #MapPop {
-	position: absolute;
-	top: 50%;
-	left: 50%;
-	transform: translate(-50%, -50%);
-	z-index: 2;
-	background: var(--zt-black);
-	border: 4px solid var(--zt-yellow);
-	box-shadow: var(--zt-shadow);
-	padding: 12px 16px;
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  z-index: 2;
+  background: var(--zt-black);
+  border: clamp(2px, 1vw, 4px) solid var(--zt-yellow);
+  box-shadow: var(--zt-shadow);
+  padding: clamp(8px, 3vw, 12px) clamp(10px, 3.8vw, 16px);
 }
 
 /* ── Mission wiring ── */
@@ -1119,161 +959,99 @@ onUnmounted(() => {
 	font-size: 0.8rem;
 }
 
-.stop-dist .ontime {
-	color: #5fd38d;
-	font-weight: 700;
-}
+#top-right.amber { background: var(--zt-orange) !important; }
+#top-right.red { background: #e5243b !important; color: #fff !important; animation: ttg-alarm 1.2s infinite; }
+@keyframes ttg-alarm { 0% { box-shadow: 0 0 0 0 rgba(229, 36, 59, 0.7); } 70%, 100% { box-shadow: 0 0 0 16px rgba(229, 36, 59, 0); } }
+.time_back_from_trip { font-size: clamp(0.7rem, 2.6vw, 0.8rem); }
 
-.stop-dist .muted {
-	opacity: 0.7;
-}
+/* CHANGE: .stop-dist .ontime/.muted, .stop-guide, .stamp-btn state styles and
+   @keyframes stamp-ready also moved to MissionInfoCard.vue, next to the markup
+   and base stop/stamp rules they style. */
 
-.stop-guide {
-	margin-top: 6px;
-	color: var(--zt-yellow);
-	font-size: 0.9rem;
-	font-weight: 700;
-}
-
-.stop-guide .bi {
-	margin-right: 4px;
-}
-
-.stamp-btn:disabled {
-	cursor: wait;
-}
-
-.stamp-btn:not(.ready) {
-	opacity: 0.55;
-	border-style: dashed;
-}
-
-.stamp-btn.ready {
-	background: var(--zt-yellow);
-	animation: stamp-ready 1.4s infinite;
-}
-
-.stamp-btn.ready .stamp-label {
-	color: var(--zt-black);
-}
-
-.stamp-btn.ready .stamp-circle {
-	background: var(--zt-black);
-	color: var(--zt-yellow);
-}
-
-@keyframes stamp-ready {
-	0% {
-		box-shadow: 0 0 0 0 rgba(255, 204, 0, 0.7);
-	}
-
-	70%,
-	100% {
-		box-shadow: 0 0 0 18px rgba(255, 204, 0, 0);
-	}
-}
-
-.demo-hint {
-	color: var(--zt-yellow-pale);
-	opacity: 0.7;
-	font-size: 0.7rem;
-	margin-top: 8px;
-}
+.demo-hint { color: var(--zt-yellow-pale); opacity: 0.7; font-size: clamp(0.62rem, 2.2vw, 0.7rem); margin-top: 8px; }
 
 #HelpPop {
-	position: absolute;
-	top: 50%;
-	left: 50%;
-	transform: translate(-50%, -50%);
-	z-index: 2;
-	width: min(340px, 90vw);
-	background: var(--zt-black);
-	border: 4px solid var(--zt-yellow);
-	box-shadow: var(--zt-shadow);
-	padding: 16px;
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  z-index: 2;
+  width: min(340px, 90vw);
+  background: var(--zt-black);
+  border: clamp(2px, 1vw, 4px) solid var(--zt-yellow);
+  box-shadow: var(--zt-shadow);
+  padding: clamp(10px, 4vw, 16px);
 }
+#HelpPop .btn-warning { color: var(--zt-black); font-weight: 700; text-align: left; }
+#HelpPop .btn-outline-warning { text-align: left; }
+.help-note { color: var(--zt-yellow-pale); opacity: 0.75; font-size: clamp(0.65rem, 2.4vw, 0.75rem); margin-bottom: 10px; }
 
-#HelpPop .btn-warning {
-	color: var(--zt-black);
-	font-weight: 700;
-	text-align: left;
+/* ── Bottom nav (own copy — edit freely, this only affects the 3D map view) ── */
+.map-nav {
+  position: fixed;
+  left: 50%;
+  transform: translateX(-50%);
+  bottom: max(12px, env(safe-area-inset-bottom));
+  width: min(520px, calc(100% - 24px));
+  height: var(--zt-nav-h);
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  border-radius: 26px;
+  box-shadow: var(--zt-shadow);
+  z-index: 1030;
 }
-
-#HelpPop .btn-outline-warning {
-	text-align: left;
+.map-nav a {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 1px;
+  color: var(--zt-ink);
+  text-decoration: none;
+  font-size: 0.66rem;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  border-radius: 18px;
+  margin: 6px;
+  border: 2px solid transparent;
 }
-
-.help-note {
-	color: var(--zt-yellow-pale);
-	opacity: 0.75;
-	font-size: 0.75rem;
-	margin-bottom: 10px;
-}
+.map-nav a i { font-size: 1.3rem; line-height: 1; }
+.map-nav a.router-link-active { color: #111; background: var(--zt-yellow); border-color: var(--zt-line); }
 </style>
 
 <!-- Map markers are created by MapLibre outside this component, so their styles can't be scoped. -->
 <style>
 .zt-stop-marker {
-	width: 34px;
-	height: 34px;
-	border-radius: 50%;
-	border: 3px solid #111;
-	background: #fff4c2;
-	color: #111;
-	font-weight: 800;
-	font-size: 0.95rem;
-	display: grid;
-	place-items: center;
-	box-shadow: 3px 3px 0 #111;
-	cursor: pointer;
-	padding: 0;
+  width: clamp(26px, 8vw, 34px);
+  height: clamp(26px, 8vw, 34px);
+  border-radius: 50%;
+  border: clamp(2px, 0.9vw, 3px) solid #111;
+  background: #fff4c2;
+  color: #111;
+  font-weight: 800;
+  font-size: clamp(0.78rem, 2.8vw, 0.95rem);
+  display: grid;
+  place-items: center;
+  box-shadow: 3px 3px 0 #111;
+  cursor: pointer;
+  padding: 0;
 }
+.zt-stop-marker.next { background: #f83878; color: #fff; width: clamp(32px, 10vw, 42px); height: clamp(32px, 10vw, 42px); font-size: clamp(0.92rem, 3.2vw, 1.1rem); z-index: 2; animation: zt-marker-pulse 1.4s infinite; }
+.zt-stop-marker.done { background: #111; color: #ffcc00; border-color: #ffcc00; box-shadow: none; }
+@keyframes zt-marker-pulse { 0% { box-shadow: 3px 3px 0 #111, 0 0 0 0 rgba(248, 56, 120, 0.7); } 70%, 100% { box-shadow: 3px 3px 0 #111, 0 0 0 16px rgba(248, 56, 120, 0); } }
 
-.zt-stop-marker.next {
-	background: #f83878;
-	color: #fff;
-	width: 42px;
-	height: 42px;
-	font-size: 1.1rem;
-	z-index: 2;
-	animation: zt-marker-pulse 1.4s infinite;
-}
-
-.zt-stop-marker.done {
-	background: #111;
-	color: #ffcc00;
-	border-color: #ffcc00;
-	box-shadow: none;
-}
-
-@keyframes zt-marker-pulse {
-	0% {
-		box-shadow: 3px 3px 0 #111, 0 0 0 0 rgba(248, 56, 120, 0.7);
-	}
-
-	70%,
-	100% {
-		box-shadow: 3px 3px 0 #111, 0 0 0 16px rgba(248, 56, 120, 0);
-	}
-}
-
-.zt-player-marker {
-	position: relative;
-	width: 40px;
-	height: 40px;
-	pointer-events: none;
-}
-
+.zt-player-marker { position: relative; width: clamp(30px, 10vw, 40px); height: clamp(30px, 10vw, 40px); pointer-events: none; }
 .zt-player-marker .core {
-	position: absolute;
-	inset: 4px;
-	border-radius: 50%;
-	background: #ffcc00;
-	border: 3px solid #111;
-	color: #111;
-	display: grid;
-	place-items: center;
-	font-size: 1rem;
+  position: absolute;
+  inset: 4px;
+  border-radius: 50%;
+  background: #ffcc00;
+  border: clamp(2px, 0.9vw, 3px) solid #111;
+  color: #111;
+  display: grid;
+  place-items: center;
+  font-size: clamp(0.8rem, 2.8vw, 1rem);
 }
 
 .zt-player-marker .pulse {
