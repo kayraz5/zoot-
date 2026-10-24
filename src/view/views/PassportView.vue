@@ -3,7 +3,7 @@ import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import Flipbook from 'flipbook-vue'
 import { StampSlam } from '../gl/stampSlam.js'
 import { drawCover, drawIdentity, drawAreaPage, drawBackPage, PAGE_W, PAGE_H } from '../gl/pageArt.js'
-import { AREAS, STYLES } from '../../model/data/origins.js'
+import { AREAS, ORIGINS, STYLES } from '../../model/data/origins.js'
 import { catalog, placeById, loadCatalog } from '../../model/services/catalog.js'
 import seedPlaces from '../../model/data/places.sg.json'
 import { usePassportStore, CHOP_TARGET } from '../../model/stores/passport.js'
@@ -101,6 +101,19 @@ const openAreas = computed(() =>
     .map((area) => ({ ...area, total: catalog.value.filter((place) => place.area === area.id).length }))
 )
 
+// Latest trip's entry date (YYMMDD, Singapore time) and entry point, for the identity page's machine-readable line
+const entry = computed(() => {
+  const trip = [...missions.value, mission.mission]
+    .filter((m) => m?.start_iso)
+    .sort((a, b) => String(b.start_iso).localeCompare(String(a.start_iso)))[0]
+  if (!trip) return null
+  const parts = new Intl.DateTimeFormat('en-SG', { timeZone: 'Asia/Singapore', year: '2-digit', month: '2-digit', day: '2-digit' })
+    .formatToParts(Date.parse(trip.start_iso))
+  const part = (type) => parts.find((p) => p.type === type).value
+  const via = ORIGINS.find((o) => o.label === trip.origin?.label)?.short || trip.origin?.label || ''
+  return { yymmdd: part('year') + part('month') + part('day'), code: via.toUpperCase().replace(/[^A-Z0-9]/g, '') }
+})
+
 const badges = computed(() => {
   const isHawker = (placeId) => placeById.value.get(placeId)?.tags.includes('hawker')
   const hawkerStamps = [...passport.stampedIds].filter(isHawker).length
@@ -136,7 +149,8 @@ function paint(i, ctx) {
       xp: profile.xp || 0,
       stamps: passport.stampedIds.size,
       chops: passport.chopCount,
-      color: profile.cover_color
+      color: profile.cover_color,
+      entry: entry.value
     })
   }
 
@@ -266,7 +280,7 @@ async function loadMissions() {
 
 // Stamps, profile or badges can arrive after the pages were first drawn
 watch(
-  () => [passport.stamps.length, passport.seen.size, user.profile, catalog.value, badges.value],
+  () => [passport.stamps.length, passport.seen.size, user.profile, catalog.value, badges.value, entry.value],
   async () => {
     if (!pages.value.length || busy.value) return
     await repaintAll()

@@ -211,7 +211,8 @@ export function drawCover(ctx, { color = DEFAULT_COVER, name = 'Field Traveller'
   ctx.strokeRect(5, 5, PAGE_W - 10, PAGE_H - 10)
 }
 
-export function drawIdentity(ctx, { name, style, level, title, xp, stamps, chops, color }) {
+// Identity page. `entry` ({ yymmdd, code }) is the latest trip, for the machine-readable line, or null
+export function drawIdentity(ctx, { name, style, level, title, xp, stamps, chops, color, entry = null }) {
   paper(ctx, '#fff8dc', true)
   ctx.fillStyle = INK
   ctx.textAlign = 'left'
@@ -246,24 +247,24 @@ export function drawIdentity(ctx, { name, style, level, title, xp, stamps, chops
 
   ctx.fillStyle = MUTED
   ctx.font = '700 12px Poppins, sans-serif'
-  ctx.fillText('ISSUED AT', 44, 330)
-  ctx.fillText('STAMPS', 216, 330)
-  ctx.fillText('CHOPS', 360, 330)
+  ctx.fillText('ISSUED AT', 44, 350)
+  ctx.fillText('STAMPS', 216, 350)
+  ctx.fillText('CHOPS', 360, 350)
   ctx.fillStyle = INK
   ctx.font = '700 22px Fredoka, sans-serif'
-  ctx.fillText('SINGAPORE', 44, 356)
-  ctx.fillText(String(stamps), 216, 356)
-  ctx.fillText(String(chops), 360, 356)
+  ctx.fillText('SINGAPORE', 44, 376)
+  ctx.fillText(String(stamps), 216, 376)
+  ctx.fillText(String(chops), 360, 376)
 
   // Signature
   ctx.strokeStyle = BRAND.pink
   ctx.lineWidth = 3
   ctx.beginPath()
-  for (let x = 44; x < 260; x += 4) ctx.lineTo(x, 420 + Math.sin(x / 9) * 8 + Math.sin(x / 23) * 6)
+  for (let x = 44; x < 260; x += 4) ctx.lineTo(x, 446 + Math.sin(x / 9) * 8 + Math.sin(x / 23) * 6)
   ctx.stroke()
   ctx.fillStyle = MUTED
   ctx.font = '700 11px Poppins, sans-serif'
-  ctx.fillText('HOLDER SIGNATURE', 44, 450)
+  ctx.fillText('HOLDER SIGNATURE', 44, 476)
 
   // Machine-readable strip at the bottom
   ctx.fillStyle = BRAND.yellow
@@ -272,7 +273,9 @@ export function drawIdentity(ctx, { name, style, level, title, xp, stamps, chops
   ctx.font = '600 21px "Courier New", monospace'
   const mrzName = (name || 'TRAVELLER').toUpperCase().replace(/[^A-Z]/g, '<').slice(0, 20)
   ctx.fillText(`P<ZOT${mrzName}`.padEnd(34, '<'), 30, PAGE_H - 110)
-  ctx.fillText(`L${String(level).padStart(2, '0')}<<XP${String(xp).padStart(6, '0')}<<SIN<<CHANGI`.padEnd(34, '<'), 30, PAGE_H - 74)
+  // Level, XP, then the latest entry: SIN + YYMMDD, and where you came in (e.g. CHANGIT3)
+  const mrzEntry = entry ? `SIN${entry.yymmdd}<<${entry.code.slice(0, 8)}` : 'SIN'
+  ctx.fillText(`L${String(level).padStart(2, '0')}<<XP${String(xp).padStart(6, '0')}<<${mrzEntry}`.padEnd(34, '<').slice(0, 34), 30, PAGE_H - 74)
   pageNumber(ctx, 1, true)
 }
 
