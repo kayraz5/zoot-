@@ -14,6 +14,9 @@ const routes = [
   { path: '/mission', name: 'mission-active', component: () => import('../../view/views/MissionView.vue'), meta: { auth: true, nav: true } },
   { path: '/mission/:id', name: 'mission', component: () => import('../../view/views/MissionView.vue'), meta: { auth: true, nav: true } },
   { path: '/map', name: 'map', component: () => import('../../view/views/3D_Map.vue'), meta: { auth: true, fullscreen: true } },
+  // Dressing room for the 3D traveller (src/view/gl/traveller.js). No auth so it's
+  // quick to open while you're tweaking his outfits.
+  { path: '/wardrobe', name: 'wardrobe', component: () => import('../../view/views/WardrobeView.vue') },
   { path: '/place/:id', name: 'place', component: () => import('../../view/views/PlaceView.vue'), meta: { nav: true } },
   { path: '/passport', name: 'passport', component: () => import('../../view/views/PassportView.vue'), meta: { auth: true, nav: true } },
   { path: '/codex', name: 'codex', component: () => import('../../view/views/CodexView.vue'), meta: { auth: true, nav: true } },
