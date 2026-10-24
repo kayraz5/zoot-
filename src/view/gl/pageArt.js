@@ -211,7 +211,66 @@ export function drawCover(ctx, { color = DEFAULT_COVER, name = 'Field Traveller'
   ctx.strokeRect(5, 5, PAGE_W - 10, PAGE_H - 10)
 }
 
-export function drawIdentity(ctx, { name, style, level, title, xp, stamps, chops, color }) {
+// Immigration-style arrival stamp for the latest trip, or a dashed box when there's no trip yet
+function drawEntryStamp(ctx, entry, x, y) {
+  const w = 190
+  const h = 124
+  if (!entry) {
+    ctx.save()
+    ctx.setLineDash([6, 7])
+    ctx.strokeStyle = '#d9c36a'
+    ctx.lineWidth = 3
+    ctx.strokeRect(x, y, w, h)
+    ctx.fillStyle = '#a89a66'
+    ctx.textAlign = 'center'
+    ctx.font = '800 13px Poppins, sans-serif'
+    ctx.fillText('NO ENTRY YET', x + w / 2, y + 56)
+    ctx.font = '600 12px Poppins, sans-serif'
+    ctx.fillText('Plan a layover to', x + w / 2, y + 78)
+    ctx.fillText('get stamped in.', x + w / 2, y + 94)
+    ctx.restore()
+    return
+  }
+
+  // Own canvas, like a chop, so the speckle only wears the ink
+  const pad = 24
+  const layer = document.createElement('canvas')
+  layer.width = w + pad * 2
+  layer.height = h + pad * 2
+  const l = layer.getContext('2d')
+  l.translate(layer.width / 2, layer.height / 2)
+  l.rotate(-0.07)
+  l.translate(-w / 2, -h / 2)
+  l.globalAlpha = 0.88
+  l.strokeStyle = l.fillStyle = BRAND.pink
+  l.lineWidth = 4
+  l.beginPath()
+  l.roundRect(0, 0, w, h, 10)
+  l.stroke()
+  l.lineWidth = 1.5
+  l.beginPath()
+  l.roundRect(7, 7, w - 14, h - 14, 6)
+  l.stroke()
+
+  l.textAlign = 'center'
+  l.font = '800 11px Poppins, sans-serif'
+  l.fillText('SINGAPORE · ARRIVAL', w / 2, 28)
+  l.font = '700 28px Fredoka, sans-serif'
+  l.fillText(entry.date, w / 2, 60)
+  l.font = '800 12px Poppins, sans-serif'
+  l.fillText(`${entry.time} · ${entry.via}`, w / 2, 82)
+  l.font = '700 11px Poppins, sans-serif'
+  l.fillText(`${entry.departLabel} ${entry.departs} · ${entry.length}`, w / 2, 102)
+  l.setTransform(1, 0, 0, 1, 0, 0)
+  speckle(l, layer.width / 2, layer.height / 2, w * 0.6, entry.date)
+  ctx.drawImage(layer, x - pad, y - pad)
+}
+
+/**
+ * Identity page. `entry` is the latest trip ({ date, time, via, departLabel, departs, length, yymmdd, code })
+ * or null; it fills the arrival stamp and the machine-readable line.
+ */
+export function drawIdentity(ctx, { name, style, level, title, xp, stamps, chops, color, entry = null }) {
   paper(ctx, '#fff8dc', true)
   ctx.fillStyle = INK
   ctx.textAlign = 'left'
@@ -246,24 +305,26 @@ export function drawIdentity(ctx, { name, style, level, title, xp, stamps, chops
 
   ctx.fillStyle = MUTED
   ctx.font = '700 12px Poppins, sans-serif'
-  ctx.fillText('ISSUED AT', 44, 330)
-  ctx.fillText('STAMPS', 216, 330)
-  ctx.fillText('CHOPS', 360, 330)
+  ctx.fillText('ISSUED AT', 44, 350)
+  ctx.fillText('STAMPS', 216, 350)
+  ctx.fillText('CHOPS', 360, 350)
   ctx.fillStyle = INK
   ctx.font = '700 22px Fredoka, sans-serif'
-  ctx.fillText('SINGAPORE', 44, 356)
-  ctx.fillText(String(stamps), 216, 356)
-  ctx.fillText(String(chops), 360, 356)
+  ctx.fillText('SINGAPORE', 44, 376)
+  ctx.fillText(String(stamps), 216, 376)
+  ctx.fillText(String(chops), 360, 376)
 
   // Signature
   ctx.strokeStyle = BRAND.pink
   ctx.lineWidth = 3
   ctx.beginPath()
-  for (let x = 44; x < 260; x += 4) ctx.lineTo(x, 420 + Math.sin(x / 9) * 8 + Math.sin(x / 23) * 6)
+  for (let x = 44; x < 260; x += 4) ctx.lineTo(x, 446 + Math.sin(x / 9) * 8 + Math.sin(x / 23) * 6)
   ctx.stroke()
   ctx.fillStyle = MUTED
   ctx.font = '700 11px Poppins, sans-serif'
-  ctx.fillText('HOLDER SIGNATURE', 44, 450)
+  ctx.fillText('HOLDER SIGNATURE', 44, 476)
+
+  drawEntryStamp(ctx, entry, 286, 404)
 
   // Machine-readable strip at the bottom
   ctx.fillStyle = BRAND.yellow
@@ -272,7 +333,9 @@ export function drawIdentity(ctx, { name, style, level, title, xp, stamps, chops
   ctx.font = '600 21px "Courier New", monospace'
   const mrzName = (name || 'TRAVELLER').toUpperCase().replace(/[^A-Z]/g, '<').slice(0, 20)
   ctx.fillText(`P<ZOT${mrzName}`.padEnd(34, '<'), 30, PAGE_H - 110)
-  ctx.fillText(`L${String(level).padStart(2, '0')}<<XP${String(xp).padStart(6, '0')}<<SIN<<CHANGI`.padEnd(34, '<'), 30, PAGE_H - 74)
+  // Level, XP, then the latest entry: SIN + YYMMDD, and where you came in (e.g. CHANGIT3)
+  const mrzEntry = entry ? `SIN${entry.yymmdd}<<${entry.code.slice(0, 8)}` : 'SIN'
+  ctx.fillText(`L${String(level).padStart(2, '0')}<<XP${String(xp).padStart(6, '0')}<<${mrzEntry}`.padEnd(34, '<').slice(0, 34), 30, PAGE_H - 74)
   pageNumber(ctx, 1, true)
 }
 
