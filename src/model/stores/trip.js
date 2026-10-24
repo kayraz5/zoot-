@@ -7,6 +7,22 @@ import { useUserStore } from './user.js'
 
 /** Over 24 h a connection counts as a stopover, not a layover. */
 export const MAX_LAYOVER_H = 24
+/** Layovers can be planned this far ahead (before the traveller has flown). */
+export const MAX_AHEAD_DAYS = 365
+const MIN_LAYOVER_MIN = 60
+
+/**
+ * Why an arrival/departure pair can't be planned, or '' when it can. Pure, so the dialog can
+ * validate a draft before anything is saved.
+ */
+export function layoverError(arrivalMs, departureMs, nowMs = now()) {
+	if (!Number.isFinite(arrivalMs) || !Number.isFinite(departureMs)) return 'Enter both times.'
+	if (departureMs <= nowMs) return 'That flight has already left.'
+	if (departureMs - arrivalMs < MIN_LAYOVER_MIN * 60000) return 'Your next flight has to leave at least an hour after you land.'
+	if (departureMs - arrivalMs > MAX_LAYOVER_H * 3600e3) return `Layovers are up to ${MAX_LAYOVER_H} h. Longer than that is a stopover.`
+	if (arrivalMs - nowMs > MAX_AHEAD_DAYS * 86400e3) return 'You can plan up to a year ahead.'
+	return ''
+}
 
 /** Planner form draft + saved trip rows (Kayra: form + trips table). */
 export const useTripStore = defineStore('trip', {
@@ -16,42 +32,51 @@ export const useTripStore = defineStore('trip', {
 	}),
 	getters: {
 		origin: (s) => ORIGINS.find((o) => o.id === s.draft.originId) || ORIGINS[0],
-		/** "Now" follows the app clock; "later" is the SGT time picked in the form. */
-		startMs: (s) => (tick.value, s.draft.startNow ? now() : fromSgLocalInput(s.draft.startLocal)),
-		mustReturnMs: (s) => fromSgLocalInput(s.draft.mustReturnLocal)
+		arrivalMs: (s) => fromSgLocalInput(s.draft.arrivalLocal),
+		/** The departure (gate) time: the planner's must-return time. */
+		mustReturnMs: (s) => fromSgLocalInput(s.draft.mustReturnLocal),
+		/**
+		 * When the trip starts: at landing, or now if they've already landed. The "Heading out"
+		 * override picks a later time instead (e.g. after a nap at the airport hotel).
+		 */
+		startMs(s) {
+			tick.value // re-evaluate as the clock moves
+			if (!s.draft.startAtLanding) return fromSgLocalInput(s.draft.startLocal)
+			return Math.max(this.arrivalMs, now())
+		},
+		layoverMin() {
+			return Math.round((this.mustReturnMs - this.arrivalMs) / 60000)
+		},
+		landed() {
+			return (tick.value, this.arrivalMs <= now())
+		}
 	},
 	actions: {
-		setHours(h) {
-			this.draft.hours = h
-			this.draft.mustReturnLocal = toSgLocalInput(roundTo5(this.startMs + h * 3600e3))
+		/** Arrival + departure from the layover dialog. Returns '' or the reason it was refused. */
+		setLayover(arrivalLocal, departureLocal) {
+			const error = layoverError(fromSgLocalInput(arrivalLocal), fromSgLocalInput(departureLocal))
+			if (error) return error
+			this.draft.arrivalLocal = arrivalLocal
+			this.draft.mustReturnLocal = departureLocal
+			this.draft.layoverSet = true
+			// An override outside the new layover no longer makes sense: go back to "at landing".
+			if (!this.draft.startAtLanding && (this.startMs < this.arrivalMs || this.startMs >= this.mustReturnMs)) {
+				this.draft.startAtLanding = true
+			}
+			return ''
 		},
-		/** Flight (gate) time picked first; it becomes the must-return time. */
-		setFlight(local) {
-			this.draft.mustReturnLocal = local
-			this.draft.flightSet = true
-			return this.syncHoursFromReturn()
-		},
-		/** Switch between leaving now and a later start. The flight time stays put once it is set. */
-		setStart(startNow, startLocal = this.draft.startLocal) {
-			this.draft.startNow = startNow
-			this.draft.startLocal = startLocal
-			if (this.draft.flightSet) this.syncHoursFromReturn()
-			else this.setHours(this.draft.hours)
+		/** "Heading out": at landing (default) or a later time inside the layover. */
+		setStart(atLanding, startLocal = this.draft.startLocal) {
+			this.draft.startAtLanding = atLanding
+			if (atLanding) return
+			const ms = fromSgLocalInput(startLocal)
+			const earliest = Math.max(this.arrivalMs, now())
+			this.draft.startLocal = toSgLocalInput(Math.min(this.mustReturnMs - 60 * 60000, Math.max(earliest, ms || earliest + 3600e3)))
 		},
 		/** Interests shown as pre-picked until the traveller changes them. */
 		setInterests(ids, { touched = true } = {}) {
 			this.draft.interests = [...new Set(ids)]
 			if (touched) this.draft.interestsTouched = true
-		},
-		/** Typed return time → hours. Returns false when it was over the layover cap and got clamped. */
-		syncHoursFromReturn() {
-			const h = Math.max(1, Math.round(((this.mustReturnMs - this.startMs) / 3600e3) * 2) / 2)
-			if (h > MAX_LAYOVER_H) {
-				this.setHours(MAX_LAYOVER_H)
-				return false
-			}
-			this.draft.hours = h
-			return true
 		},
 		async saveTrip() {
 			const user = useUserStore()
@@ -81,13 +106,14 @@ function roundTo5(ms) {
 }
 
 function defaultDraft() {
+	const landing = roundTo5(now() + 3600e3)
 	return {
 		originId: 'changi-t3',
-		startNow: true,
-		startLocal: toSgLocalInput(roundTo5(now() + 3600e3)),
-		hours: 8,
-		mustReturnLocal: toSgLocalInput(roundTo5(now() + 8 * 3600e3)),
-		flightSet: false, // the plan page asks for the flight time first
+		arrivalLocal: toSgLocalInput(landing),
+		mustReturnLocal: toSgLocalInput(landing + 8 * 3600e3), // departure
+		layoverSet: false, // the plan page asks for arrival + departure first
+		startAtLanding: true,
+		startLocal: toSgLocalInput(landing + 3600e3),
 		interests: ['hawker', 'gardens', 'photo'],
 		interestsTouched: false,
 		energy: 'med',
