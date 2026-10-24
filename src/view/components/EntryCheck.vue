@@ -15,6 +15,9 @@ const countries = [...new Set(['SG', ...Object.keys(snapshot.index.rules)])]
   .sort((a, b) => a.name.localeCompare(b.name))
 
 const result = ref(null) // { status, link, checkedOn, live }
+// The card's own copy of the choice, so the answer shows even if saving it fails
+const selected = ref(passport.nationality || '')
+watch(() => passport.nationality, (code) => { if (code) selected.value = code }) // loaded after the card opened
 const loading = ref(false)
 
 function fromSnapshot(code) {
@@ -37,7 +40,12 @@ async function check(code) {
     loading.value = false
   }
 }
-watch(() => passport.nationality, check, { immediate: true })
+watch(selected, check, { immediate: true })
+
+function choose(code) {
+  selected.value = code
+  passport.setNationality(code)
+}
 
 // India's transit facility also needs a visa for one of the VFTF countries, so ask before answering
 const status = computed(() => {
@@ -56,12 +64,12 @@ const checkedOn = computed(() => result.value && new Date(result.value.checkedOn
   <section class="zt-card p-3 mt-3 entry">
     <div class="small fw-800 mb-2"><i class="bi bi-passport"></i> Can I leave Changi?</div>
     <label class="tiny text-muted d-block mb-1" for="entry-country">Passport country</label>
-    <select id="entry-country" class="form-select form-select-sm mb-2" :value="passport.nationality || ''" @change="passport.setNationality($event.target.value)">
+    <select id="entry-country" class="form-select form-select-sm mb-2" :value="selected" @change="choose($event.target.value)">
       <option value="" disabled>Choose your passport</option>
       <option v-for="c in countries" :key="c.code" :value="c.code">{{ c.name }}</option>
     </select>
 
-    <p v-if="!passport.nationality" class="small text-muted mb-0">Pick the passport you're travelling on to see if you can explore Singapore on your layover.</p>
+    <p v-if="!selected" class="small text-muted mb-0">Pick the passport you're travelling on to see if you can explore Singapore on your layover.</p>
     <p v-else-if="loading" class="small text-muted mb-0">Checking ICA's rules…</p>
 
     <template v-else-if="result">
@@ -82,18 +90,18 @@ const checkedOn = computed(() => result.value && new Date(result.value.checkedOn
         </div>
         <ul class="small mb-0 ps-3">
           <li>Passport valid for at least 6 more months, and your onward ticket.</li>
-          <li v-if="status === 'vftf'">The onward flight must leave within 96 hours{{ VFTF.withVisa.includes(passport.nationality) ? ', and bring the visa or pass for the country you said' : '' }}. <a :href="ICA_VFTF_PAGE" target="_blank" rel="noopener">ICA's transit rules</a></li>
+          <li v-if="status === 'vftf'">The onward flight must leave within 96 hours{{ VFTF.withVisa.includes(selected) ? ', and bring the visa or pass for the country you said' : '' }}. <a :href="ICA_VFTF_PAGE" target="_blank" rel="noopener">ICA's transit rules</a></li>
           <li>Submit the free <a :href="ICA_ARRIVAL_CARD_PAGE" target="_blank" rel="noopener">SG Arrival Card</a> within 3 days before you land. Only ICA's site and the MyICA app are official.</li>
           <li>Allow about 30 minutes for immigration each way.</li>
         </ul>
-        <button v-if="status === 'vftf' && VFTF.withVisa.includes(passport.nationality)" class="btn btn-link btn-sm px-0" @click="passport.setTransitVisa(null)">Change my visa answer</button>
+        <button v-if="status === 'vftf' && VFTF.withVisa.includes(selected)" class="btn btn-link btn-sm px-0" @click="passport.setTransitVisa(null)">Change my visa answer</button>
       </template>
 
       <template v-else-if="status === 'visa'">
         <div class="verdict stop"><i class="bi bi-x-circle-fill"></i> You need a Singapore visa to leave the airport.</div>
         <p class="small mb-1">Without one, stay in Changi's transit area: there's plenty to do airside, and you won't need to clear immigration.</p>
         <p class="small mb-0"><a :href="result.link" target="_blank" rel="noopener">How to get a visa (ICA)</a></p>
-        <button v-if="VFTF.withVisa.includes(passport.nationality)" class="btn btn-link btn-sm px-0" @click="passport.setTransitVisa(null)">Change my visa answer</button>
+        <button v-if="VFTF.withVisa.includes(selected)" class="btn btn-link btn-sm px-0" @click="passport.setTransitVisa(null)">Change my visa answer</button>
       </template>
 
       <div v-else-if="status === 'none'" class="verdict stop"><i class="bi bi-x-circle-fill"></i> Singapore doesn't admit holders of this passport. Stay airside.</div>

@@ -1,4 +1,4 @@
-import { defineStore } from 'pinia'
+import { defineStore, acceptHMRUpdate } from 'pinia'
 import { getDb } from '../services/db/index.js'
 
 // Stamps, area chops and seen places (passport + Codex). An area's chop is earned at CHOP_TARGET places.
@@ -93,7 +93,7 @@ export const usePassportStore = defineStore('passport', {
       this.stamps = stamps
       // Stamped places count as seen too (stamps from before seen was saved never got added)
       this.seen = new Set([...(page?.seen_places || []), ...this.seen, ...this.stampedIds])
-      this.nationality = page?.nationality ?? null
+      this.nationality = page?.nationality ?? this.nationality // keep a choice made while loading
       this.transitVisa = page?.transit_visa ?? null
       if (page) {
         // Drop areas whose chop isn't earned (e.g. slammed under the old one-stamp rule), so they slam at 6
@@ -119,11 +119,9 @@ export const usePassportStore = defineStore('passport', {
       return before < CHOP_TARGET && after >= CHOP_TARGET
     },
 
-    // The passport takes these when it opens and slams them in
-    takeFresh() {
-      const fresh = this.fresh
-      this.fresh = []
-      return fresh
+    // The passport calls this once a fresh stamp's slam has played on its page
+    markShown(placeId) {
+      this.fresh = this.fresh.filter((id) => id !== placeId)
     },
 
     // Changing country clears the transit-visa answer, which only applies to some passports
@@ -166,3 +164,6 @@ export const usePassportStore = defineStore('passport', {
     }
   }
 })
+
+// Dev only: swap in the edited store instead of keeping the old one (missing new actions) after a hot reload
+if (import.meta.hot) import.meta.hot.accept(acceptHMRUpdate(usePassportStore, import.meta.hot))
