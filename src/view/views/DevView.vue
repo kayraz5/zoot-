@@ -7,7 +7,6 @@ import { geo, setFake, teleport, hasFix } from '../../model/services/geo.js'
 import { skipMinutes, resetClock, clockOffsetMin, tick } from '../../model/services/clock.js'
 import { formatTime } from '../../model/services/hours.js'
 import { HAS_SUPABASE } from '../../model/services/config.js'
-import { getDb } from '../../model/services/db/index.js'
 import { useMissionStore } from '../../model/stores/mission.js'
 import { useUiStore } from '../../model/stores/ui.js'
 import { useUserStore } from '../../model/stores/user.js'
@@ -55,10 +54,8 @@ async function grant() {
 
 async function resetLocal() {
 	if (!confirm('Delete all Zoot data stored in this browser (guest profile, missions, stamps)?')) return
-	const db = await getDb()
-	await db.resetAll?.()
-		;['zoot.passport', 'zoot.pendingSlams', 'zoot.seen', 'zoot.activeMission', 'zoot.bookmarks', 'zoot.clockOffset', 'zoot.forceRain', 'zoot.forceHaze', 'zoot.forceLightning', 'zoot.fakeGps', 'zoot.guest'].forEach((k) => localStorage.removeItem(k))
-	Object.keys(localStorage).filter((k) => k.startsWith('zoot.summary.')).forEach((k) => localStorage.removeItem(k))
+	// Every Zoot key, including the guest profile, stamps, missions and trips
+	Object.keys(localStorage).filter((k) => k.startsWith('zoot.')).forEach((k) => localStorage.removeItem(k))
 	location.href = '/'
 }
 </script>

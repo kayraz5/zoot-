@@ -7,6 +7,7 @@ import {useUiStore} from '../../model/stores/ui.js';
 import {STYLES} from '../../model/data/origins.js';
 import {DEV_PANEL} from '../../model/services/config.js';
 import {COVERS, DEFAULT_COVER, onColor} from '../../model/services/brand.js';
+import EntryCheck from '../components/EntryCheck.vue';
 
 /* Steven: Profile view (except passport, only entry point here) */
 
@@ -87,6 +88,8 @@ async function signOut() {
                 </div>
             </div>
         </section>
+
+        <EntryCheck />
 
         <section class="zt-card p-3 mt-3">
             <div class="small fw-800 mb-2">Passport cover</div>
