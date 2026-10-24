@@ -3,7 +3,7 @@ import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import Flipbook from 'flipbook-vue'
 import { StampSlam } from '../gl/stampSlam.js'
 import { drawCover, drawIdentity, drawAreaPage, drawBackPage, PAGE_W, PAGE_H } from '../gl/pageArt.js'
-import { AREAS, ORIGINS, STYLES } from '../../model/data/origins.js'
+import { AREAS, STYLES } from '../../model/data/origins.js'
 import { catalog, placeById, loadCatalog } from '../../model/services/catalog.js'
 import seedPlaces from '../../model/data/places.sg.json'
 import { usePassportStore, CHOP_TARGET } from '../../model/stores/passport.js'
@@ -101,33 +101,6 @@ const openAreas = computed(() =>
     .map((area) => ({ ...area, total: catalog.value.filter((place) => place.area === area.id).length }))
 )
 
-// Latest trip, for the arrival stamp and machine-readable line on the identity page
-const entry = computed(() => {
-  const trip = [...missions.value, mission.mission]
-    .filter((m) => m?.start_iso)
-    .sort((a, b) => String(b.start_iso).localeCompare(String(a.start_iso)))[0]
-  if (!trip) return null
-
-  const start = Date.parse(trip.start_iso)
-  const end = Date.parse(trip.must_return_iso)
-  const sg = (options) => new Intl.DateTimeFormat('en-SG', { timeZone: 'Asia/Singapore', ...options })
-  const clock = (ms) => sg({ hour: '2-digit', minute: '2-digit', hourCycle: 'h23' }).format(ms)
-  const part = (type) => sg({ year: '2-digit', month: '2-digit', day: '2-digit' }).formatToParts(start).find((p) => p.type === type).value
-  const via = (ORIGINS.find((o) => o.label === trip.origin?.label)?.short || trip.origin?.label || 'Singapore').toUpperCase()
-  const minutes = Math.max(0, Math.round((end - start) / 60000))
-
-  return {
-    date: sg({ day: '2-digit', month: 'short', year: '2-digit' }).format(start).toUpperCase(),
-    time: clock(start),
-    via,
-    departLabel: trip.origin?.kind === 'hotel' ? 'CHECK-OUT' : 'DEPARTS',
-    departs: Number.isNaN(end) ? '--:--' : clock(end),
-    length: `${Math.floor(minutes / 60)}H ${String(minutes % 60).padStart(2, '0')}M`,
-    yymmdd: part('year') + part('month') + part('day'),
-    code: via.replace(/[^A-Z0-9]/g, '')
-  }
-})
-
 const badges = computed(() => {
   const isHawker = (placeId) => placeById.value.get(placeId)?.tags.includes('hawker')
   const hawkerStamps = [...passport.stampedIds].filter(isHawker).length
@@ -163,8 +136,7 @@ function paint(i, ctx) {
       xp: profile.xp || 0,
       stamps: passport.stampedIds.size,
       chops: passport.chopCount,
-      color: profile.cover_color,
-      entry: entry.value
+      color: profile.cover_color
     })
   }
 
@@ -294,7 +266,7 @@ async function loadMissions() {
 
 // Stamps, profile or badges can arrive after the pages were first drawn
 watch(
-  () => [passport.stamps.length, passport.seen.size, user.profile, catalog.value, badges.value, entry.value],
+  () => [passport.stamps.length, passport.seen.size, user.profile, catalog.value, badges.value],
   async () => {
     if (!pages.value.length || busy.value) return
     await repaintAll()
