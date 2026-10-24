@@ -1,0 +1,25 @@
+/* Shared by the plan page and its components (imported once by PlanView). */
+.plan-label {
+	font-weight: 800;
+	font-size: 0.68rem;
+	text-transform: uppercase;
+	letter-spacing: 0.05em;
+	margin-bottom: 8px;
+}
+.plan-field-btn {
+	display: flex; align-items: center; gap: 10px; width: 100%;
+	padding: 10px 14px; border: var(--zt-bw) solid var(--zt-line); border-radius: 14px;
+	background: var(--zt-card); color: var(--zt-ink); font-size: 0.85rem;
+}
+.plan-field-btn:hover:not(:disabled) { background: var(--zt-yellow-pale); }
+.plan-step-h { font-family: var(--zt-font-display); text-transform: uppercase; letter-spacing: 0.02em; line-height: 0.95; font-weight: 400; font-size: 2rem; margin: 0; }
+/* Picked state shared by interest tiles and style cards */
+.plan-pick {
+	position: relative; display: flex; flex-direction: column; align-items: flex-start; gap: 6px; text-align: left;
+	padding: 12px; min-height: 88px; border: 2px solid var(--zt-line); border-radius: 16px;
+	background: var(--zt-card); color: var(--zt-ink); font-weight: 800; font-size: 0.8rem;
+}
+.plan-pick > i:first-child { font-size: 1.2rem; }
+.plan-pick.active { background: var(--zt-yellow-pale); box-shadow: 0 4px 0 var(--zt-shadow-color); }
+[data-bs-theme='dark'] .plan-pick.active { color: #111; }
+.plan-pick .plan-check { position: absolute; top: 8px; right: 8px; font-size: 1rem; color: #111; }

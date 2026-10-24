@@ -1,3 +1,5 @@
+// EDITOR: Kayra
+
 import { defineStore } from 'pinia'
 import { ORIGINS } from '../data/origins.js'
 import { getDb } from '../services/db/index.js'
@@ -5,26 +7,47 @@ import { now, tick } from '../services/clock.js'
 import { toSgLocalInput, fromSgLocalInput } from '../services/hours.js'
 import { useUserStore } from './user.js'
 
-/** Over 24 h a connection counts as a stopover, not a layover. */
+/** Will display: Over 24 h a connection counts as a stopover, not a layover. */
 export const MAX_LAYOVER_H = 24
-/** Layovers can be planned this far ahead (before the traveller has flown). */
+/** Feature: Layovers can be planned this far ahead (before the traveller has flown). */
 export const MAX_AHEAD_DAYS = 365
-const MIN_LAYOVER_MIN = 60
+/** Feature: Shorter than this, the airport buffers leave too little time to go out. */
+export const MIN_LAYOVER_H = 5
+/** Roughly: Arrival immigration + bags */
+const EXIT_MIN = 30
+
 
 /**
- * Why an arrival/departure pair can't be planned, or '' when it can. Pure, so the dialog can
- * validate a draft before anything is saved.
+ * SCENARIO: Whether the traveller is already landside, so the planner can skip the exit buffer.
+ * Worked out instead of asked: Jewel is landside, and anyone heading out at least 30 min
+ * after landing has had time to clear immigration. (bcs GPS can't tell airside from landside.)
+ */
+export function isCleared(originId, arrivalMs, startMs) {
+	return originId === 'jewel' || startMs - arrivalMs >= EXIT_MIN * 60000
+}
+
+/**
+ * SCENARIO MESSAGES: Why an arrival/departure pair can't be planned
  */
 export function layoverError(arrivalMs, departureMs, nowMs = now()) {
-	if (!Number.isFinite(arrivalMs) || !Number.isFinite(departureMs)) return 'Enter both times.'
-	if (departureMs <= nowMs) return 'That flight has already left.'
-	if (departureMs - arrivalMs < MIN_LAYOVER_MIN * 60000) return 'Your next flight has to leave at least an hour after you land.'
-	if (departureMs - arrivalMs > MAX_LAYOVER_H * 3600e3) return `Layovers are up to ${MAX_LAYOVER_H} h. Longer than that is a stopover.`
-	if (arrivalMs - nowMs > MAX_AHEAD_DAYS * 86400e3) return 'You can plan up to a year ahead.'
+	if (!Number.isFinite(arrivalMs) || !Number.isFinite(departureMs)) 
+		return 'Enter both times.'
+	if (departureMs <= nowMs) 
+		return 'That flight has already left.'
+	if (departureMs <= arrivalMs) 
+		return 'Your next flight has to leave after you land.'
+	if (departureMs - arrivalMs < MIN_LAYOVER_H * 3600e3) 
+		return `Layovers need at least ${MIN_LAYOVER_H} h to leave the airport safely.`
+	if (departureMs - arrivalMs > MAX_LAYOVER_H * 3600e3) 
+		return `Layovers are up to ${MAX_LAYOVER_H} h. Longer than that is a stopover.`
+	if (arrivalMs - nowMs > MAX_AHEAD_DAYS * 86400e3) 
+		return 'You can plan up to a year ahead.'
 	return ''
 }
 
-/** Planner form draft + saved trip rows (Kayra: form + trips table). */
+//  PINIA STATE MANAGEMENT
+// Planner form draft + saved trip rows (Kayra: form + trips table). */
+
 export const useTripStore = defineStore('trip', {
 	state: () => ({
 		draft: defaultDraft(),
@@ -37,7 +60,7 @@ export const useTripStore = defineStore('trip', {
 		mustReturnMs: (s) => fromSgLocalInput(s.draft.mustReturnLocal),
 		/**
 		 * When the trip starts: at landing, or now if they've already landed. The "Heading out"
-		 * override picks a later time instead (e.g. after a nap at the airport hotel).
+		 * override picks a later time instead
 		 */
 		startMs(s) {
 			tick.value // re-evaluate as the clock moves
@@ -49,6 +72,10 @@ export const useTripStore = defineStore('trip', {
 		},
 		landed() {
 			return (tick.value, this.arrivalMs <= now())
+		},
+		/** Already through immigration (see isCleared). Replaces the old manual toggle. */
+		cleared(s) {
+			return isCleared(s.draft.originId, this.arrivalMs, this.startMs)
 		}
 	},
 	actions: {
@@ -94,7 +121,7 @@ export const useTripStore = defineStore('trip', {
 				maxWalk: d.maxWalk,
 				partySize: d.partySize,
 				foodNeeds: d.foodNeeds,
-				cleared: d.cleared
+				cleared: this.cleared
 			})
 			return this.current
 		}
@@ -120,7 +147,6 @@ function defaultDraft() {
 		indoorPref: 'any',
 		maxWalk: 15,
 		partySize: 1,
-		foodNeeds: 'none', // none | halal | vegetarian | vegan
-		cleared: false
+		foodNeeds: 'none' // none | halal | vegetarian | vegan
 	}
 }

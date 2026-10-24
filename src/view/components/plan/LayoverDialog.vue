@@ -1,12 +1,14 @@
+// EDITOR: Kayra
+
 <script setup>
 import { computed, onMounted, ref } from 'vue'
-import { useTripStore, layoverError, MAX_AHEAD_DAYS } from '../../../model/stores/trip.js'
+import { useTripStore, layoverError, isCleared, MAX_AHEAD_DAYS, MIN_LAYOVER_H, MAX_LAYOVER_H } from '../../../model/stores/trip.js'
 import { computeBudget } from '../../../model/services/planner.js'
 import { formatDuration, formatTime, toSgLocalInput, fromSgLocalInput } from '../../../model/services/hours.js'
 import { now, tick } from '../../../model/services/clock.js'
 
 /**
- * First question of the plan flow: when you land and when your next flight leaves.
+ * FISRT QUESTION: when you land and when your next flight leaves
  * Works for layovers planned weeks ahead as well as for travellers who have already landed.
  */
 const props = defineProps({
@@ -30,12 +32,13 @@ const error = computed(() => (bothSet.value ? (tick.value, layoverError(arrivalM
 const canContinue = computed(() => bothSet.value && !error.value)
 
 const maxLocal = computed(() => toSgLocalInput(now() + MAX_AHEAD_DAYS * 86400e3))
-const departureMin = computed(() => (tick.value, toSgLocalInput(Math.max(now(), Number.isFinite(arrivalMs.value) ? arrivalMs.value + 3600e3 : now()))))
+const departureMin = computed(() => (tick.value, toSgLocalInput(Math.max(now(), Number.isFinite(arrivalMs.value) ? arrivalMs.value + MIN_LAYOVER_H * 3600e3 : now()))))
 
 const preview = computed(() => {
 	if (!bothSet.value || error.value) return null
 	const startMs = Math.max(arrivalMs.value, now())
-	const budget = computeBudget({ origin: trip.origin, startMs, mustReturnMs: departureMs.value, cleared: d.cleared })
+	const cleared = isCleared(d.originId, arrivalMs.value, startMs)
+	const budget = computeBudget({ origin: trip.origin, startMs, mustReturnMs: departureMs.value, cleared })
 	return {
 		layover: formatDuration(Math.round((departureMs.value - arrivalMs.value) / 60000)),
 		explore: formatDuration(Math.max(0, budget.usable_min)),
@@ -59,7 +62,7 @@ function submit() {
 				<button v-if="canCancel" type="button" class="btn-close" aria-label="Cancel" @click="emit('close')"></button>
 			</div>
 			<h2 id="layover-q" class="zt-display mt-2 mb-1">Your layover</h2>
-			<p class="tiny text-muted mb-3">Plan now or weeks ahead. Times are Singapore time, as on your boarding pass.</p>
+			<p class="tiny text-muted mb-3">Plan now or weeks ahead, for layovers of {{ MIN_LAYOVER_H }}–{{ MAX_LAYOVER_H }} h. </p>
 
 			<div class="times">
 				<div>
@@ -75,8 +78,8 @@ function submit() {
 			<p class="tiny mt-2 mb-0 help" :class="error ? 'text-danger fw-800' : 'text-muted'" aria-live="polite">
 				<template v-if="error">{{ error }}</template>
 				<template v-else-if="preview">
-					Layover <b>{{ preview.layover }}</b> · about <b>{{ preview.explore }}</b> to explore<template v-if="preview.landed">, starting now</template>.
-					Back at {{ trip.origin.short }} by {{ preview.backBy }}.
+					Layover <b>{{ preview.layover }}</b> (about <b>{{ preview.explore }}</b> to explore<template v-if="preview.landed">, starting now)</template>.
+					Back at {{ trip.origin.short }} by <b>{{ preview.backBy }}</b>.
 					<span v-if="preview.tight" class="d-block text-danger fw-800 mt-1">Too tight to leave the airport safely.</span>
 				</template>
 				<template v-else>Already landed? Enter your landing time anyway. We'll start from now.</template>
