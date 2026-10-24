@@ -1,6 +1,5 @@
 <script setup>
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
-import { useRoute, useRouter } from 'vue-router'
 import Flipbook from 'flipbook-vue'
 import { StampSlam } from '../gl/stampSlam.js'
 import { drawCover, drawIdentity, drawAreaPage, drawBackPage, PAGE_W, PAGE_H } from '../gl/pageArt.js'
@@ -17,8 +16,6 @@ import { getDb } from '../../model/services/db/index.js'
 const passport = usePassportStore()
 const user = useUserStore()
 const mission = useMissionStore()
-const route = useRoute()
-const router = useRouter()
 
 const stage = ref(null)
 const book = ref(null) // the flipbook-vue component
@@ -38,8 +35,8 @@ const bookPages = computed(() => [null, ...pages.value])
 
 // Area chops waiting for their slam stay hidden until the stamp lands
 const revealedAreas = new Set()
-// Place just stamped (?stamp=id, from the stamp pop-up): its chop stays hidden until its own slam lands
-let newStamp = route.query.stamp || null
+// Places stamped since the passport was last open: their chops stay hidden until their own slam lands
+const hiddenStamps = new Set()
 
 const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms))
 
@@ -146,11 +143,11 @@ function paint(i, ctx) {
   const area = AREAS[i - FIRST_AREA_PAGE]
   if (area) {
     const waitingForSlam = passport.pendingSlams.includes(area.id)
-    const { [newStamp]: _, ...shownStamps } = stampsByPlace.value
+    const shownStamps = Object.fromEntries(Object.entries(stampsByPlace.value).filter(([id]) => !hiddenStamps.has(id)))
     return drawAreaPage(ctx, {
       area,
       places: areaPlaces(area.id),
-      stampsByPlace: newStamp ? shownStamps : stampsByPlace.value,
+      stampsByPlace: shownStamps,
       target: CHOP_TARGET,
       pageNo: i,
       left,
@@ -242,7 +239,7 @@ async function playNewStamp(placeId) {
   const slot = areaPlaces(place.area).findIndex((p) => p.id === placeId)
   const at = slot >= 0 && slot < CHOP_TARGET && pagePoint(page, 136 + (slot % 2) * 240, 262 + Math.floor(slot / 2) * 140)
   const reveal = async () => {
-    newStamp = null
+    hiddenStamps.delete(placeId)
     navigator.vibrate?.(40)
     await repaintPage(page)
   }
@@ -253,8 +250,7 @@ async function playNewStamp(placeId) {
 
 async function runSlams() {
   busy.value = true
-  if (newStamp) await playNewStamp(newStamp)
-  newStamp = null
+  for (const placeId of [...hiddenStamps]) await playNewStamp(placeId)
   // Stamps that load mid-slam get their turn too
   while (book.value && passport.pendingSlams.length) await playSlams()
   busy.value = false
@@ -280,6 +276,9 @@ watch(
 
 onMounted(async () => {
   await Promise.all([loadCatalog(), passport.whenLoaded()])
+  for (const placeId of passport.takeFresh()) {
+    if (passport.stampedIds.has(placeId)) hiddenStamps.add(placeId)
+  }
   try {
     await Promise.all([
       document.fonts.load('700 20px Fredoka'),
@@ -298,13 +297,8 @@ onMounted(async () => {
     console.warn('[passport] WebGL unavailable, chops appear without the slam', err)
   }
 
-  // Drop ?stamp= so a refresh doesn't replay it
-  if (route.query.stamp) router.replace({ query: {} })
-  // Without a place stamped, the new-stamp slam is skipped (e.g. an old link)
-  if (newStamp && !passport.stampedIds.has(newStamp)) newStamp = null
-
   await wait(300)
-  if (newStamp || passport.pendingSlams.length) await runSlams()
+  if (hiddenStamps.size || passport.pendingSlams.length) await runSlams()
   else goToPage(latestStampPage())
   window.addEventListener('keydown', onKey)
 })

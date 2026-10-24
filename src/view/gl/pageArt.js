@@ -82,6 +82,26 @@ function speckle(ctx, cx, cy, radius, seed) {
 }
 
 // Round (or square) ink stamp with a glyph, label and small text underneath
+/**
+ * Short label for a place's chop: drops the area name it starts with ("Tiong Bahru Market" → "MARKET"),
+ * then keeps whole words up to 14 characters ("Maxwell Food Centre" → "MAXWELL FOOD").
+ */
+export function chopLabel(name, areaId = '') {
+  let words = name.replace(/\(.*?\)/g, '').split(/[\s,&/–-]+/).filter(Boolean)
+  const areaWords = areaId.toLowerCase().split(/\s+/)
+  const startsWithArea = areaWords.every((word, i) => words[i]?.toLowerCase() === word)
+  if (startsWithArea && words.length > areaWords.length) words = words.slice(areaWords.length)
+
+  const kept = [words[0] || name]
+  for (const word of words.slice(1)) {
+    if ([...kept, word].join(' ').length > 14) break
+    kept.push(word)
+  }
+  // Don't end on a filler word ("Satay by the Bay" → "SATAY", not "SATAY BY THE")
+  while (kept.length > 1 && /^(by|the|of|and|at|on|in|a)$/i.test(kept.at(-1))) kept.pop()
+  return kept.join(' ').toUpperCase()
+}
+
 // Drawn on its own canvas first, so the speckle only knocks ink out of the chop, not holes in the page
 export function drawChop(ctx, options) {
   const size = Math.ceil(options.r * 2.6)
@@ -307,7 +327,7 @@ export function drawAreaPage(ctx, { area, places, stampsByPlace, target, pageNo,
 
     if (stamp) {
       drawChop(ctx, {
-        x, y, r: 52, ink: area.ink, glyph: area.glyph, label: place.name.split(/[ ,(&]/)[0],
+        x, y, r: 52, ink: area.ink, glyph: area.glyph, label: chopLabel(place.name, area.id),
         sub: stamp.date, seed: place.id, alpha: 0.85, square: i % 3 === 1
       })
       return

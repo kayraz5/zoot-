@@ -15,7 +15,8 @@ export const usePassportStore = defineStore('passport', {
     userId: null,
     stamps: [],
     slammed: new Set(),
-    seen: new Set()
+    seen: new Set(),
+    fresh: [] // places stamped this session that the passport hasn't slammed in yet
   }),
 
   getters: {
@@ -68,6 +69,7 @@ export const usePassportStore = defineStore('passport', {
     async fetch(userId) {
       this.userId = userId || null
       this.stamps = []
+      this.fresh = []
       this.slammed = new Set()
       this.seen = new Set()
       if (!userId) return
@@ -103,10 +105,19 @@ export const usePassportStore = defineStore('passport', {
     // Returns true when this stamp earns its area's chop
     addStamp(stamp) {
       const before = this.byArea[stamp.area]?.length || 0
+      // A place stamped again another day has no new chop to show
+      if (!this.stampedIds.has(stamp.place_id)) this.fresh.push(stamp.place_id)
       this.stamps.push(stamp)
       this.markSeen([stamp.place_id])
       const after = this.byArea[stamp.area]?.length || 0
       return before < CHOP_TARGET && after >= CHOP_TARGET
+    },
+
+    // The passport takes these when it opens and slams them in
+    takeFresh() {
+      const fresh = this.fresh
+      this.fresh = []
+      return fresh
     },
 
     consumeSlam(area) {
