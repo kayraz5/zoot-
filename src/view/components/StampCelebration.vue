@@ -24,8 +24,9 @@ function close() {
   ui.celebrate(null)
 }
 
-// The passport slams any new stamps in when it opens, however you get there
+// Opens the passport and flips through to this place's page, where the new stamp slams in
 function goToPassport() {
+  passport.openTo = celebration.value?.place?.id || null
   close()
   router.push('/passport')
 }

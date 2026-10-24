@@ -17,6 +17,7 @@ export const usePassportStore = defineStore('passport', {
     slammed: new Set(),
     seen: new Set(),
     fresh: [], // places stamped this session that the passport hasn't slammed in yet
+    openTo: null, // place the passport should flip to when it opens (set by "See in passport")
     nationality: null, // passport country for the entry check (ISO alpha-2), kept private in passport_pages
     transitVisa: null // holds a visa that qualifies for the 96 h transit facility (true/false, null = not asked)
   }),

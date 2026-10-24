@@ -21,7 +21,8 @@ const stage = ref(null)
 const book = ref(null) // the flipbook-vue component
 const slamCanvas = ref(null)
 const pages = ref([]) // one image (blob: URL) per page
-const busy = ref(false) // slam playing, ignore input
+const busy = ref(false) // slam or auto-flip playing, ignore input
+const flipMs = ref(1000) // page-turn speed; faster while flipping through to a page by itself
 const missions = ref([]) // every saved mission, for the mission badges
 
 let stampSlam = null
@@ -88,10 +89,12 @@ const openPages = computed(() => {
 })
 
 // Same numbers as printed on the pages (the cover is 0)
-const pageLabel = computed(() => {
+// Updated only once a turn settles, so it doesn't flicker through the pages mid-flip
+const pageLabel = ref('Cover')
+function updatePageLabel() {
   const open = openPages.value.filter((page) => page > 0)
-  return open.length ? `Page ${open.join('–')} / ${pageCount - 1}` : 'Cover'
-})
+  pageLabel.value = open.length ? `Page ${open.join('–')} / ${pageCount - 1}` : 'Cover'
+}
 
 // Area pages on the open spread, for the "All N places" buttons
 const openAreas = computed(() =>
@@ -252,7 +255,11 @@ async function slamChop(areaId) {
 
 // Open pages once a turn has settled (flipbook-vue clears its flip state only after the new page images load)
 const settledPages = computed(() => (book.value && !book.value.flip.direction ? openPages.value.join(',') : null))
-watch(settledPages, (pages) => pages && slamOpenPages())
+watch(settledPages, (pages) => {
+  if (!pages) return
+  updatePageLabel()
+  slamOpenPages()
+})
 
 // After every flip, drag or jump: slam in the unseen stamps on the open pages, then any area chop earned there
 async function slamOpenPages() {
@@ -314,8 +321,16 @@ onMounted(async () => {
     console.warn('[passport] WebGL unavailable, chops appear without the slam', err)
   }
 
-  // Always opens on the closed cover
   window.addEventListener('keydown', onKey)
+
+  // Opens on the closed cover; from "See in passport", flips through to that place's page and slams it in
+  const placeId = passport.openTo
+  passport.openTo = null
+  const place = placeById.value.get(placeId)
+  if (place) {
+    await flipToPage(areaPage(place.area))
+    slamOpenPages()
+  }
 })
 
 onBeforeUnmount(() => {
@@ -331,6 +346,20 @@ function onKey(e) {
   if (e.key === 'ArrowLeft') book.value?.flipLeft()
 }
 
+// Turn pages one at a time (quickly) until `page` is open, like thumbing through to it
+async function flipToPage(page) {
+  if (page < 0) return
+  busy.value = true
+  flipMs.value = 350
+  await wait(500) // show the closed cover for a moment first
+  for (let turns = 0; turns < pageCount && book.value?.canFlipRight && !openPages.value.includes(page); turns++) {
+    book.value.flipRight()
+    while (book.value?.flip.direction) await wait(40) // settled once flipbook-vue clears it
+  }
+  flipMs.value = 1000
+  busy.value = false
+}
+
 function jumpToArea(areaId) {
   goToPage(areaPage(areaId))
 }
@@ -344,7 +373,7 @@ function jumpToArea(areaId) {
     </div>
 
     <div ref="stage" class="stage" :class="{ busy }">
-      <Flipbook v-if="pages.length" ref="book" class="book" :pages="bookPages" :click-to-zoom="false" aria-label="Passport. Drag a page corner or tap a side to turn the page." />
+      <Flipbook v-if="pages.length" ref="book" class="book" :pages="bookPages" :click-to-zoom="false" :flip-duration="flipMs" aria-label="Passport. Drag a page corner or tap a side to turn the page." />
       <canvas ref="slamCanvas" class="slam-canvas"></canvas>
     </div>
 
