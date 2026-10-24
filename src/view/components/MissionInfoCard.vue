@@ -1,10 +1,11 @@
 <script setup>
-// Pulled out of 3D_Map.vue: this is the card at the bottom of the map that shows the
-// mission's current status ("no quest yet" / "quest complete" / "heading to a stop").
-// It's purely presentational — all the GPS/mission computed values (mission, next,
-// distance, guidance, etc.) are worked out in 3D_Map.vue (it needs them for drawing
-// the map too) and handed down here as props. Buttons don't act directly; they emit
-// events so 3D_Map.vue stays the one place that owns navigation/map state.
+/**
+ * Next-stop card ("center console") shown at the bottom of the map.
+ *
+ * Purely presentational: the map view computes mission/GPS values (it needs them
+ * for drawing too) and passes them in as props. Actions are emitted as events, so
+ * the map view remains the single owner of navigation and map state.
+ */
 defineProps({
   mission: { type: Object, default: null },       // the active mission, or null if none
   next: { type: Object, default: null },           // the stop you're heading to, or null if the quest is done
@@ -18,14 +19,21 @@ defineProps({
   stampedCount: { type: Number, default: 0 },
   totalVisits: { type: Number, default: 0 },
   modeIcon: { type: Object, required: true },      // { walk, mrt, taxi } -> bootstrap-icon class
-  formatDist: { type: Function, required: true }   // metres -> "120 m" / "1.2 km"
+  formatDistance: { type: Function, required: true } // metres -> "120 m" / "1.2 km"
 })
 
-defineEmits(['plan', 'open-passport', 'stamp', 'change-map-style', 'need-help'])
+defineEmits(['plan', 'open-passport', 'stamp', 'change-map-style', 'need-help', 'close'])
 </script>
 
 <template>
   <div id="CenterInfo" class="rounded-4">
+    <!-- This is the only way to hide the card now that the old nav-bar toggle button
+         is gone while the card's open (see 3D_Map.vue) — without it there'd be no way
+         back to the floating flag button. -->
+    <button type="button" class="card-close" aria-label="Hide next-stop card" @click="$emit('close')">
+      <i class="bi bi-x-lg" aria-hidden="true"></i>
+    </button>
+
     <!-- No quest yet -->
     <div v-if="!mission" class="row align-items-center">
       <div class="col-12">
@@ -56,7 +64,7 @@ defineEmits(['plan', 'open-passport', 'stamp', 'change-map-style', 'need-help'])
         </div>
         <div class="stop-title">{{ next.name }}</div>
         <div class="stop-dist">
-          <template v-if="distance != null">{{ formatDist(distance) }} &middot; </template>
+          <template v-if="distance != null">{{ formatDistance(distance) }} &middot; </template>
           <span v-if="lateBy == null" class="muted">locating you…</span>
           <span v-else-if="lateBy > 0" class="behind">{{ lateBy }} min behind plan</span>
           <span v-else class="ontime">on time</span>
@@ -72,7 +80,7 @@ defineEmits(['plan', 'open-passport', 'stamp', 'change-map-style', 'need-help'])
         </button>
       </div>
 
-      <div class="d-flex flex-wrap">
+      <div class="d-flex flex-wrap card-actions">
         <button id="ChangeMap" class="btn btn-sm bg-warning" @click="$emit('change-map-style')">
           <i class="bi bi-map"></i> Change Map Style
         </button>
@@ -85,6 +93,10 @@ defineEmits(['plan', 'open-passport', 'stamp', 'change-map-style', 'need-help'])
 </template>
 
 <style scoped>
+/* Text and button sizes use container queries (cqw = % of this card's rendered
+   width) rather than vw. On a 320–430px phone, a vw-based clamp stays pinned to its
+   floor, so the card looked identical on every device; sizing against the card
+   itself scales properly within its 300–600px range. */
 #CenterInfo {
   position: absolute;
   left: 50%;
@@ -98,12 +110,33 @@ defineEmits(['plan', 'open-passport', 'stamp', 'change-map-style', 'need-help'])
   border: clamp(2px, 1vw, 4px) solid var(--zt-yellow);
   box-shadow: var(--zt-shadow);
   padding: clamp(12px, 4vw, 18px) clamp(14px, 4.6vw, 20px);
+  container-type: inline-size;
 }
+
+.card-close {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  border: none;
+  background: none;
+  color: var(--zt-yellow-pale);
+  opacity: 0.6;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.85rem;
+  cursor: pointer;
+}
+.card-close:hover,
+.card-close:active { opacity: 1; }
 
 .stop-meta {
   color: var(--zt-yellow-pale);
   opacity: 0.7;
-  font-size: clamp(0.65rem, 2.4vw, 0.75rem);
+  font-size: clamp(0.65rem, 3.5cqw, 0.9rem);
   font-weight: 800;
   text-transform: uppercase;
   letter-spacing: 0.05em;
@@ -111,13 +144,13 @@ defineEmits(['plan', 'open-passport', 'stamp', 'change-map-style', 'need-help'])
 
 .stop-title {
   color: var(--zt-yellow-pale);
-  font-size: clamp(1.15rem, 5vw, 1.6rem);
+  font-size: clamp(1.15rem, 6.1cqw, 1.6rem);
   font-weight: 800;
   margin: 2px 0;
 }
 
 .stop-dist {
-  font-size: clamp(0.75rem, 2.8vw, 0.9rem);
+  font-size: clamp(0.75rem, 4cqw, 1.05rem);
   color: var(--zt-yellow-pale);
 }
 
@@ -130,7 +163,7 @@ defineEmits(['plan', 'open-passport', 'stamp', 'change-map-style', 'need-help'])
 .stop-dist .muted { opacity: 0.7; }
 
 .stop-near {
-  font-size: clamp(0.7rem, 2.5vw, 0.8rem);
+  font-size: clamp(0.7rem, 3.7cqw, 1rem);
   color: var(--zt-yellow-pale);
   opacity: 0.7;
   margin-top: 6px;
@@ -139,14 +172,14 @@ defineEmits(['plan', 'open-passport', 'stamp', 'change-map-style', 'need-help'])
 .stop-guide {
   margin-top: 6px;
   color: var(--zt-yellow);
-  font-size: clamp(0.78rem, 2.8vw, 0.9rem);
+  font-size: clamp(0.78rem, 4.2cqw, 1.1rem);
   font-weight: 700;
 }
 .stop-guide .bi { margin-right: 4px; }
 
 .stamp-btn {
-  width: clamp(72px, 24vw, 100px);
-  height: clamp(72px, 24vw, 100px);
+  width: clamp(72px, 24cqw, 100px);
+  height: clamp(72px, 24cqw, 100px);
   border-radius: 50%;
   border: clamp(2px, 1vw, 4px) solid var(--zt-yellow);
   background: transparent;
@@ -166,30 +199,42 @@ defineEmits(['plan', 'open-passport', 'stamp', 'change-map-style', 'need-help'])
 @keyframes stamp-ready { 0% { box-shadow: 0 0 0 0 rgba(255, 204, 0, 0.7); } 70%, 100% { box-shadow: 0 0 0 18px rgba(255, 204, 0, 0); } }
 
 .stamp-circle {
-  width: clamp(32px, 10vw, 42px);
-  height: clamp(32px, 10vw, 42px);
+  width: clamp(32px, 10cqw, 42px);
+  height: clamp(32px, 10cqw, 42px);
   border-radius: 50%;
   background: var(--zt-yellow-pale);
   color: var(--zt-black);
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: clamp(16px, 4.8vw, 20px);
+  font-size: clamp(16px, 4.8cqw, 20px);
 }
 
 .stamp-label {
   color: var(--zt-yellow-pale);
-  font-size: clamp(0.6rem, 2.2vw, 0.7rem);
+  font-size: clamp(0.6rem, 3.2cqw, 0.85rem);
   font-weight: 800;
   text-transform: uppercase;
   letter-spacing: 0.05em;
 }
 
-#ChangeMap {
-  color: black;
-  text-align: left;
-  width: fit-content;
-  border-radius: 13px;
+/* Both action buttons share one sizing rule so they always match height; without
+   `width: fit-content`, "Need help?" wraps and becomes taller than "Change Map". */
+.card-actions {
+  align-items: center;
+  gap: 8px;
   margin-top: 10px;
 }
+
+#ChangeMap,
+#NeedHelp {
+  text-align: left;
+  width: fit-content;
+  white-space: nowrap;
+  border-radius: 13px;
+  margin: 0;
+}
+
+#ChangeMap { color: black; }
+#NeedHelp { color: white; }
 </style>

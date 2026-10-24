@@ -260,6 +260,33 @@ export const useMissionStore = defineStore('mission', {
       })
     },
 
+    /**
+     * Resequence the remaining FREE pending stops (not fixed to a social-quest meetup time) by
+     * nearest-neighbor from here(): whichever stop is physically closest goes next, then closest
+     * from there, and so on — called automatically after every stamp() so the plan keeps following
+     * wherever you actually are instead of its original booking order. Stamped/skipped stops and
+     * fixed social-quest blocks never move. retimeMission (via editLegs) still has final say: if the
+     * reordered sequence would miss a closing time or the return deadline, the whole reorder is
+     * refused and the original order is left exactly as it was — this can never produce a broken plan.
+     */
+    reorderByProximity() {
+      return this.editLegs((legs) => {
+        const slots = []
+        legs.forEach((l, i) => { if (l.kind === 'visit' && l.status === 'pending' && !l.fixed) slots.push(i) })
+        if (slots.length < 2) return null // nothing to reorder
+
+        const pool = slots.map((i) => legs[i])
+        const ordered = []
+        let cur = this.here()
+        while (pool.length) {
+          pool.sort((a, b) => distanceM(cur, a) - distanceM(cur, b))
+          cur = pool.shift()
+          ordered.push(cur)
+        }
+        slots.forEach((i, k) => { legs[i] = ordered[k] })
+      })
+    },
+
     changeStay(leg, deltaMin) {
       return this.editLegs((legs) => {
         const l = legs[indexOfStop(legs, leg.place_id)]
@@ -295,6 +322,9 @@ export const useMissionStore = defineStore('mission', {
           l.stamped_at = stamp.stamped_at
         }
         await this.persist(this.mission)
+        // Now that you're at `place`, the rest of the plan may no longer be the shortest way
+        // round — send whichever remaining stop is closest from here next.
+        if (l) await this.reorderByProximity()
       }
       ui.celebrate({ place, xp: leg.xp, chopEarned, area: place.area })
       return stamp

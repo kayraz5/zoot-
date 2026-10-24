@@ -9,7 +9,7 @@
     "build": "vite build",
     "preview": "vite preview",
     "sync:places": "node scripts/sync-places.mjs",
-    "snapshot:entry": "node scripts/snapshot-entry.mjs",
+    "sync:mrt-lines": "node scripts/sync-mrt-lines.mjs",
     "test:unit": "vitest",
     "test:e2e": "playwright test"
   },

@@ -1,5 +1,5 @@
 <script setup>
-import {computed, ref} from 'vue';
+import {computed, defineAsyncComponent, ref} from 'vue';
 import {useRouter} from 'vue-router';
 import {useUserStore} from '../../model/stores/user.js';
 import {usePassportStore} from '../../model/stores/passport.js';
@@ -7,7 +7,12 @@ import {useUiStore} from '../../model/stores/ui.js';
 import {STYLES} from '../../model/data/origins.js';
 import {DEV_PANEL} from '../../model/services/config.js';
 import {COVERS, DEFAULT_COVER, onColor} from '../../model/services/brand.js';
-import EntryCheck from '../components/EntryCheck.vue';
+import {useCharacterStore} from '../../model/stores/character.js';
+
+// Loaded only when the Character tab is opened. The studio pulls in all of
+// Three.js (~540 kB), and most visits to this page are just checking XP or
+// signing out — no reason to make those pay for a 3D engine they never see.
+const CharacterStudio = defineAsyncComponent(() => import('../components/CharacterStudio.vue'));
 
 /* Steven: Profile view (except passport, only entry point here) */
 
@@ -18,6 +23,39 @@ const router = useRouter();
 
 const editing = ref(false);
 const name = ref(user.profile?.display_name || '');
+
+// ── Character tab ────────────────────────────────────────────────────────
+const tab = ref('profile');          // 'profile' | 'character'
+const character = useCharacterStore();
+
+// Draft copies. The studio edits these, so the preview updates as you click,
+// but nothing reaches the map until you press Save — which is what makes Save
+// mean something instead of being decoration.
+const draftOutfit = ref(character.outfit);
+const draftFur = ref(character.fur);
+const draftHat = ref(character.hat);
+const draftEyewear = ref(character.eyewear);
+
+const unsaved = computed(() =>
+    draftOutfit.value !== character.outfit ||
+    draftFur.value !== character.fur ||
+    draftHat.value !== character.hat ||
+    draftEyewear.value !== character.eyewear);
+
+function saveLook() {
+    character.save({
+        outfit: draftOutfit.value, fur: draftFur.value,
+        hat: draftHat.value, eyewear: draftEyewear.value
+    });
+    ui.toast('Look saved — your traveller is wearing it on the map.', 'dark');
+}
+
+function revertLook() {
+    draftOutfit.value = character.outfit;
+    draftFur.value = character.fur;
+    draftHat.value = character.hat;
+    draftEyewear.value = character.eyewear;
+}
 
 const style = computed(() => STYLES[user.profile?.style] || STYLES.budget);
 const cover = computed(() => user.profile?.cover_color || DEFAULT_COVER);
@@ -89,8 +127,26 @@ async function signOut() {
             </div>
         </section>
 
-        <EntryCheck />
+        <!-- The hero above stays put on both tabs — it's who you are. Only the
+             panels below it swap. -->
+        <nav class="zt-tabs mt-3" role="tablist" aria-label="Profile sections">
+            <button
+                role="tab"
+                :aria-selected="tab === 'profile'"
+                :class="{active: tab === 'profile'}"
+                @click="tab = 'profile'">
+                <i class="bi bi-person-badge"></i> Profile
+            </button>
+            <button
+                role="tab"
+                :aria-selected="tab === 'character'"
+                :class="{active: tab === 'character'}"
+                @click="tab = 'character'">
+                <i class="bi bi-person-arms-up"></i> Character
+            </button>
+        </nav>
 
+        <template v-if="tab === 'profile'">
         <section class="zt-card p-3 mt-3">
             <div class="small fw-800 mb-2">Passport cover</div>
             <div class="d-flex gap-2">
@@ -152,10 +208,83 @@ async function signOut() {
         <button class="btn btn-outline-danger w-100" @click="signOut">
             <i class="bi bi-box-arrow-right"></i> Sign out
         </button>
+        </template>
+
+        <!-- Character tab. CharacterStudio is the same component /wardrobe uses,
+             so there's one dressing room, not two that drift apart. It edits the
+             draft refs; only Save pushes them into the store that the 3D map
+             reads. -->
+        <section v-else class="zt-card p-3 mt-3">
+            <div class="small fw-800 mb-1">Your traveller</div>
+            <p class="tiny text-muted mb-3">
+                Drag to spin. Mix an outfit, hat, eyewear and fur however you like, then save — the 3D map uses whatever you save here.
+            </p>
+
+            <Suspense>
+                <CharacterStudio
+                    v-model:outfit="draftOutfit"
+                    v-model:fur="draftFur"
+                    v-model:hat="draftHat"
+                    v-model:eyewear="draftEyewear">
+                    <template #actions>
+                        <div class="d-flex gap-2 mt-3 align-items-center flex-wrap">
+                            <button class="btn btn-primary" :disabled="!unsaved" @click="saveLook">
+                                <i class="bi bi-check2"></i> Save look
+                            </button>
+                            <button v-if="unsaved" class="btn btn-soft btn-sm" @click="revertLook">
+                                Undo changes
+                            </button>
+                            <span v-if="unsaved" class="tiny text-muted">Unsaved</span>
+                            <span v-else class="tiny text-muted">
+                                <i class="bi bi-check-circle"></i> Saved &middot; worn on the map
+                            </span>
+                        </div>
+                    </template>
+                </CharacterStudio>
+
+                <!-- Shown while the 3D chunk downloads. -->
+                <template #fallback>
+                    <div class="studio-loading">
+                        <div class="spinner-border" role="status"><span class="visually-hidden">Loading</span></div>
+                    </div>
+                </template>
+            </Suspense>
+        </section>
     </main>
 </template>
 
 <style scoped>
+/* Segmented tab control: two halves of one outlined pill, matching the sticker
+   look the rest of the app uses (thick border, hard shadow, yellow when on). */
+.zt-tabs {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 0;
+    border: var(--zt-bw) solid var(--zt-line);
+    border-radius: 999px;
+    overflow: hidden;
+    box-shadow: var(--zt-shadow-sm);
+    background: var(--zt-card);
+}
+.zt-tabs button {
+    border: 0;
+    background: none;
+    color: var(--zt-ink);
+    font-family: var(--zt-font-head);
+    font-weight: 600;
+    padding: 0.55rem 0.5rem;
+    cursor: pointer;
+}
+.zt-tabs button + button { border-left: var(--zt-bw) solid var(--zt-line); }
+.zt-tabs button.active { background: var(--zt-yellow); color: var(--zt-on-yellow); }
+
+.studio-loading {
+    display: grid;
+    place-items: center;
+    min-height: min(52dvh, 420px);
+    color: var(--zt-muted);
+}
+
 .hero {
     background: var(--zt-card);
 }
