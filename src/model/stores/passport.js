@@ -16,7 +16,9 @@ export const usePassportStore = defineStore('passport', {
     stamps: [],
     slammed: new Set(),
     seen: new Set(),
-    fresh: [] // places stamped this session that the passport hasn't slammed in yet
+    fresh: [], // places stamped this session that the passport hasn't slammed in yet
+    nationality: null, // passport country for the entry check (ISO alpha-2), kept private in passport_pages
+    transitVisa: null // holds a visa that qualifies for the 96 h transit facility (true/false, null = not asked)
   }),
 
   getters: {
@@ -72,6 +74,8 @@ export const usePassportStore = defineStore('passport', {
       this.fresh = []
       this.slammed = new Set()
       this.seen = new Set()
+      this.nationality = null
+      this.transitVisa = null
       if (!userId) return
 
       const db = await getDb()
@@ -89,6 +93,8 @@ export const usePassportStore = defineStore('passport', {
       this.stamps = stamps
       // Stamped places count as seen too (stamps from before seen was saved never got added)
       this.seen = new Set([...(page?.seen_places || []), ...this.seen, ...this.stampedIds])
+      this.nationality = page?.nationality ?? null
+      this.transitVisa = page?.transit_visa ?? null
       if (page) {
         // Drop areas whose chop isn't earned (e.g. slammed under the old one-stamp rule), so they slam at 6
         const chopped = new Set(this.choppedAreas)
@@ -120,6 +126,19 @@ export const usePassportStore = defineStore('passport', {
       return fresh
     },
 
+    // Changing country clears the transit-visa answer, which only applies to some passports
+    setNationality(code) {
+      if (code === this.nationality) return
+      this.nationality = code || null
+      this.transitVisa = null
+      this.save()
+    },
+
+    setTransitVisa(holds) {
+      this.transitVisa = holds
+      this.save()
+    },
+
     consumeSlam(area) {
       this.slammed.add(area)
       this.save()
@@ -138,7 +157,10 @@ export const usePassportStore = defineStore('passport', {
       saving = saving.then(async () => {
         if (this.userId !== userId) return
         const db = await getDb()
-        await db.savePassportPage(userId, { slammed_areas: [...this.slammed], seen_places: [...this.seen] })
+        const progress = { slammed_areas: [...this.slammed], seen_places: [...this.seen] }
+        // Only sent once set, so passport saves keep working before passport_pages.sql adds these columns
+        if (this.nationality) Object.assign(progress, { nationality: this.nationality, transit_visa: this.transitVisa })
+        await db.savePassportPage(userId, progress)
       }).catch((err) => console.warn('[passport] could not save progress:', err.message))
       return saving
     }
