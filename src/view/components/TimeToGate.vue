@@ -7,7 +7,17 @@ import { formatTime } from '../../model/services/hours.js'
 const props = defineProps({
   mustReturnMs: { type: Number, required: true },
   leaveByMs: { type: Number, default: null },
-  label: { type: String, default: 'Time to gate' }
+  label: { type: String, default: 'Time to gate' },
+  /** When the trip starts. Before then the board shows "Starts in …" instead of a long countdown. */
+  startMs: { type: Number, default: null }
+})
+const upcoming = computed(() => props.startMs != null && tick.value < props.startMs)
+const startsIn = computed(() => {
+  const min = Math.max(0, Math.round((props.startMs - tick.value) / 60000))
+  const d = Math.floor(min / 1440)
+  const h = Math.floor((min % 1440) / 60)
+  const m = min % 60
+  return d ? `${d}d ${h}h` : h ? `${h}h ${String(m).padStart(2, '0')}m` : `${m}m`
 })
 const remaining = computed(() => props.mustReturnMs - tick.value)
 const minutes = computed(() => remaining.value / 60000)
@@ -23,7 +33,11 @@ const leaveSoon = computed(() => props.leaveByMs && props.leaveByMs - tick.value
 </script>
 
 <template>
-  <div class="ttg" :class="level" role="timer" :aria-label="`${label} ${text}`">
+  <div v-if="upcoming" class="ttg ok" role="timer" :aria-label="`Trip starts in ${startsIn}`">
+    <div class="lbl"><i class="bi bi-calendar-event"></i> Starts in</div>
+    <div class="val mono">{{ startsIn }}</div>
+  </div>
+  <div v-else class="ttg" :class="level" role="timer" :aria-label="`${label} ${text}`">
     <div class="lbl"><i class="bi bi-airplane-fill"></i> {{ label }}</div>
     <div class="val mono">{{ text }}</div>
     <div v-if="leaveByMs" class="leave" :class="{ soon: leaveSoon }">Head back by {{ formatTime(leaveByMs) }}</div>

@@ -8,16 +8,13 @@ const PROFILES = {
   worship: { label: 'A place of worship', tags: ['heritage', 'culture', 'temple'], indoor: true, duration_min: 30, cost_band: 0, hours: [['09:00', '17:00']] },
   memorial: { label: 'A memorial', tags: ['heritage', 'photo'], indoor: false, duration_min: 20, cost_band: 0, hours: '24h' },
   landmark: { label: 'A landmark', tags: ['architecture', 'photo', 'heritage'], indoor: false, duration_min: 30, cost_band: 0, hours: '24h' },
-  district: { label: 'A neighbourhood', tags: ['culture', 'photo', 'shopping'], indoor: false, duration_min: 60, cost_band: 1, hours: '24h' },
   park: { label: 'A park', tags: ['nature', 'gardens', 'photo'], indoor: false, duration_min: 45, cost_band: 0, hours: '24h' },
   nature: { label: 'A nature spot', tags: ['nature', 'views'], indoor: false, duration_min: 90, cost_band: 0, hours: [['07:00', '18:30']], min_window_h: 8 },
   lookout: { label: 'A viewpoint', tags: ['views', 'photo'], indoor: false, duration_min: 30, cost_band: 1, hours: [['09:00', '21:00']] },
-  beach: { label: 'A beach', tags: ['beach', 'nature'], indoor: false, duration_min: 60, cost_band: 0, hours: [['07:00', '21:00']], min_window_h: 8 },
   zoo: { label: 'A wildlife park', tags: ['nature', 'family'], indoor: false, duration_min: 150, cost_band: 3, hours: [['09:00', '17:30']], min_window_h: 10 },
   aquarium: { label: 'An aquarium', tags: ['family'], indoor: true, duration_min: 120, cost_band: 3, hours: [['10:00', '17:00']], min_window_h: 8 },
   themepark: { label: 'A theme park', tags: ['family', 'rides'], indoor: false, duration_min: 180, cost_band: 3, hours: [['10:00', '18:00']], min_window_h: 12 },
-  hawker: { label: 'A hawker centre', tags: ['hawker', 'food'], indoor: true, duration_min: 45, cost_band: 0, hours: [['08:00', '21:00']] },
-  nightmarket: { label: 'A night market', tags: ['food', 'nightlife', 'shopping'], indoor: false, duration_min: 60, cost_band: 1, hours: [['18:00', '23:00']] }
+  hawker: { label: 'A hawker centre', tags: ['hawker', 'food'], indoor: true, duration_min: 45, cost_band: 0, hours: [['08:00', '21:00']] }
 }
 
 // A seed point can sit at an entrance while OSM uses the centre, so similar names can match further apart
