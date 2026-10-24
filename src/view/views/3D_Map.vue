@@ -15,30 +15,29 @@ import { AxiosError } from 'axios'
 import { createPlaceMarker, removePlaceMarker } from '../components/placeMarker.js'
 import places from '../../model/data/places.sg.json'
 import { PinLayer } from '../gl/pinPoint.js'
+// CHANGE: the mission-status card (the "No active quest" / "Quest complete" /
+// "Heading to a stop" box) moved into its own file, MissionInfoCard.vue, so it's
+// easier to find and edit on its own instead of being buried in this file's
+// template. It's just markup + styling — all the mission/GPS data it needs
+// (mission, next, distance, guidance, etc.) still lives here and gets passed down
+// as props, since this file needs those same values for drawing the map too.
+import MissionInfoCard from '../components/MissionInfoCard.vue'
+// CHANGE: the ~70 lines of "mission state" computed values (m, next, here, check,
+// liveTravel, distance, guidance, lateBy, stopNumber, countdown, leaveBy, the time
+// -critical/-warning flags, HOME_RADIUS_M, modeIcon, formatDist) moved into this
+// composable — a plain function both this file and, later, any other view can call.
+// It can't live inside MissionInfoCard.vue itself: the map-drawing code below
+// (drawMission/drawFence/drawRoute/nearNext/etc.) needs those exact same values,
+// and a parent component can't reach into a child's internals to get them back out.
+import { useMissionNav } from '../composables/useMissionNav.js'
 import { useMissionStore } from '../../model/stores/mission.js'
 import { useUiStore } from '../../model/stores/ui.js'
 import { geo, hasFix, startGps, setFake, teleport } from '../../model/services/geo.js'
-import { tick } from '../../model/services/clock.js'
-import { checkInStatus } from '../../model/services/checkin.js'
-import { distanceM, travel } from '../../model/services/travel.js'
+import { distanceM } from '../../model/services/travel.js'
 import { addQuestLayers, createPlayerMarker, setFence, setQuestColors, syncStopMarkers, straight } from '../map/questLayers.js'
 import { loadCatalog } from '../../model/services/catalog.js'
 import { formatTime } from '../../model/services/hours.js'
-import AppNav from '../components/AppNav.vue'
-import { useMissionStore } from '../../model/stores/mission.js'
-import { useUiStore } from '../../model/stores/ui.js'
-import { loadCatalog } from '../../model/services/catalog.js'
-import { geo, startGps, setFake, teleport, hasFix } from '../../model/services/geo.js'
-import { checkInStatus } from '../../model/services/checkin.js'
-import { travel, distanceM } from '../../model/services/travel.js'
-import { formatTime } from '../../model/services/hours.js'
-import { tick } from '../../model/services/clock.js'
-import { getWalkRoute } from '../../model/services/walkRoute.js'
-import { addQuestLayers, setQuestColors, setRoute, setFence, syncStopMarkers, createPlayerMarker, straight } from '../map/questLayers.js'
 import { describePsi } from '../../model/services/weather.js'
-import { removePlaceMarker } from '../components/placeMarker.js'
-import { PinLayer } from '../gl/pinPoint.js'
-import QuestCoopChip from '../components/QuestCoopChip.vue'
 
 const ORS_API_KEY = "eyJvcmciOiI1YjNjZTM1OTc4NTExMTAwMDFjZjYyNDgiLCJpZCI6IjdiZWU2YWY0OGY3NDQ4NjA5MGJiNjUwZTVkZjg5NTAwIiwiaCI6Im11cm11cjY0In0="
 const el = ref(null)
@@ -62,7 +61,6 @@ const navItems = [
   { to: '/passport', icon: 'bi-journal-bookmark-fill', label: 'Passport' },
   { to: '/me', icon: 'bi-person-circle', label: 'Me' }
 ]
-
 
 // CHANGE: added a cache in front of the OpenRouteService call.
 // Why: this ORS key's free tier only allows 200 requests/day. Once the mission
@@ -143,72 +141,12 @@ const plannedSegments = ref([]) // street routes between the later stops
 const markers = new Map()
 let player = null
 
-const HOME_RADIUS_M = 300 // "back at the airport/hotel" counts within this distance
-const modeIcon = { walk: 'bi-person-walking', mrt: 'bi-train-front-fill', taxi: 'bi-taxi-front-fill' }
-
-const demo = computed(() => geo.fake) // Demo-Walk = fake GPS you move with WASD / taps
-const m = computed(() => store.mission)
-const next = computed(() => store.nextLeg)
-const here = computed(() => (hasFix() ? { lat: geo.lat, lng: geo.lng } : null))
-const opts = computed(() => ({ maxWalk: m.value?.prefs?.maxWalk, style: m.value?.style }))
-
-const liveTravel = computed(() => (next.value && here.value ? travel(here.value, next.value, opts.value) : null))
-const distance = computed(() => (next.value && here.value ? distanceM(here.value, next.value) : null))
-
-/** Can you stamp right now? Visits use the real check-in rules; the trip home uses a wider radius. */
-const check = computed(() => {
-	tick.value
-	const n = next.value
-	if (!n) return null
-	if (n.kind === 'return') {
-		if (!here.value) return { ok: false, message: 'Waiting for GPS…' }
-		const d = distanceM(here.value, n)
-		return d <= HOME_RADIUS_M
-			? { ok: true, message: `You're back at ${n.name}. Check in to finish the quest.` }
-			: { ok: false, message: `${formatDist(d)} from ${n.name}. Get within ${HOME_RADIUS_M} m to finish.` }
-	}
-	return checkInStatus({ place: n, position: here.value ? { ...here.value, accuracy: geo.accuracy } : null, fake: geo.fake })
-})
-
-/** Minutes you'd arrive after the planned time if you set off now (negative = early). */
-const lateBy = computed(() => {
-	if (!next.value || !liveTravel.value) return null
-	const eta = tick.value + liveTravel.value.minutes * 60000
-	return Math.round((eta - Date.parse(next.value.arrive_iso)) / 60000)
-})
-
-/** The next instruction: a walking/MRT/taxi hint. No turn-by-turn text — fetchRoute() (OpenRouteService) only gives us the line, not steps. */
-const guidance = computed(() => {
-  const t = liveTravel.value
-  if (!t || !here.value) return null
-  if (t.mode !== 'walk') return { icon: modeIcon[t.mode], text: t.detail }
-  if (distance.value < 40) return { icon: 'bi-flag-fill', text: "You're there. Look around for the spot." }
-  return { icon: 'bi-person-walking', text: `Walk ${formatDist(distance.value)} to the stop` }
-})
-
-const countdown = computed(() => {
-	if (!store.mustReturnMs) return null
-	const s = Math.max(0, Math.floor((store.mustReturnMs - tick.value) / 1000))
-	return `${Math.floor(s / 3600)}:${String(Math.floor((s % 3600) / 60)).padStart(2, '0')}:${String(s % 60).padStart(2, '0')}`
-})
-const leaveBy = computed(() => {
-	tick.value
-	return m.value && next.value ? store.leaveBy()?.ms ?? null : null
-})
-// CHANGE: was one computed returning a class-name string via a ternary chain
-// (`timeLevel`, hard to see at a glance which number maps to which class).
-// Now it's a plain minutes value plus two named boolean checks — the template
-// below wires each one straight to its class with :class="{ red: ..., amber: ... }",
-// so to change a threshold you just edit the number here, and to see which
-// class is "on" you just read the two lines instead of tracing a ternary.
-const minutesToDeadline = computed(() => (store.mustReturnMs - tick.value) / 60000)
-const isTimeCritical = computed(() => minutesToDeadline.value < 45) // under 45 min left → red
-const isTimeWarning = computed(() => minutesToDeadline.value < 90 && !isTimeCritical.value) // under 90 min left (but not critical yet) → amber
-
-function formatDist(meters) {
-	if (meters == null) return ''
-	return meters >= 1000 ? `${(meters / 1000).toFixed(1)} km` : `${Math.round(meters / 10) * 10} m`
-}
+const {
+  HOME_RADIUS_M, modeIcon,
+  demo, m, next, here, check, lateBy, liveTravel, distance, stopNumber, guidance,
+  countdown, leaveBy, isTimeCritical, isTimeWarning,
+  formatDist
+} = useMissionNav()
 
 
 // ── Drawing ──────────────────────────────────────────────────────────────
@@ -322,28 +260,6 @@ async function refreshLiveRoute(force = false) {
 function flyTo(p, zoom = 17) {
 	map?.flyTo({ center: [p.lng, p.lat], zoom, duration: 1200 })
 	following.value = false
-}
-
-function recenter() {
-	following.value = true
-	if (!geo.fake) startGps()
-	if (here.value) map.easeTo({ center: [here.value.lng, here.value.lat], zoom: 17, duration: 800 })
-	else ui.toast('Waiting for GPS… Allow location access, or turn on Demo-Walk.', 'dark')
-}
-
-/** Fit you + every remaining stop on screen, leaving room for the stop card. */
-function overview() {
-	// The trip home is usually far (the airport), so leave it out unless it's the last thing left.
-	const ahead = store.legs.filter((l) => l.status === 'pending')
-	const pts = [here.value, ...(ahead.length > 1 ? ahead.filter((l) => l.kind === 'visit') : ahead)].filter(Boolean)
-	if (!pts.length && m.value) pts.push(m.value.origin)
-	if (!pts.length) return
-	const lngs = pts.map((p) => p.lng)
-	const lats = pts.map((p) => p.lat)
-	following.value = false
-	map.fitBounds([[Math.min(...lngs), Math.min(...lats)], [Math.max(...lngs), Math.max(...lats)]], {
-		padding: { top: 140, bottom: 300, left: 60, right: 100 }, maxZoom: 16.5, duration: 1000
-	})
 }
 
 // ── Stamping & help ──────────────────────────────────────────────────────
@@ -750,63 +666,30 @@ onUnmounted(() => {
     </div>
   </div>
 
-  <div id="CenterInfo" class="rounded-4">
-    <!-- No quest yet -->
-    <div v-if="!m" class="row align-items-center">
-      <div class="col-12">
-        <div class="stop-meta">No active quest</div>
-        <div class="stop-title">Plan a layover first</div>
-        <div class="stop-near">Your stops, route and stamps show up here once you build a quest.</div>
-        <button class="btn btn-warning btn-sm mt-3" @click="router.push('/plan')"><i class="bi bi-magic"></i> Plan a layover</button>
-      </div>
-    </div>
-
-    <!-- Every stop done and back home -->
-    <div v-else-if="!next" class="row align-items-center">
-      <div class="col-12">
-        <div class="stop-meta">Quest complete &middot; {{ store.stampedCount }}/{{ store.visitLegs.length }} stamped</div>
-        <div class="stop-title">{{ m.title }}</div>
-        <div class="stop-near">Nice run. Your chops are in the passport.</div>
-        <button class="btn btn-warning btn-sm mt-3" @click="router.push('/passport')"><i class="bi bi-book"></i> Open passport</button>
-      </div>
-    </div>
-
-    <!-- Heading to a stop (or home) -->
-    <div v-else class="row align-items-center">
-      <div class="col-7 col-sm-8">
-        <div class="stop-meta">
-          <template v-if="next.kind === 'visit'">Next stop {{ stopNumber }} &middot; </template><template v-else>Head home &middot; </template>
-          <span class="bi" :class="modeIcon[liveTravel?.mode || next.travel_mode]"></span> {{ liveTravel?.minutes ?? next.travel_min }} min
-          <template v-if="next.kind === 'visit'"> &middot; Stay {{ next.stay_min }} min</template>
-        </div>
-        <div class="stop-title">{{ next.name }}</div>
-        <div class="stop-dist">
-          <template v-if="distance != null">{{ formatDist(distance) }} &middot; </template>
-          <span v-if="lateBy == null" class="muted">locating you…</span>
-          <span v-else-if="lateBy > 0" class="behind">{{ lateBy }} min behind plan</span>
-          <span v-else class="ontime">on time</span>
-        </div>
-        <div v-if="guidance" class="stop-guide"><i class="bi" :class="guidance.icon"></i> {{ guidance.text }}</div>
-        <div class="stop-near">{{ check?.message }}</div>
-      </div>
-      <div class="col-5 col-sm-4 d-flex justify-content-end">
-        <button class="stamp-btn" :class="{ ready: check?.ok }" :disabled="stamping" @click="stampNext"
-          :aria-label="next.kind === 'return' ? 'Check in back home' : `Stamp ${next.name}`">
-          <span class="stamp-circle"><i class="bi" :class="next.kind === 'return' ? 'bi-house-check-fill' : 'bi-patch-check-fill'"></i></span>
-          <span class="stamp-label">{{ stamping ? '…' : next.kind === 'return' ? "I'm back" : 'Stamp' }}</span>
-        </button>
-      </div>
-
-      <div class="d-flex flex-wrap">
-        <button id="ChangeMap" class="btn btn-sm bg-warning" @click="MapStyle = !MapStyle">
-          <i class="bi bi-map"></i> Change Map Style
-        </button>
-        <button id="NeedHelp" class="btn btn-sm bg-danger" @click="helpOpen = true">
-          <i class="bi bi-question-circle-fill"></i> Need help?
-        </button>
-      </div>
-    </div>
-  </div>
+  <!-- CHANGE: this used to be ~55 lines of inline markup. Now it's the MissionInfoCard
+       component (imported above) — all the data it needs is passed as props, and its
+       button clicks come back up as events, which we handle the same way the inline
+       @click handlers used to (router.push, MapStyle toggle, stampNext, etc). -->
+  <MissionInfoCard
+    :mission="m"
+    :next="next"
+    :stop-number="stopNumber"
+    :live-travel="liveTravel"
+    :distance="distance"
+    :late-by="lateBy"
+    :guidance="guidance"
+    :check="check"
+    :stamping="stamping"
+    :stamped-count="store.stampedCount"
+    :total-visits="store.visitLegs.length"
+    :mode-icon="modeIcon"
+    :format-dist="formatDist"
+    @plan="router.push('/plan')"
+    @open-passport="router.push('/passport')"
+    @stamp="stampNext"
+    @change-map-style="MapStyle = !MapStyle"
+    @need-help="helpOpen = true"
+  />
 
   <div v-if="demo" id="demo-controls" class="rounded-4">
     <div class="demo-row">
@@ -986,95 +869,8 @@ onUnmounted(() => {
 	pointer-events: auto;
 }
 
-#CenterInfo {
-  position: absolute;
-  left: 50%;
-  transform: translateX(-50%);
-  bottom: clamp(70px, 20vw, 100px);
-  max-width: 600px;
-  width: 90%;
-  z-index: 1;
-  text-align: left;
-  background: var(--zt-black);
-  border: clamp(2px, 1vw, 4px) solid var(--zt-yellow);
-  box-shadow: var(--zt-shadow);
-  padding: clamp(12px, 4vw, 18px) clamp(14px, 4.6vw, 20px);
-}
-
-.stop-meta {
-  color: var(--zt-yellow-pale);
-  opacity: 0.7;
-  font-size: clamp(0.65rem, 2.4vw, 0.75rem);
-  font-weight: 800;
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
-}
-
-.stop-title {
-  color: var(--zt-yellow-pale);
-  font-size: clamp(1.15rem, 5vw, 1.6rem);
-  font-weight: 800;
-  margin: 2px 0;
-}
-
-.stop-dist {
-  font-size: clamp(0.75rem, 2.8vw, 0.9rem);
-  color: var(--zt-yellow-pale);
-}
-
-.stop-dist .behind {
-	color: var(--zt-orange);
-	font-weight: 700;
-}
-
-.stop-near {
-  font-size: clamp(0.7rem, 2.5vw, 0.8rem);
-  color: var(--zt-yellow-pale);
-  opacity: 0.7;
-  margin-top: 6px;
-}
-
-.stamp-btn {
-  width: clamp(72px, 24vw, 100px);
-  height: clamp(72px, 24vw, 100px);
-  border-radius: 50%;
-  border: clamp(2px, 1vw, 4px) solid var(--zt-yellow);
-  background: transparent;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  gap: 4px;
-  cursor: pointer;
-}
-
-.stamp-circle {
-  width: clamp(32px, 10vw, 42px);
-  height: clamp(32px, 10vw, 42px);
-  border-radius: 50%;
-  background: var(--zt-yellow-pale);
-  color: var(--zt-black);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: clamp(16px, 4.8vw, 20px);
-}
-
-.stamp-label {
-  color: var(--zt-yellow-pale);
-  font-size: clamp(0.6rem, 2.2vw, 0.7rem);
-  font-weight: 800;
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
-}
-
-#ChangeMap {
-	color: black;
-	text-align: left;
-	width: fit-content;
-	border-radius: 13px;
-	margin-top: 10px;
-}
+/* CHANGE: #CenterInfo, .stop-*, .stamp-*, #ChangeMap moved to MissionInfoCard.vue
+   (its own <style scoped>) along with the markup that used them. */
 
 #demo-controls {
   position: absolute;
@@ -1168,23 +964,9 @@ onUnmounted(() => {
 @keyframes ttg-alarm { 0% { box-shadow: 0 0 0 0 rgba(229, 36, 59, 0.7); } 70%, 100% { box-shadow: 0 0 0 16px rgba(229, 36, 59, 0); } }
 .time_back_from_trip { font-size: clamp(0.7rem, 2.6vw, 0.8rem); }
 
-.stop-guide {
-  margin-top: 6px;
-  color: var(--zt-yellow);
-  font-size: clamp(0.78rem, 2.8vw, 0.9rem);
-  font-weight: 700;
-}
-
-@keyframes stamp-ready {
-	0% {
-		box-shadow: 0 0 0 0 rgba(255, 204, 0, 0.7);
-	}
-
-	70%,
-	100% {
-		box-shadow: 0 0 0 18px rgba(255, 204, 0, 0);
-	}
-}
+/* CHANGE: .stop-dist .ontime/.muted, .stop-guide, .stamp-btn state styles and
+   @keyframes stamp-ready also moved to MissionInfoCard.vue, next to the markup
+   and base stop/stamp rules they style. */
 
 .demo-hint { color: var(--zt-yellow-pale); opacity: 0.7; font-size: clamp(0.62rem, 2.2vw, 0.7rem); margin-top: 8px; }
 
