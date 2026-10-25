@@ -93,13 +93,19 @@ for (const [a, b, t, line] of EDGES) {
 
 const rideCache = new Map()
 
-/** Shortest ride between hubs with a transfer penalty. Dijkstra over (hub, line) states. */
+/**
+ * Shortest ride between hubs with a transfer penalty. Dijkstra over (hub, line) states.
+ * `path` (hub ids visited, start to end) and `edgeLines` (the line each hop in `path` rode)
+ * exist so mrtRoute.js can slice real track geometry per line-segment of a multi-transfer
+ * ride — `lines` alone only gives the deduped set of lines used, not where each one starts
+ * and ends along the path, which is what the slicer needs.
+ */
 export function rideMinutes(fromHub, toHub) {
-  if (fromHub === toHub) return { minutes: 0, lines: [] }
+  if (fromHub === toHub) return { minutes: 0, lines: [], path: [fromHub], edgeLines: [] }
   const key = fromHub + '>' + toHub
   if (rideCache.has(key)) return rideCache.get(key)
   const best = new Map()
-  const queue = [{ node: fromHub, line: null, cost: 0, lines: [] }]
+  const queue = [{ node: fromHub, line: null, cost: 0, lines: [], path: [fromHub], edgeLines: [] }]
   let result = null
   while (queue.length) {
     queue.sort((a, b) => a.cost - b.cost)
@@ -107,11 +113,11 @@ export function rideMinutes(fromHub, toHub) {
     const stateKey = cur.node + '|' + cur.line
     if (best.has(stateKey) && best.get(stateKey) <= cur.cost) continue
     best.set(stateKey, cur.cost)
-    if (cur.node === toHub) { result = { minutes: cur.cost, lines: cur.lines }; break }
+    if (cur.node === toHub) { result = { minutes: cur.cost, lines: cur.lines, path: cur.path, edgeLines: cur.edgeLines }; break }
     for (const e of ADJ[cur.node] || []) {
       const change = cur.line && cur.line !== e.line ? TRANSFER_MIN : 0
       const lines = cur.line === e.line ? cur.lines : [...cur.lines, e.line]
-      queue.push({ node: e.to, line: e.line, cost: cur.cost + e.t + change, lines })
+      queue.push({ node: e.to, line: e.line, cost: cur.cost + e.t + change, lines, path: [...cur.path, e.to], edgeLines: [...cur.edgeLines, e.line] })
     }
   }
   rideCache.set(key, result)
@@ -137,7 +143,8 @@ export function nearestHub(p) {
   return { id: best.id, ...best.hub, walk_min: Math.max(1, Math.round((best.d * DETOUR) / WALK_M_PER_MIN)) }
 }
 
-function transit(a, b) {
+/** Exported so mrtRoute.js can get at the hub ids + per-hop line sequence, not just the minutes. */
+export function transit(a, b) {
   const ha = nearestHub(a)
   const hb = nearestHub(b)
   if (ha.id === hb.id) return null
@@ -148,7 +155,11 @@ function transit(a, b) {
     minutes: ha.walk_min + MRT_WAIT_MIN + ride.minutes + hb.walk_min,
     from: ha.name,
     to: hb.name,
-    lines: ride.lines
+    fromHub: ha.id,
+    toHub: hb.id,
+    lines: ride.lines,
+    path: ride.path,
+    edgeLines: ride.edgeLines
   }
 }
 

@@ -1,913 +1,1354 @@
 <script setup>
-import { ref, computed, onMounted, onUnmounted, watch } from 'vue'
-import { useRoute, useRouter } from 'vue-router'
-import { Map as MapLibreMap, setWorkerUrl } from 'maplibre-gl'
+/**
+ * 3D Map — the live quest screen.
+ *
+ * This file owns the MapLibre instance and everything drawn on it: the route, the
+ * check-in ring, stop pins, the traveller avatar, and the camera that follows them.
+ * Mission *state* lives in the Pinia store; this view only reads it and turns user
+ * gestures into camera/map updates.
+ *
+ * Read order (the script follows this list top to bottom):
+ *   1. Imports
+ *   2. Module constants
+ *   3. UI state
+ *   4. Stores & derived mission state
+ *   5. Map instance & mutable handles
+ *   6. Lifecycle
+ *   7. Map setup & theming
+ *   8. Rendering
+ *   9. Camera
+ *  10. Mission actions
+ *  11. Demo-Walk
+ *  12. Watchers
+ *  13. Helpers
+ *
+ * Naming conventions:
+ *   - `mission`     the active mission object; `missionStore` is its Pinia store.
+ *   - `next`        the next leg to walk to (visit or return).
+ *   - `flatMode`    top-down free-roam view (pan on, 3D traveller/pins off).
+ *   - `here`        the traveller's current { lat, lng }, or null before a GPS fix.
+ *   - Positions are { lat, lng }; MapLibre expects [lng, lat].
+ *
+ * Data shapes used across the rendering functions:
+ *   - liveRoute:      { coords: [[lng, lat], …], from: {lat,lng}, to: leg }
+ *   - plannedSegments [{ coords, mode: 'walk'|'mrt'|'taxi', active: false }]
+ *   - orbit:          { pointerId, x, y, bearing, pitch } while a drag is active
+ */
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 1. Imports
+// ─────────────────────────────────────────────────────────────────────────────
+import { ref, onMounted, onUnmounted, watch } from 'vue'
+import { useRouter } from 'vue-router'
+import { Map as MapLibreMap, LngLatBounds, setWorkerUrl } from 'maplibre-gl'
 import 'maplibre-gl/dist/maplibre-gl.css'
-// MapLibre resolves its worker next to its own module, which Vite never copies into the build.
-// Importing it with ?url makes Vite emit it as an asset and gives us the real URL.
+// MapLibre resolves its worker next to its own module, which Vite never copies into
+// the build. Importing it with ?url makes Vite emit it as an asset and gives us the
+// real URL.
 import maplibreWorkerUrl from 'maplibre-gl/dist/maplibre-gl-worker.mjs?url'
 
 setWorkerUrl(maplibreWorkerUrl)
+
 import axios from 'axios'
 import destination from '@turf/destination'
 import { point } from '@turf/helpers'
-import AppNav from '../components/AppNav.vue'
+
+// 3D stop pins (WebGL custom layers) — see gl/pinPoint.js.
+import { PinLayer, syncStopPins } from '../gl/pinPoint.js'
+// The 3D traveller: traveller.js is the body, travellerAssets.js the outfits, and
+// travellerLayer.js the MapLibre wrapper (it also exports the bearing helper).
+import { TravellerLayer, bearingBetween } from '../gl/travellerLayer.js'
+
+// Presentational next-stop card. All mission/GPS data is passed as props; button
+// clicks come back as events so this view stays the single owner of map state.
+import MissionInfoCard from '../components/MissionInfoCard.vue'
+// Mission-derived values shared with drawing and the HUD (mission, next, here,
+// check-in status, guidance, countdown…).
+import { useMissionNav } from '../composables/useMissionNav.js'
+
 import { useMissionStore } from '../../model/stores/mission.js'
 import { useUiStore } from '../../model/stores/ui.js'
+// Outfit + fur saved in Me → Character. The store is deliberately free of 3D
+// imports, so reading it here is cheap.
+import { useCharacterStore } from '../../model/stores/character.js'
+
+import { geo, hasFix, startGps, setFake, teleport } from '../../model/services/geo.js'
+import { distanceM } from '../../model/services/travel.js'
+import { addQuestLayers, createPlayerMarker, setFence, setQuestColors, syncStopMarkers } from '../map/questLayers.js'
 import { loadCatalog } from '../../model/services/catalog.js'
-import { geo, startGps, setFake, teleport, hasFix } from '../../model/services/geo.js'
-import { checkInStatus } from '../../model/services/checkin.js'
-import { travel, distanceM } from '../../model/services/travel.js'
 import { formatTime } from '../../model/services/hours.js'
-import { tick } from '../../model/services/clock.js'
-import { getWalkRoute } from '../../model/services/walkRoute.js'
-import { addQuestLayers, setQuestColors, setRoute, setFence, syncStopMarkers, createPlayerMarker, straight } from '../map/questLayers.js'
-import { describePsi } from '../../model/services/weather.js'
-import { removePlaceMarker } from '../components/placeMarker.js'
-import { PinLayer } from '../gl/pinPoint.js'
-import QuestCoopChip from '../components/QuestCoopChip.vue'
+// Street-following geometry for walk/taxi legs, with provider failover. A leg whose
+// router calls are still pending (or all failing) is simply not drawn — never a
+// straight line.
+import { getWalkRoute, getDriveRoute } from '../../model/services/routing.js'
+// Same contract for MRT legs: walk + real track geometry + walk, stitched together.
+import { getMrtRoute } from '../../model/services/mrtRoute.js'
 
-const ORS_API_KEY = "eyJvcmciOiI1YjNjZTM1OTc4NTExMTAwMDFjZjYyNDgiLCJpZCI6IjdiZWU2YWY0OGY3NDQ4NjA5MGJiNjUwZTVkZjg5NTAwIiwiaCI6Im11cm11cjY0In0="
-const el = ref(null)
-let map = null
-let placeMarkers = []
-const weather_data = ref(null)
-const MapStyle = ref(false)
-const speed = ref(20)
-const wasd = ref(true)
-const is3D = ref(true)
-const Go3D = ref(false)
-const colorTheme = ref('theme')
-const colorblind = ref(false)
-const SideInfo = ref(false)
+// ─────────────────────────────────────────────────────────────────────────────
+// 2. Module constants
+// ─────────────────────────────────────────────────────────────────────────────
+const TRAVELLER_LAYER_ID = 'zt-traveller'
+const ROUTE_SOURCE_ID = 'mission-route'
+const ROUTE_LAYER_ID = 'mission-route-line'
+// A decorative Marina Bay Sands pin, added once the style has loaded.
+const MBS_DEMO_PIN = { id: 'mbs-pin', lng: 103.8607, lat: 1.2830 }
 
-async function fetchRoute(start, end) {
-  const URL = `https://api.openrouteservice.org/v2/directions/foot-walking?api_key=${ORS_API_KEY}&start=${start[0]},${start[1]}&end=${end[0]},${end[1]}`
-  const response = await axios.get(URL)
-  return response.data.features[0].geometry
-}
-function getCurrentPosition() {
-  return new Promise((resolve, reject) => { // call resolve, and if there's a value from pos, then resolve value
-    navigator.geolocation.getCurrentPosition( // would be the current location cords, else will fall back into the error
-      (pos) => resolve([pos.coords.longitude, pos.coords.latitude]),
-      reject
-    )
-  })
+/** Pick the right route resolver for a leg's travel mode. */
+const ROUTE_BY_MODE = { walk: getWalkRoute, taxi: getDriveRoute, mrt: getMrtRoute }
+
+/** Demo-Walk keyboard controls: key → bearing offset relative to the map's north. */
+const KEY_DIRECTIONS = {
+  w: 0, arrowup: 0,
+  s: 180, arrowdown: 180,
+  a: -90, arrowleft: -90,
+  d: 90, arrowright: 90
 }
 
-async function showRouteTo(destination) {
-  const start = await getCurrentPosition()
-  const geometry = await fetchRoute(start, destination)
+// Bottom navigation, inlined (not AppNav.vue) so this fullscreen view can adjust
+// it without affecting the shared nav used by every other page.
+const navItemsBefore = [
+  { to: '/map', icon: 'bi-geo-alt-fill', label: 'Map' },
+  { to: '/mission', icon: 'bi-signpost-split-fill', label: 'Mission' }
+]
+const navItemsAfter = [
+  { to: '/passport', icon: 'bi-journal-bookmark-fill', label: 'Passport' },
+  { to: '/me', icon: 'bi-person-circle', label: 'Me' }
+]
 
-  if (map.getSource('route')) {
-    map.getSource('route').setData({ type: 'Feature', geometry, properties: {} })
-  } else {
-    map.addSource('route', { // registers the route's coordinates under the name "route"
-      type: 'geojson',
-      data: { type: 'Feature', geometry, properties: {} }
-    })
-    map.addLayer({ // draws the route source's data as a line, from the current position to the destination
-      id: 'route-line',
-      type: 'line',
-      source: 'route',
-      layout: { 'line-join': 'round', 'line-cap': 'round' },
-      paint: {
-        'line-color': '#ff1dce', // bright purplish-pink
-        'line-width': 5,
-        'line-opacity': 0.9
-      }
-    })
+/**
+ * Map colour palettes. "theme" is the stylised Zoot look; "simple" follows a
+ * light, Google-Maps-like street style. Brand-tied colours are read from app.css
+ * at runtime so the map can never drift from the UI's tokens.
+ */
+const MAP_PALETTE = {
+  theme: {
+    background: cssVar('--zt-black-2', '#282828'),
+    water: '#2f6fb8',
+    building: '#55493a',
+    road: cssVar('--zt-yellow', '#ffcc00'),
+    parkFill: cssVar('--zt-soft-line', '#3a3626'),
+    landuseFill: '#332f26',
+    landcover: {
+      landcover_grass: '#4a7a33',
+      landcover_ice: '#3f6363',
+      landcover_sand: '#9c8324',
+      landcover_wood: '#355e22'
+    }
+  },
+  simple: {
+    background: '#f2efe8',
+    water: '#a8d8f0',
+    building: '#e4dbc8',
+    road: '#ffffff', // fallback for any road_ layer roadClasses doesn't name
+    roadClasses: {
+      motorway: '#f8a24d', motorwayCasing: '#e8923e',
+      primary: '#fcd9a6', primaryCasing: '#f0bb7c',
+      secondary: '#ffffff', secondaryCasing: '#e6e3da',
+      minor: '#ffffff', minorCasing: '#e9e6de',
+      path: '#ddcfb3',
+      rail: '#b6b2a8'
+    },
+    parkFill: '#cfe8c6',
+    landuseFill: '#f6eedd',
+    landcover: {
+      landcover_grass: '#c3e3ae',
+      landcover_ice: '#eaf4f4',
+      landcover_sand: '#faf1d2',
+      landcover_wood: '#bfe8a8'
+    }
   }
 }
 
-// ── Mission state ────────────────────────────────────────────────────────
-const route = useRoute()
+// ─────────────────────────────────────────────────────────────────────────────
+// 3. UI state (everything the template binds to)
+// ─────────────────────────────────────────────────────────────────────────────
+const mapContainer = ref(null)          // the <div> MapLibre renders into
+const mapReady = ref(false)             // style loaded + quest layers added
+const following = ref(true)             // camera tracks the traveller until a user gesture
+const stamping = ref(false)             // a stamp request is in flight
+const helpOpen = ref(false)             // "Need help?" replan dialog
+const showMissionCard = ref(readMissionCardFlag())
+
+const flatMode = ref(false)             // true = top-down free-roam (pan enabled, no 3D)
+const mapToolsOpen = ref(false)         // right-hand map tools drawer
+const mapStyleOpen = ref(false)         // map appearance dialog
+const buildingsVisible = ref(true)      // 3D building extrusions on/off
+const mapTheme = ref('theme')           // 'theme' | 'simple'
+const colorblindMode = ref(false)       // high-contrast map palette
+const showTraveller3D = ref(true)       // 3D character vs flat dot
+const showStopPins3D = ref(true)        // 3D tower pins vs flat numbered dots
+
+const demoSpeed = ref(20)               // Demo-Walk multiplier (1×, 6×, 20×)
+const wasdEnabled = ref(true)           // keyboard movement during Demo-Walk
+const weatherData = ref(null)           // Open-Meteo snapshot for the top-left pill
+
+// Route geometry: the live leg's resolved street path, and the cached paths for
+// the legs after it. Both are produced by refreshLiveRoute/refreshPlannedRoutes.
+const liveRoute = ref(null)             // { coords, from, to }
+const plannedSegments = ref([])         // [{ coords, mode, active }]
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 4. Stores & derived mission state
+// ─────────────────────────────────────────────────────────────────────────────
 const router = useRouter()
-const store = useMissionStore()
-
+const missionStore = useMissionStore()
 const ui = useUiStore()
-const haze = computed(() => {
-	if (!ui.shownHaze) return null
-	return { psi: ui.shownHaze.psi, ...describePsi(ui.shownHaze.psi) }
-})
-const lightningNearby = computed(() => ui.shownLightning?.nearby === true)
-const mapReady = ref(false)
-const following = ref(true) // camera follows you until you drag the map
-const stamping = ref(false)
-const helpOpen = ref(false)
-const liveRoute = ref(null) // street route from you to the next stop: { coords, steps, from, to }
-const plannedSegments = ref([]) // street routes between the later stops
-const markers = new Map()
-let player = null
+const character = useCharacterStore()
 
-const HOME_RADIUS_M = 300 // "back at the airport/hotel" counts within this distance
-const modeIcon = { walk: 'bi-person-walking', mrt: 'bi-train-front-fill', taxi: 'bi-taxi-front-fill' }
+const {
+  HOME_RADIUS_M, modeIcon,
+  demo, mission, next, here, check, lateBy, liveTravel, distance, stopNumber, guidance,
+  countdown, leaveBy, isTimeCritical, isTimeWarning,
+  formatDistance
+} = useMissionNav()
 
-const demo = computed(() => geo.fake) // Demo-Walk = fake GPS you move with WASD / taps
-const m = computed(() => store.mission)
-const next = computed(() => store.nextLeg)
-const here = computed(() => (hasFix() ? { lat: geo.lat, lng: geo.lng } : null))
-const opts = computed(() => ({ maxWalk: m.value?.prefs?.maxWalk, style: m.value?.style }))
+// ─────────────────────────────────────────────────────────────────────────────
+// 5. Map instance & mutable handles
+// ─────────────────────────────────────────────────────────────────────────────
+let map = null                          // MapLibre map instance
+let player = null                       // flat "you are here" DOM marker
+let traveller3D = null                  // 3D character layer (null while using the dot)
+let lastTravellerAt = null              // previous fix, used to work out facing
+let travellerStopTimer = 0              // drops the walk cycle after the fixes stop
 
-const liveTravel = computed(() => (next.value && here.value ? travel(here.value, next.value, opts.value) : null))
-const distance = computed(() => (next.value && here.value ? distanceM(here.value, next.value) : null))
+// Per-leg render state. Keys are derived from seq + place_id so a leg keeps the
+// same identity across replans (see legKey()).
+const markers = new Map()               // flat stop markers  → MapLibre Marker
+const pins = new Map()                  // 3D stop towers     → PinLayer
+// Resolved planned segments, kept across refreshes: a segment that resolved once
+// keeps rendering (stale-while-revalidate) until a fresh geometry replaces it.
+const plannedRouteCache = new Map()     // legKey → { coords, mode }
 
-/** Can you stamp right now? Visits use the real check-in rules; the trip home uses a wider radius. */
-const check = computed(() => {
-	tick.value
-	const n = next.value
-	if (!n) return null
-	if (n.kind === 'return') {
-		if (!here.value) return { ok: false, message: 'Waiting for GPS…' }
-		const d = distanceM(here.value, n)
-		return d <= HOME_RADIUS_M
-			? { ok: true, message: `You're back at ${n.name}. Check in to finish the quest.` }
-			: { ok: false, message: `${formatDist(d)} from ${n.name}. Get within ${HOME_RADIUS_M} m to finish.` }
-	}
-	return checkInStatus({ place: n, position: here.value ? { ...here.value, accuracy: geo.accuracy } : null, fake: geo.fake })
-})
-
-/** Minutes you'd arrive after the planned time if you set off now (negative = early). */
-const lateBy = computed(() => {
-	if (!next.value || !liveTravel.value) return null
-	const eta = tick.value + liveTravel.value.minutes * 60000
-	return Math.round((eta - Date.parse(next.value.arrive_iso)) / 60000)
-})
-
-/** The next instruction: a street turn when walking, the MRT/taxi hop otherwise. */
-const guidance = computed(() => {
-	const t = liveTravel.value
-	if (!t || !here.value) return null
-	if (t.mode !== 'walk') return { icon: modeIcon[t.mode], text: t.detail }
-	if (distance.value < 40) return { icon: 'bi-flag-fill', text: "You're there. Look around for the spot." }
-	const lr = liveRoute.value
-	if (!lr || lr.to !== next.value) return { icon: 'bi-person-walking', text: `Walk ${formatDist(distance.value)} to the stop` }
-	const step = lr.steps.find((s, i) => i > 0 && s.text !== 'Arrive at the stop' && distanceM(here.value, s.at) > 10)
-	if (!step) return { icon: 'bi-flag-fill', text: `Straight on, ${formatDist(distance.value)} to go` }
-	return { icon: step.icon, text: `In ${formatDist(distanceM(here.value, step.at))}: ${step.text}` }
-})
-
-const countdown = computed(() => {
-	if (!store.mustReturnMs) return null
-	const s = Math.max(0, Math.floor((store.mustReturnMs - tick.value) / 1000))
-	return `${Math.floor(s / 3600)}:${String(Math.floor((s % 3600) / 60)).padStart(2, '0')}:${String(s % 60).padStart(2, '0')}`
-})
-const leaveBy = computed(() => {
-	tick.value
-	return m.value && next.value ? store.leaveBy()?.ms ?? null : null
-})
-const timeLevel = computed(() => {
-	const min = (store.mustReturnMs - tick.value) / 60000
-	return min < 45 ? 'red' : min < 90 ? 'amber' : ''
-})
-
-function formatDist(meters) {
-	if (meters == null) return ''
-	return meters >= 1000 ? `${(meters / 1000).toFixed(1)} km` : `${Math.round(meters / 10) * 10} m`
-}
-
-// ── Drawing ──────────────────────────────────────────────────────────────
-function drawMission() {
-	if (!mapReady.value) return
-	if (here.value) player.setLngLat([here.value.lng, here.value.lat]).addTo(map)
-	syncStopMarkers(map, markers, store.legs, next.value, (leg) => flyTo(leg))
-	drawRoute()
-	drawFence()
-}
-
-function drawFence() {
-	const n = next.value
-	const radius = n?.kind === 'return' ? HOME_RADIUS_M : (check.value?.radius ?? 80)
-	setFence(map, n, radius, !!check.value?.ok)
-}
-
-/** You → next stop (bold, live) + every later pending leg (faded). */
-function drawRoute() {
-	if (!mapReady.value) return
-	const segs = []
-	const n = next.value
-	if (n) {
-		const from = here.value || previousPoint(n)
-		const lr = liveRoute.value
-		const mode = liveTravel.value?.mode || n.travel_mode
-		const coords = lr && lr.to === n && mode === 'walk' ? [[from.lng, from.lat], ...lr.coords] : straight(from, n)
-		segs.push({ coords, mode, active: true })
-	}
-	setRoute(map, [...segs, ...plannedSegments.value])
-}
-
-/** Where the traveller was before `leg`: the leg before it, or the trip origin. */
-function previousPoint(leg) {
-	const legs = store.legs
-	const i = legs.indexOf(leg)
-	return i > 0 ? legs[i - 1] : m.value.origin
-}
-
-/** Street routes between later stops (only walking legs need the router; MRT/taxi stay straight). */
-async function refreshPlanned() {
-	const pending = store.legs.filter((l) => l.status === 'pending')
-	const segs = []
-	for (let i = 1; i < pending.length; i++) {
-		const a = pending[i - 1]
-		const b = pending[i]
-		const r = b.travel_mode === 'walk' ? await getWalkRoute(a, b) : null
-		segs.push({ coords: r ? r.coords : straight(a, b), mode: b.travel_mode, active: false })
-	}
-	plannedSegments.value = segs
-	drawRoute()
-}
-
-let lastRouteAt = 0
-let retryTimer = 0
-async function refreshLiveRoute(force = false) {
-	clearTimeout(retryTimer)
-	const n = next.value
-	if (!n || !here.value || liveTravel.value?.mode !== 'walk') {
-		liveRoute.value = null
-		return drawRoute()
-	}
-	const lr = liveRoute.value
-	const moved = lr ? distanceM(lr.from, here.value) : Infinity
-	if (!force && lr?.to === n && moved < 25) return drawRoute()
-	// Moving fast (demo 20×): at most one router call every 3 s, but always catch up once you stop.
-	const wait = 3000 - (Date.now() - lastRouteAt)
-	if (!force && wait > 0) {
-		retryTimer = setTimeout(() => refreshLiveRoute(), wait)
-		return drawRoute()
-	}
-	lastRouteAt = Date.now()
-	const from = { ...here.value }
-	const r = await getWalkRoute(from, n)
-	if (r && next.value === n) liveRoute.value = { ...r, from, to: n }
-	drawRoute()
-}
-
-// ── Camera ───────────────────────────────────────────────────────────────
-function flyTo(p, zoom = 17) {
-	map?.flyTo({ center: [p.lng, p.lat], zoom, duration: 1200 })
-	following.value = false
-}
-
-function recenter() {
-	following.value = true
-	if (!geo.fake) startGps()
-	if (here.value) map.easeTo({ center: [here.value.lng, here.value.lat], zoom: 17, duration: 800 })
-	else ui.toast('Waiting for GPS… Allow location access, or turn on Demo-Walk.', 'dark')
-}
-
-/** Fit you + every remaining stop on screen, leaving room for the stop card. */
-function overview() {
-	// The trip home is usually far (the airport), so leave it out unless it's the last thing left.
-	const ahead = store.legs.filter((l) => l.status === 'pending')
-	const pts = [here.value, ...(ahead.length > 1 ? ahead.filter((l) => l.kind === 'visit') : ahead)].filter(Boolean)
-	if (!pts.length && m.value) pts.push(m.value.origin)
-	if (!pts.length) return
-	const lngs = pts.map((p) => p.lng)
-	const lats = pts.map((p) => p.lat)
-	following.value = false
-	map.fitBounds([[Math.min(...lngs), Math.min(...lats)], [Math.max(...lngs), Math.max(...lats)]], {
-		padding: { top: 140, bottom: 300, left: 60, right: 100 }, maxZoom: 16.5, duration: 1000
-	})
-}
-
-// ── Stamping & help ──────────────────────────────────────────────────────
-async function stampNext() {
-	const n = next.value
-	if (!n || stamping.value) return
-	if (!check.value?.ok) return ui.toast(check.value?.message || 'Not in range yet.', 'warning', 3500)
-	stamping.value = true
-	try {
-		if (n.kind === 'return') await store.completeReturn()
-		else await store.stamp(n)
-		liveRoute.value = null
-	} catch (err) {
-		ui.toast(err.message, 'warning', 4500)
-	} finally {
-		stamping.value = false
-	}
-}
-
-async function replan(mode) {
-	helpOpen.value = false
-	await store.replan(mode)
-}
-
-async function skipNext() {
-	helpOpen.value = false
-	if (next.value?.kind !== 'visit') return
-	await store.skip(next.value)
-	ui.toast('Stop skipped. On to the next one.', 'dark')
-}
-
-// ── Demo-Walk (fake GPS) ─────────────────────────────────────────────────
-function bearingDeg(a, b) {
-	const r = (x) => (x * Math.PI) / 180
-	const y = Math.sin(r(b.lng - a.lng)) * Math.cos(r(b.lat))
-	const x = Math.cos(r(a.lat)) * Math.sin(r(b.lat)) - Math.sin(r(a.lat)) * Math.cos(r(b.lat)) * Math.cos(r(b.lng - a.lng))
-	return (Math.atan2(y, x) * 180) / Math.PI
-}
-function offsetFrom(p, bearing, meters) {
-	const [lng, lat] = destination(point([p.lng, p.lat]), meters / 1000, bearing, { units: 'kilometers' }).geometry.coordinates
-	return { lat, lng }
-}
-/** A spot `meters` short of the next stop, on the line from the previous one. */
-function nearNext(meters) {
-	const n = next.value
-	if (!n) return m.value?.origin || null
-	const prev = previousPoint(n)
-	return offsetFrom(n, bearingDeg(n, prev), meters)
-}
-
-function toggleDemo() {
-	if (geo.fake) {
-		setFake(false)
-		ui.toast('Using real GPS.', 'dark')
-	} else {
-		setFake(true, here.value || nearNext(200) || undefined)
-		following.value = true
-		ui.toast('Demo-Walk on: use WASD / arrow keys, or tap the map to move.', 'dark', 4000)
-	}
-}
-
-function jumpTo(meters) {
-	const p = nearNext(meters)
-	if (!p) return
-	if (!geo.fake) setFake(true)
-	teleport(p)
-	following.value = true
-}
-
-const KEY_DIRS = { w: 0, arrowup: 0, s: 180, arrowdown: 180, a: -90, arrowleft: -90, d: 90, arrowright: 90 }
-const keys = new Set()
+// Timers / animation.
 let raf = 0
 let lastFrame = 0
-function onKey(e) {
-	if (!geo.fake || !wasd.value || e.target.closest?.('input, textarea, select')) return
-	const k = e.key.toLowerCase()
-	if (k in KEY_DIRS) {
-		keys.add(k)
-		e.preventDefault()
-	}
-}
-const onKeyUp = (e) => keys.delete(e.key.toLowerCase())
-function loop(t) {
-	const dt = Math.min(100, t - (lastFrame || t))
-	lastFrame = t
-	if (keys.size && geo.fake && hasFix() && map) {
-		let x = 0
-		let y = 0
-		for (const k of keys) {
-			const a = ((KEY_DIRS[k] + map.getBearing()) * Math.PI) / 180
-			x += Math.sin(a)
-			y += Math.cos(a)
-		}
-		if (x || y) {
-			const metersPerSec = 1.4 * speed.value // walking pace × demo speed
-			teleport(offsetFrom(here.value, (Math.atan2(x, y) * 180) / Math.PI, (metersPerSec * dt) / 1000))
-			following.value = true
-		}
-	}
-	raf = requestAnimationFrame(loop)
-}
-
-// ── Reactions ────────────────────────────────────────────────────────────
-watch(() => [here.value?.lat, here.value?.lng], () => {
-	if (!mapReady.value || !here.value) return
-	player.setLngLat([here.value.lng, here.value.lat]).addTo(map)
-	if (following.value) {
-		// Following always means street level, even if you'd zoomed out to see the whole quest.
-		const zoom = map.getZoom() < 15.5 ? 16.8 : undefined
-		if (geo.fake && !zoom) map.jumpTo({ center: [here.value.lng, here.value.lat] })
-		else map.easeTo({ center: [here.value.lng, here.value.lat], zoom, duration: zoom ? 900 : 600 })
-	}
-	drawFence()
-	refreshLiveRoute()
-})
-
-// Stamps, skips and replans change the legs: redraw everything.
-watch(() => [mapReady.value, m.value?.id, store.legs.map((l) => l.seq + l.status + l.place_id).join()], () => {
-	drawMission()
-	refreshPlanned()
-	refreshLiveRoute(true)
-})
-
-watch(check, drawFence)
-
 let noFixTimer = 0
+let retryTimer = 0
+let lastRouteAt = 0
+const keys = new Set()                  // pressed Demo-Walk keys (w/a/s/d + arrows)
+let orbit = null                        // active drag-to-orbit gesture, or null
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 6. Lifecycle
+// ─────────────────────────────────────────────────────────────────────────────
 onMounted(async () => {
-	await loadCatalog()
-	await store.loadActive()
-	if (!geo.fake) startGps()
-	noFixTimer = setTimeout(() => {
-		if (!hasFix() && m.value) ui.toast("Can't find your location. Allow location access, or tap Enable Demo-Walk to try the quest from here.", 'warning', 6000)
-	}, 8000)
-	window.addEventListener('keydown', onKey)
-	window.addEventListener('keyup', onKeyUp)
-	raf = requestAnimationFrame(loop)
-})
+  createMap()
 
-function GoToFlat() {
-	map.easeTo({
-		pitch: 0,
-		bearing: 0,
-		duration: 600
-	})
-}
+  await loadCatalog()
+  await missionStore.loadActive()
+  if (!geo.fake) startGps()
 
-function GoTo3D() {
-	map.easeTo({
-		pitch: 56,
-		bearing: -18,
-		duration: 600
-	})
-}
+  // GPS can be slow or denied; only nag once we know a mission cares about it.
+  noFixTimer = window.setTimeout(() => {
+    if (!hasFix() && mission.value) {
+      ui.toast(
+        "Can't find your location. Allow location access, or tap Enable Demo-Walk to try the quest from here.",
+        'warning',
+        6000
+      )
+    }
+  }, 8000)
 
-function View(x) {
-	if (x) {
-		GoToFlat()
-	}
-	else {
-		GoTo3D()
-	}
-}
+  window.addEventListener('keydown', onDemoKeyDown)
+  window.addEventListener('keyup', onDemoKeyUp)
+  raf = requestAnimationFrame(demoWalkLoop)
 
-function RemoveBuildings(show) {
-	map.setLayoutProperty('building', 'visibility', show ? 'visible' : 'none')
-	map.setLayoutProperty('building-3d', 'visibility', show ? 'visible' : 'none')
-}
-
-function applyMapColors() {
-	if (!map || !map.isStyleLoaded()) return
-
-	if (colorTheme.value === 'theme') {
-		// Background + water → darker version of the Simple theme's own hue
-		map.setPaintProperty('background', 'background-color', '#463320')
-		map.setPaintProperty('water', 'fill-color', '#002166')
-
-		// Buildings → darker version of the Simple theme's own hue
-		map.setPaintProperty('building', 'fill-color', '#37342f')
-		map.setPaintProperty('building-3d', 'fill-extrusion-color', '#37342f')
-
-		// Every road layer → bright yellow, regardless of class
-		map.getStyle().layers.forEach((layer) => {
-			if (layer.id.startsWith('road_') && layer.type === 'line') {
-				map.setPaintProperty(layer.id, 'line-color', '#ffcc00')
-			}
-		})
-
-		// Landcover → darker version of each layer's own original hue
-		const landcoverDark = {
-			landcover_grass: '#2e481e',
-			landcover_ice: '#273f3f',
-			landcover_sand: '#5a4e0c',
-			landcover_wood: '#2b5214'
-		}
-		map.getStyle().layers.forEach((layer) => {
-			if (landcoverDark[layer.id]) {
-				map.setPaintProperty(layer.id, 'fill-color', landcoverDark[layer.id])
-			} else if ((layer.id.startsWith('landuse_') || layer.id === 'park') && layer.type === 'fill') {
-				map.setPaintProperty(layer.id, 'fill-color', '#141414')
-			}
-		})
-	} else {
-		map.setPaintProperty('background', 'background-color', '#f8f4f0')
-		map.setPaintProperty('water', 'fill-color', '#9ebdff')
-		map.setPaintProperty('building', 'fill-color', '#dcd9d6')
-		map.setPaintProperty('building-3d', 'fill-extrusion-color', '#dcd9d6')
-
-		map.getStyle().layers.forEach((layer) => {
-			if (layer.id.startsWith('road_') && layer.type === 'line') {
-				map.setPaintProperty(layer.id, 'line-color', '#333333')
-			}
-		})
-
-		const landcoverLight = {
-			landcover_grass: '#b0d59a',
-			landcover_ice: '#e0ecec',
-			landcover_sand: '#f7efc3',
-			landcover_wood: '#ace38c'
-		}
-		map.getStyle().layers.forEach((layer) => {
-			if (landcoverLight[layer.id]) {
-				map.setPaintProperty(layer.id, 'fill-color', landcoverLight[layer.id])
-			} else if ((layer.id.startsWith('landuse_') || layer.id === 'park') && layer.type === 'fill') {
-				map.setPaintProperty(layer.id, 'fill-color', '#f8f4f0')
-			}
-		})
-	}
-}
-
-function ApplyColorblindMode(enabled) {
-	if (!map || !map.isStyleLoaded()) return
-
-	if (enabled) {
-		map.setPaintProperty('building', 'fill-color', '#E69F00')           // orange
-		map.setPaintProperty('building-3d', 'fill-extrusion-color', '#E69F00')
-		map.setPaintProperty('water', 'fill-color', '#0072B2')              // blue
-
-		map.getStyle().layers.forEach((layer) => {
-			if (layer.id.startsWith('road_') && layer.type === 'line') {
-				map.setPaintProperty(layer.id, 'line-color', '#F0E442')         // yellow
-			}
-		})
-
-		const landcoverSafe = {
-			landcover_grass: '#009E73',   // bluish-green
-			landcover_wood: '#009E73',
-			landcover_sand: '#E69F00',
-			landcover_ice: '#56B4E9'
-		}
-		map.getStyle().layers.forEach((layer) => {
-			if (landcoverSafe[layer.id]) {
-				map.setPaintProperty(layer.id, 'fill-color', landcoverSafe[layer.id])
-			}
-		})
-	} else {
-		applyMapColors()
-	}
-}
-
-onMounted(() => {
-	map = new MapLibreMap({
-		container: el.value,
-		style: 'https://tiles.openfreemap.org/styles/liberty',
-		center: [103.8198, 1.3521], // Singapore
-		zoom: 16.5,
-		pitch: 56,
-		bearing: -18,
-		maxPitch: 72,
-		minZoom: 10,
-		attributionControl: { compact: true },
-		canvasContextAttributes: { antialias: true },
-		pixelRatio: Math.min(window.devicePixelRatio || 1, 2)
-	})
-
-	map.on('load', async () => {
-		applyMapColors()
-		addQuestLayers(map)
-		setQuestColors(map, colorTheme.value === 'theme')
-		player = createPlayerMarker(map)
-		map.addLayer(new PinLayer({ id: 'mbs-pin', lng: 103.8607, lat: 1.2830 }))
-		mapReady.value = true
-		await store.loadActive()
-		// "On map" from the mission list jumps to that stop; otherwise start on you, or on the whole quest.
-		const focus = store.legs.find((l) => String(l.seq) === String(route.query.focus))
-		if (focus) flyTo(focus)
-		else if (here.value) map.jumpTo({ center: [here.value.lng, here.value.lat], zoom: 17 })
-		else if (store.nextLeg) map.jumpTo({ center: [store.nextLeg.lng, store.nextLeg.lat], zoom: 16 })
-		else overview()
-	})
-	// Dragging the map stops the camera from snapping back to you until you press the crosshair.
-	map.on('dragstart', (e) => { if (e.originalEvent) following.value = false })
-	// Demo-Walk: tap anywhere to walk there instantly.
-	map.on('click', (e) => {
-		if (!geo.fake) return
-		teleport({ lat: e.lngLat.lat, lng: e.lngLat.lng })
-	})
-})
-
-watch(colorTheme, () => {
-	applyMapColors()
-	if (map) setQuestColors(map, colorTheme.value === 'theme')
-})
-
-onMounted(async () => {
-	ui.loadWeather(1.2897, 103.8501) // fills ui.haze and ui.lightning (it handles its own errors)
-	try {
-		const res = await axios.get("https://api.open-meteo.com/v1/forecast?latitude=1.2897&longitude=103.8501&current=temperature_2m,rain,uv_index")
-		weather_data.value = res.data
-	} catch (err) {
-		console.error(err)
-	}
+  // Weather is decorative; a failure must never block the map.
+  ui.loadWeather(1.2897, 103.8501)
+  try {
+    const { data } = await axios.get(
+      'https://api.open-meteo.com/v1/forecast?latitude=1.2897&longitude=103.8501&current=temperature_2m,rain,uv_index'
+    )
+    weatherData.value = data
+  } catch (err) {
+    console.error('[3D_Map] weather fetch failed', err)
+  }
 })
 
 onUnmounted(() => {
-	cancelAnimationFrame(raf)
-	clearTimeout(noFixTimer)
-	clearTimeout(retryTimer)
-	window.removeEventListener('keydown', onKey)
-	window.removeEventListener('keyup', onKeyUp)
-	markers.clear()
-	placeMarkers.forEach(removePlaceMarker)
-	map?.remove()
+  cancelAnimationFrame(raf)
+  clearTimeout(noFixTimer)
+  clearTimeout(retryTimer)
+  clearTimeout(travellerStopTimer)
+  window.removeEventListener('keydown', onDemoKeyDown)
+  window.removeEventListener('keyup', onDemoKeyUp)
+  detachOrbitListeners()
+  markers.clear()
+  pins.clear()
+  map?.remove()
+  map = null
 })
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 7. Map setup & theming
+// ─────────────────────────────────────────────────────────────────────────────
+
+/** Create the MapLibre instance, wire its events, and attach the orbit gesture. */
+function createMap() {
+  map = new MapLibreMap({
+    container: mapContainer.value,
+    style: 'https://tiles.openfreemap.org/styles/liberty',
+    center: [103.8198, 1.3521], // Singapore
+    zoom: 16.5,
+    pitch: 56,
+    bearing: -18,
+    maxPitch: 72,
+    minZoom: 10,
+    // The camera is locked to the traveller: panning/rotating are intentionally
+    // off and replaced by the custom orbit (3D) and free-roam (flat) modes below.
+    dragPan: false,
+    dragRotate: false,
+    keyboard: false,
+    boxZoom: false,
+    attributionControl: { compact: true },
+    canvasContextAttributes: { antialias: true },
+    pixelRatio: Math.min(window.devicePixelRatio || 1, 2)
+  })
+
+  // Pinch still zooms; it just no longer doubles as a two-finger rotate.
+  map.touchZoomRotate.disableRotation()
+  // Scroll/trackpad zoom centres on the screen, not the cursor, so it can't drift
+  // the view off the traveller.
+  map.scrollZoom.enable({ around: 'center' })
+  // The drag-to-orbit handler is pointer-event driven. MapLibre's CSS would give
+  // this canvas `touch-action: pan-x pan-y` (dragPan is off, so its `none` rule
+  // never applies), which lets the browser claim a horizontal touch drag and fire
+  // `pointercancel` mid-gesture. `none` keeps the whole drag as pointer events;
+  // MapLibre's pinch-zoom uses touch events, so it is unaffected.
+  map.getCanvas().style.touchAction = 'none'
+
+  map.on('load', applyMapColors)
+  map.on('load', onMapLoad)
+  map.on('load', () => centerOnMe(false))
+  map.on('load', () => map.addLayer(new PinLayer(MBS_DEMO_PIN)))
+  map.on('load', syncPlayerAvatar)
+
+  map.on('movestart', onMapMoveStart)
+  map.on('moveend', onMapMoveEnd)
+
+  attachOrbitListeners()
+}
+
+/** First style load: add quest layers and start rendering. */
+function onMapLoad() {
+  addQuestLayers(map)
+  player = createPlayerMarker()
+  mapReady.value = true
+}
+
+/**
+ * A real user gesture (pointer/wheel/touch) pauses follow; our own flyTo/easeTo/
+ * jumpTo calls carry no `originalEvent`, so they never fight the camera.
+ */
+function onMapMoveStart(event) {
+  if (event.originalEvent && !flatMode.value) following.value = false
+}
+
+/** When a real gesture ends, settle back onto the traveller (unless free-roaming). */
+function onMapMoveEnd(event) {
+  if (!event.originalEvent || flatMode.value) return
+  following.value = true
+  if (here.value) map.easeTo({ center: [here.value.lng, here.value.lat], duration: 500 })
+}
+
+function attachOrbitListeners() {
+  const canvas = map.getCanvas()
+  canvas.addEventListener('pointerdown', onOrbitPointerDown)
+  canvas.addEventListener('pointermove', onOrbitPointerMove)
+  canvas.addEventListener('pointerup', onOrbitPointerUp)
+  canvas.addEventListener('pointercancel', onOrbitPointerUp)
+}
+
+function detachOrbitListeners() {
+  if (!map) return
+  const canvas = map.getCanvas()
+  canvas.removeEventListener('pointerdown', onOrbitPointerDown)
+  canvas.removeEventListener('pointermove', onOrbitPointerMove)
+  canvas.removeEventListener('pointerup', onOrbitPointerUp)
+  canvas.removeEventListener('pointercancel', onOrbitPointerUp)
+}
+
+/**
+ * Read a CSS custom property from :root, with a fallback. Lets the map reuse the
+ * app's brand tokens instead of carrying a second, drift-prone copy of the hexes.
+ */
+function cssVar(name, fallback) {
+  const value = getComputedStyle(document.documentElement).getPropertyValue(name).trim()
+  return value || fallback
+}
+
+/**
+ * Pick a road colour by layer class. "simple" tiers roads like Google Maps
+ * (orange motorways → white local streets); casing layers get the darker edge.
+ */
+function roadColorFor(layerId, palette) {
+  const classes = palette.roadClasses
+  if (!classes) return palette.road
+
+  const isCasing = layerId.endsWith('_casing') || layerId.endsWith('_hatching')
+  if (layerId.includes('motorway')) return isCasing ? classes.motorwayCasing : classes.motorway
+  if (layerId.includes('trunk_primary')) return isCasing ? classes.primaryCasing : classes.primary
+  if (layerId.includes('secondary_tertiary')) return isCasing ? classes.secondaryCasing : classes.secondary
+  if (layerId.includes('rail')) return classes.rail
+  if (layerId.includes('path_pedestrian')) return classes.path
+  // Minor streets, ramps/links and service roads all read as plain local streets.
+  return isCasing ? classes.minorCasing : classes.minor
+}
+
+/** Apply the selected palette to background, water, buildings, roads and land cover. */
+function applyMapColors() {
+  if (!map || !map.isStyleLoaded()) return
+
+  const palette = mapTheme.value === 'theme' ? MAP_PALETTE.theme : MAP_PALETTE.simple
+
+  map.setPaintProperty('background', 'background-color', palette.background)
+  map.setPaintProperty('water', 'fill-color', palette.water)
+  map.setPaintProperty('building', 'fill-color', palette.building)
+  map.setPaintProperty('building-3d', 'fill-extrusion-color', palette.building)
+
+  for (const layer of map.getStyle().layers) {
+    if (layer.id.startsWith('road_') && layer.type === 'line') {
+      map.setPaintProperty(layer.id, 'line-color', roadColorFor(layer.id, palette))
+    }
+  }
+
+  for (const layer of map.getStyle().layers) {
+    if (palette.landcover[layer.id]) {
+      map.setPaintProperty(layer.id, 'fill-color', palette.landcover[layer.id])
+    } else if (layer.id === 'park' && layer.type === 'fill') {
+      map.setPaintProperty(layer.id, 'fill-color', palette.parkFill)
+    } else if (layer.id.startsWith('landuse_') && layer.type === 'fill') {
+      map.setPaintProperty(layer.id, 'fill-color', palette.landuseFill)
+    }
+  }
+}
+
+/**
+ * Okabe–Ito high-contrast palette for colourblind users. Turning it off restores
+ * the normal palette for the current theme.
+ */
+function setColorblindMode(enabled) {
+  colorblindMode.value = enabled
+  if (!map || !map.isStyleLoaded()) return
+
+  if (!enabled) {
+    applyMapColors()
+    return
+  }
+
+  map.setPaintProperty('building', 'fill-color', '#E69F00')            // orange
+  map.setPaintProperty('building-3d', 'fill-extrusion-color', '#E69F00')
+  map.setPaintProperty('water', 'fill-color', '#0072B2')               // blue
+
+  for (const layer of map.getStyle().layers) {
+    if (layer.id.startsWith('road_') && layer.type === 'line') {
+      map.setPaintProperty(layer.id, 'line-color', '#F0E442')          // yellow
+    }
+  }
+
+  const safeLandcover = {
+    landcover_grass: '#009E73', // bluish-green
+    landcover_wood: '#009E73',
+    landcover_sand: '#E69F00',
+    landcover_ice: '#56B4E9'
+  }
+  for (const layer of map.getStyle().layers) {
+    if (safeLandcover[layer.id]) {
+      map.setPaintProperty(layer.id, 'fill-color', safeLandcover[layer.id])
+    }
+  }
+}
+
+/** Show or hide the 2D/3D building layers. */
+function setBuildingsVisible(show) {
+  buildingsVisible.value = show
+  const visibility = show ? 'visible' : 'none'
+  for (const layerId of ['building', 'building-3d']) {
+    if (map?.getLayer(layerId)) map.setLayoutProperty(layerId, 'visibility', visibility)
+  }
+}
+
+/**
+ * Switch between the guided 3D view and the flat free-roam view.
+ *
+ * Flat: panning on, follow off, 2D dots instead of towers/traveller — you can
+ * look around the whole island.
+ * 3D: panning locked, follow resumed, traveller and tower pins back.
+ */
+function setFlatMode(isFlat) {
+  flatMode.value = isFlat
+
+  if (isFlat) {
+    following.value = false
+    map.dragPan.enable()
+    animateToFlat()
+    showTraveller3D.value = false
+    showStopPins3D.value = false
+    return
+  }
+
+  map.dragPan.disable()
+  following.value = true
+  if (!geo.fake) startGps()
+  if (here.value) {
+    map.flyTo({ center: [here.value.lng, here.value.lat], zoom: 18, pitch: 56, bearing: -18, duration: 1200 })
+  } else {
+    animateTo3D()
+  }
+  showTraveller3D.value = true
+  showStopPins3D.value = true
+}
+
+function toggleFlatMode() {
+  setFlatMode(!flatMode.value)
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 8. Rendering
+// ─────────────────────────────────────────────────────────────────────────────
+
+/** Redraw everything that depends on the mission: avatars, pins, route, fence, zoom. */
+function drawMission() {
+  if (!mapReady.value) return
+  syncPlayerAvatar()
+  syncStopVisuals()
+  drawRoute()
+  drawFence()
+  updateMinZoomForStops()
+}
+
+/**
+ * Panning is locked, so zooming out is the only way to see a distant stop. Cap the
+ * minimum zoom at whatever fits every stop (plus the traveller) on screen.
+ */
+function updateMinZoomForStops() {
+  if (!map) return
+
+  const points = missionStore.legs.map((leg) => [leg.lng, leg.lat])
+  if (here.value) points.push([here.value.lng, here.value.lat])
+  if (points.length < 2) {
+    map.setMinZoom(10)
+    return
+  }
+
+  const bounds = points.reduce(
+    (box, coordinate) => box.extend(coordinate),
+    new LngLatBounds(points[0], points[0])
+  )
+  const camera = map.cameraForBounds(bounds, { padding: 60 })
+  map.setMinZoom(camera ? Math.min(camera.zoom, 17) : 10)
+}
+
+/** Show exactly one stop representation at a time: 3D towers or flat dots. */
+function syncStopVisuals() {
+  if (!mapReady.value) return
+
+  if (showStopPins3D.value) {
+    // An empty leg list tears the other representation down.
+    syncStopMarkers(map, markers, [], next.value, flyTo)
+    syncStopPins(map, pins, missionStore.legs)
+  } else {
+    syncStopPins(map, pins, [])
+    syncStopMarkers(map, markers, missionStore.legs, next.value, flyTo)
+  }
+}
+
+/** Draw the check-in ring around the next stop (wider at home). */
+function drawFence() {
+  if (!map) return
+  const target = next.value
+  const radius = target?.kind === 'return' ? HOME_RADIUS_M : (check.value?.radius ?? 80)
+  setFence(map, target, radius, !!check.value?.ok)
+}
+
+/**
+ * Render the route we actually know: the live leg once its real street geometry
+ * has resolved, plus every cached planned segment. Anything unresolved is simply
+ * not drawn — never a straight-line fallback.
+ */
+function drawRoute() {
+  if (!mapReady.value) return
+
+  const segments = []
+  const target = next.value
+  if (target) {
+    const origin = here.value || previousPoint(target)
+    const live = liveRoute.value
+    if (live && live.to === target) {
+      segments.push([[origin.lng, origin.lat], ...live.coords])
+    }
+  }
+  for (const segment of plannedSegments.value) segments.push(segment.coords)
+
+  const data = {
+    type: 'FeatureCollection',
+    features: segments.map((coordinates) => ({
+      type: 'Feature',
+      geometry: { type: 'LineString', coordinates },
+      properties: {}
+    }))
+  }
+
+  const source = map.getSource(ROUTE_SOURCE_ID)
+  if (source) {
+    source.setData(data)
+    return
+  }
+
+  map.addSource(ROUTE_SOURCE_ID, { type: 'geojson', data })
+  map.addLayer({
+    id: ROUTE_LAYER_ID,
+    type: 'line',
+    source: ROUTE_SOURCE_ID,
+    layout: { 'line-join': 'round', 'line-cap': 'round' },
+    paint: {
+      'line-color': '#ff1dce',
+      'line-width': 5,
+      'line-opacity': 0.9
+    }
+  })
+}
+
+/** Where the traveller was before `leg`: the previous leg, or the trip origin. */
+function previousPoint(leg) {
+  const legs = missionStore.legs
+  const index = legs.indexOf(leg)
+  return index > 0 ? legs[index - 1] : mission.value.origin
+}
+
+/** Stable identity for an adjacent leg pair, independent of array position. */
+function legKey(a, b) {
+  return `${a.seq}:${a.place_id || 'home'}>${b.seq}:${b.place_id || 'home'}`
+}
+
+/** Rebuild `plannedSegments` from whatever is already in the cache. */
+function syncPlannedSegments(pendingLegs) {
+  plannedSegments.value = pendingLegs
+    .slice(1)
+    .map((leg, index) => {
+      const segment = plannedRouteCache.get(legKey(pendingLegs[index], leg))
+      return segment && { coords: segment.coords, mode: segment.mode, active: false }
+    })
+    .filter(Boolean)
+
+  drawRoute()
+}
+
+/**
+ * Fetch street geometry for every later pending leg, then redraw. The cache makes
+ * this stale-while-revalidate: existing geometry renders immediately, fresh
+ * results replace it as they arrive, and a failed fetch never erases a good route.
+ */
+async function refreshPlannedRoutes() {
+  const pendingLegs = missionStore.legs.filter((leg) => leg.status === 'pending')
+
+  // Drop cache entries for pairs that no longer exist (replans, skips, reorders).
+  const activeKeys = new Set(pendingLegs.slice(1).map((leg, index) => legKey(pendingLegs[index], leg)))
+  for (const key of plannedRouteCache.keys()) {
+    if (!activeKeys.has(key)) plannedRouteCache.delete(key)
+  }
+
+  syncPlannedSegments(pendingLegs)
+
+  await Promise.all(
+    pendingLegs.slice(1).map(async (leg, index) => {
+      const previous = pendingLegs[index]
+      const resolveRoute = ROUTE_BY_MODE[leg.travel_mode]
+      if (!resolveRoute) return
+
+      const route = await resolveRoute(previous, leg)
+      if (!route) return // keep the cached geometry, if any
+
+      plannedRouteCache.set(legKey(previous, leg), { coords: route.coords, mode: leg.travel_mode })
+      syncPlannedSegments(pendingLegs)
+    })
+  )
+}
+
+/**
+ * Refresh the geometry for the leg currently being walked. Throttled while moving
+ * (Demo-Walk at 20× would otherwise hammer the routers) and skipped when the
+ * traveller has barely moved or the target has not changed.
+ */
+async function refreshLiveRoute(force = false) {
+  clearTimeout(retryTimer)
+
+  const target = next.value
+  const travelMode = liveTravel.value?.mode
+  const resolveRoute = ROUTE_BY_MODE[travelMode]
+
+  // Nothing to draw yet: no target, no fix, or no resolver for this mode.
+  if (!target || !here.value || !resolveRoute) return drawRoute()
+
+  const current = liveRoute.value
+  const movedMeters = current ? distanceM(current.from, here.value) : Infinity
+  if (!force && current?.to === target && movedMeters < 25) return drawRoute()
+
+  const waitMs = 3000 - (Date.now() - lastRouteAt)
+  if (!force && waitMs > 0) {
+    retryTimer = window.setTimeout(() => refreshLiveRoute(), waitMs)
+    return drawRoute()
+  }
+  lastRouteAt = Date.now()
+
+  const from = { ...here.value }
+  const route = await resolveRoute(from, target)
+  // Ignore late responses for a target that is no longer next.
+  if (route && next.value === target) {
+    liveRoute.value = { coords: route.coords, from, to: target }
+  }
+  drawRoute()
+}
+
+/**
+ * Decide which avatar is visible: the 3D traveller or the flat pulsing dot. Never
+ * both. Neither appears before a GPS fix — that would claim a position we do not
+ * actually know.
+ */
+function syncPlayerAvatar() {
+  if (!mapReady.value) return
+
+  const position = here.value
+
+  if (showTraveller3D.value) {
+    player?.remove() // safe every call; no-op if it was never added
+    if (!position) return
+
+    if (!traveller3D) {
+      traveller3D = new TravellerLayer({
+        id: TRAVELLER_LAYER_ID,
+        lng: position.lng,
+        lat: position.lat,
+        outfit: character.outfit,
+        fur: character.fur,
+        hat: character.hat,
+        eyewear: character.eyewear
+      })
+      map.addLayer(traveller3D)
+    }
+
+    moveTraveller(position)
+    return
+  }
+
+  // Switched to the flat dot: tear the character down (onRemove frees geometry).
+  if (traveller3D) {
+    if (map.getLayer(TRAVELLER_LAYER_ID)) map.removeLayer(TRAVELLER_LAYER_ID)
+    traveller3D = null
+    lastTravellerAt = null
+    clearTimeout(travellerStopTimer)
+  }
+  if (position) player.setLngLat([position.lng, position.lat]).addTo(map)
+}
+
+/**
+ * Keep the 3D character on the latest fix, facing the direction of travel and
+ * playing the walk cycle while he is actually moving.
+ */
+function moveTraveller(position) {
+  if (!traveller3D) return
+  traveller3D.setLngLat(position.lng, position.lat)
+
+  // Only turn on a real step: GPS jitter would otherwise spin him on the spot.
+  if (lastTravellerAt && distanceM(lastTravellerAt, position) > 3) {
+    traveller3D.setBearing(bearingBetween(lastTravellerAt, position))
+    traveller3D.setMoving(true)
+
+    // Fixes stop arriving when you stop walking, so re-arm an idle timer instead.
+    clearTimeout(travellerStopTimer)
+    travellerStopTimer = window.setTimeout(() => traveller3D?.setMoving(false), 2500)
+    lastTravellerAt = { ...position }
+  } else if (!lastTravellerAt) {
+    lastTravellerAt = { ...position }
+  }
+}
+
+/**
+ * Drag-to-orbit for the guided 3D view: horizontal drag spins the bearing, vertical
+ * drag tilts the pitch, both pivoting on the traveller so the world rotates around
+ * them instead of sliding underneath.
+ *
+ * Only the primary pointer drives this. A second finger means pinch-zoom, so the
+ * orbit steps aside and MapLibre's touchZoomRotate owns the gesture.
+ */
+function onOrbitPointerDown(event) {
+  if (!map || flatMode.value) return
+  if (!event.isPrimary) {
+    orbit = null
+    return
+  }
+
+  event.preventDefault()
+  map.getCanvas().setPointerCapture?.(event.pointerId)
+  orbit = {
+    pointerId: event.pointerId,
+    x: event.clientX,
+    y: event.clientY,
+    bearing: map.getBearing(),
+    pitch: map.getPitch()
+  }
+  // Stop the GPS follow watcher from recentring mid-gesture and fighting the orbit.
+  following.value = false
+}
+
+function onOrbitPointerMove(event) {
+  if (!orbit || !map || event.pointerId !== orbit.pointerId) return
+
+  const dx = event.clientX - orbit.x
+  const dy = event.clientY - orbit.y
+  const around = here.value ? [here.value.lng, here.value.lat] : undefined
+
+  map.jumpTo({
+    bearing: orbit.bearing + dx * 0.7,
+    pitch: Math.min(map.getMaxPitch(), Math.max(0, orbit.pitch - dy * 0.35)),
+    around
+  })
+}
+
+function onOrbitPointerUp(event) {
+  if (!orbit || event.pointerId !== orbit.pointerId) return
+
+  map?.getCanvas().releasePointerCapture?.(event.pointerId)
+  orbit = null
+  following.value = true
+  // Pivoting on a non-centre `around` nudges `center`; settle back onto the traveller.
+  if (here.value && map) map.easeTo({ center: [here.value.lng, here.value.lat], duration: 300 })
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 9. Camera
+// ─────────────────────────────────────────────────────────────────────────────
+
+/** Fly to a stop, and stop following until the user recentres. */
+function flyTo(place, zoom = 17) {
+  map?.flyTo({ center: [place.lng, place.lat], zoom, duration: 1200 })
+  following.value = false
+}
+
+/** Recentre on the traveller (or explain why we cannot). */
+function centerOnMe(notifyOnFail = true) {
+  following.value = true
+  if (!geo.fake) startGps()
+
+  if (here.value) {
+    map.flyTo({ center: [here.value.lng, here.value.lat], zoom: 18, duration: 1500 })
+  } else if (notifyOnFail) {
+    ui.toast('Waiting for GPS… Allow location access, or turn on Demo-Walk.', 'dark')
+  }
+}
+
+function zoomIn() {
+  map.zoomIn({ duration: 1500 })
+}
+
+function zoomOut() {
+  map.zoomTo(12, { duration: 1500 })
+}
+
+function animateToFlat() {
+  map.easeTo({ pitch: 0, bearing: 0, duration: 600 })
+}
+
+function animateTo3D() {
+  map.easeTo({ pitch: 56, bearing: -18, duration: 600 })
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 10. Mission actions
+// ─────────────────────────────────────────────────────────────────────────────
+
+/** Stamp the next stop, or check in at home. */
+async function stampNextStop() {
+  const target = next.value
+  if (!target || stamping.value) return
+  if (!check.value?.ok) return ui.toast(check.value?.message || 'Not in range yet.', 'warning', 3500)
+
+  stamping.value = true
+  try {
+    if (target.kind === 'return') await missionStore.completeReturn()
+    else await missionStore.stamp(target)
+    liveRoute.value = null
+  } catch (err) {
+    ui.toast(err.message, 'warning', 4500)
+  } finally {
+    stamping.value = false
+  }
+}
+
+/** Rewrite the future legs ("I'm behind", "less walking", "swap", "rain"). */
+async function replan(mode) {
+  helpOpen.value = false
+  await missionStore.replan(mode)
+}
+
+/** Skip the next visit (return legs cannot be skipped). */
+async function skipNextStop() {
+  helpOpen.value = false
+  if (next.value?.kind !== 'visit') return
+  await missionStore.skip(next.value)
+  ui.toast('Stop skipped. On to the next one.', 'dark')
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 11. Demo-Walk (fake GPS you move with WASD / taps)
+// ─────────────────────────────────────────────────────────────────────────────
+
+/** Initial bearing from `a` to `b`, in degrees clockwise from north. */
+function bearingDegrees(a, b) {
+  const rad = (degrees) => (degrees * Math.PI) / 180
+  const y = Math.sin(rad(b.lng - a.lng)) * Math.cos(rad(b.lat))
+  const x =
+    Math.cos(rad(a.lat)) * Math.sin(rad(b.lat)) -
+    Math.sin(rad(a.lat)) * Math.cos(rad(b.lat)) * Math.cos(rad(b.lng - a.lng))
+  return (Math.atan2(y, x) * 180) / Math.PI
+}
+
+/** A point `meters` from `origin` along `bearing` (degrees). */
+function pointAtOffset(origin, bearing, meters) {
+  const [lng, lat] = destination(point([origin.lng, origin.lat]), meters / 1000, bearing, {
+    units: 'kilometers'
+  }).geometry.coordinates
+  return { lat, lng }
+}
+
+/** A spot `meters` short of the next stop, on the line from the previous one. */
+function pointNearNextStop(meters) {
+  const target = next.value
+  if (!target) return mission.value?.origin || null
+  const previous = previousPoint(target)
+  return pointAtOffset(target, bearingDegrees(target, previous), meters)
+}
+
+/** Toggle Demo-Walk (fake GPS) on/off. */
+function toggleDemoWalk() {
+  if (geo.fake) {
+    setFake(false)
+    ui.toast('Using real GPS.', 'dark')
+    return
+  }
+
+  setFake(true, here.value || pointNearNextStop(200) || undefined)
+  following.value = true
+  ui.toast('Demo-Walk on: use WASD / arrow keys, or tap the map to move.', 'dark', 4000)
+}
+
+/** Teleport a short distance before the next stop (demo shortcut). */
+function jumpNearNextStop(meters) {
+  const place = pointNearNextStop(meters)
+  if (!place) return
+  if (!geo.fake) setFake(true)
+  teleport(place)
+  following.value = true
+}
+
+function onDemoKeyDown(event) {
+  if (!geo.fake || !wasdEnabled.value || event.target.closest?.('input, textarea, select')) return
+  const key = event.key.toLowerCase()
+  if (key in KEY_DIRECTIONS) {
+    keys.add(key)
+    event.preventDefault()
+  }
+}
+
+function onDemoKeyUp(event) {
+  keys.delete(event.key.toLowerCase())
+}
+
+/** Frame loop: move the fake GPS while WASD keys are held, then request the next frame. */
+function demoWalkLoop(timestamp) {
+  const deltaMs = Math.min(100, timestamp - (lastFrame || timestamp))
+  lastFrame = timestamp
+
+  if (keys.size && geo.fake && hasFix() && map) {
+    let directionX = 0
+    let directionY = 0
+    for (const key of keys) {
+      const angle = ((KEY_DIRECTIONS[key] + map.getBearing()) * Math.PI) / 180
+      directionX += Math.sin(angle)
+      directionY += Math.cos(angle)
+    }
+
+    if (directionX || directionY) {
+      const metersPerSecond = 1.4 * demoSpeed.value // walking pace × demo multiplier
+      const bearing = (Math.atan2(directionX, directionY) * 180) / Math.PI
+      teleport(pointAtOffset(here.value, bearing, (metersPerSecond * deltaMs) / 1000))
+      following.value = true
+    }
+  }
+
+  raf = requestAnimationFrame(demoWalkLoop)
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 12. Watchers
+// ─────────────────────────────────────────────────────────────────────────────
+
+// Remember the card's open/closed state across visits to other pages.
+watch(showMissionCard, (open) => writeMissionCardFlag(open))
+
+// A new GPS fix: move the avatar and keep the camera on it unless the user is looking around.
+watch(() => [here.value?.lat, here.value?.lng], onHereChanged)
+
+// Stamps, skips, replans and reorders change the legs: redraw everything.
+watch(
+  () => [
+    mapReady.value,
+    mission.value?.id,
+    missionStore.legs.map((leg) => `${leg.seq}${leg.status}${leg.place_id}`).join()
+  ],
+  onMissionLegsChanged
+)
+
+watch(check, drawFence)
+watch(showTraveller3D, syncPlayerAvatar)
+watch(showStopPins3D, syncStopVisuals)
+
+// Saving a look in Me → Character recolours the existing character in place.
+watch(
+  () => [character.outfit, character.fur, character.hat, character.eyewear],
+  syncTravellerAppearance
+)
+
+watch(mapTheme, () => {
+  applyMapColors()
+  if (map) setQuestColors(map, mapTheme.value === 'theme')
+})
+
+function onHereChanged() {
+  if (!mapReady.value || !here.value) return
+
+  syncPlayerAvatar()
+
+  if (following.value) {
+    // Following always means street level, even if the user had zoomed out.
+    const zoom = map.getZoom() < 15.5 ? 16.8 : undefined
+    if (geo.fake && !zoom) map.jumpTo({ center: [here.value.lng, here.value.lat] })
+    else map.easeTo({ center: [here.value.lng, here.value.lat], zoom, duration: zoom ? 900 : 600 })
+  }
+
+  drawFence()
+  refreshLiveRoute()
+}
+
+function onMissionLegsChanged() {
+  drawMission()
+  refreshPlannedRoutes()
+  refreshLiveRoute(true)
+}
+
+function syncTravellerAppearance() {
+  if (!traveller3D) return
+  // setOutfit rebuilds every slot including head/face, so hats and glasses go on after.
+  traveller3D.setOutfit(character.outfit)
+  traveller3D.setFur(character.fur)
+  traveller3D.setHat(character.hat)
+  traveller3D.setEyewear(character.eyewear)
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 13. Helpers
+// ─────────────────────────────────────────────────────────────────────────────
+
+// The next-stop card remembers whether it was left open. '1' means open; any
+// other value (including a first visit) means closed. localStorage can be
+// unavailable, so both operations fail safe to "closed".
+function readMissionCardFlag() {
+  try {
+    return localStorage.getItem('zoot.mapMissionCard') === '1'
+  } catch {
+    return false
+  }
+}
+
+function writeMissionCardFlag(open) {
+  try {
+    localStorage.setItem('zoot.mapMissionCard', open ? '1' : '0')
+  } catch {
+    // Ignore: the preference just will not persist.
+  }
+}
 </script>
-
 <template>
-	<div ref="el" class="quest-map"></div>
+  <!-- MapLibre renders into this element; every overlay below is plain DOM on top. -->
+  <div ref="mapContainer" class="quest-map"></div>
 
-	<div id="top-left" class="badge rounded-pill text-bg-warning">
-		<img id="img-pill" src="/brand/zoot-badge-192.png" alt="" width="25" height="25">
-		Singapore
-	</div>
+  <!-- ── Top-left status pills ─────────────────────────────────────────── -->
+  <div id="top-left" class="badge rounded-pill text-bg-warning">
+    <img id="img-pill" src="/brand/zoot-badge-192.png" alt="" width="25" height="25">
+    Singapore
+  </div>
 
-	<div id="top-left2" class="badge rounded-pill text-bg-warning">
-		<span class="wx-item bi bi-sun-fill" title="Temperature">{{ weather_data?.current?.temperature_2m }}°C</span>
-		<span class="wx-item bi bi-cloud-rain-heavy-fill" title="Rainfall now">{{ weather_data?.current?.rain }} mm</span>
-		<span v-if="haze" class="wx-item bi bi-wind" :title="`PSI ${haze.psi} (${haze.label})`">
-			{{ haze.psi }}<span class="psi-dot" :class="`psi-${haze.level}`"></span>
-		</span>
-		<span v-if="lightningNearby" class="wx-item bi bi-lightning-charge-fill"
-			:title="`Lightning ${ui.shownLightning.nearestKm} km away`"></span>
-	</div>
+  <div id="top-left2" class="badge rounded-pill text-bg-warning">
+    <span class="bi bi-sun-fill">{{ weatherData?.current?.temperature_2m }}C</span>
+    <span class="bi bi-cloud-rain-heavy-fill">&nbsp;{{ weatherData?.current?.rain }}</span>
+  </div>
 
+  <button id="top-left3" class="btn btn-warning rounded-pill" @click="toggleDemoWalk">
+    {{ demo ? 'Use real GPS' : 'Enable Demo-Walk' }}
+  </button>
 
-	<button id="top-left3" @click="toggleDemo" class="btn btn-warning rounded-pill">{{ demo ? 'Use real GPS' : 'Enable Demo - Walk' }}</button>
+  <!-- ── Right stack: countdown + map tools ────────────────────────────── -->
+  <div id="right-stack">
+    <!-- Two explicit class flags instead of one derived string, so the red/amber
+         thresholds stay visible here and in useMissionNav. -->
+    <div
+      id="top-right"
+      class="badge rounded-4 text-bg-warning"
+      :class="{ red: isTimeCritical, amber: isTimeWarning }"
+      role="timer"
+    >
+      <span class="bi-airplane-fill"> &nbsp; Time to Travel</span>
+      <br>
+      <div class="time_left_from_trip mono">{{ countdown || '--:--:--' }}</div>
+      <div class="time_back_from_trip">
+        {{ leaveBy ? `Head back by ${formatTime(leaveBy)}` : mission ? 'Quest complete' : 'No active quest' }}
+      </div>
+    </div>
 
-	<div id="top-right" class="badge rounded-4 text-bg-warning" :class="timeLevel" role="timer">
-		<span class="bi-airplane-fill"> &nbsp; Time to Travel</span>
-		<br>
-		<div class="time_left_from_trip mono">{{ countdown || '--:--:--' }}</div>
-		<div class="time_back_from_trip">{{ leaveBy ? `Head back by ${formatTime(leaveBy)}` : m ? 'Quest complete' : 'Noactive quest' }}</div>
-	</div>
+    <div id="MoreInfo" class="map-btn" @click="mapToolsOpen = !mapToolsOpen">
+      <i class="bi bi-list"></i>
+    </div>
 
-	<button id="TestRoute" class="btn btn-warning rounded-pill" @click="showRouteTo([103.8607, 1.2834])">Test Route (MBS)</button>
+    <div class="map-tools" :class="{ open: mapToolsOpen }">
+      <div id="zoom" class="map-btn" @click="zoomIn">
+        <i class="bi bi-zoom-in"></i>
+      </div>
 
-	<button id="MoreInfo" class="map-btn" type="button" @click="SideInfo = !SideInfo" aria-label="Map tools"
-		title="Map tools">
-		<i class="bi bi-list"></i>
-	</button>
+      <div id="outlook" class="map-btn" @click="zoomOut">
+        <i class="bi bi-arrows-fullscreen"></i>
+      </div>
 
-	<div class="map-tools" :class="{ open: SideInfo }">
-		<button id="zoom" class="map-btn" type="button" @click="next && flyTo(next)" :disabled="!next"
-			aria-label="Zoom to next stop" title="Zoom to next stop">
-			<i class="bi bi-zoom-in"></i>
-		</button>
+      <div id="RealGps" class="map-btn" @click="centerOnMe()">
+        <i class="bi bi-crosshair"></i>
+      </div>
 
-		<button id="outlook" class="map-btn" type="button" @click="overview" aria-label="Show whole quest"
-			title="Show whole quest">
-			<i class="bi bi-arrows-fullscreen"></i>
-		</button>
+      <!-- Toggles between the guided 3D view and flat free-roam. -->
+      <div id="TopView" class="map-btn" @click="toggleFlatMode()">
+        <i class="bi-map"></i>
+      </div>
+    </div>
+  </div>
 
-		<button id="RealGps" class="map-btn" :class="{ active: following }" type="button" @click="recenter"
-			aria-label="Follow my location" title="Follow my location">
-			<i class="bi bi-crosshair"></i>
-		</button>
+  <!-- ── Next-stop card (the "center console") ─────────────────────────── -->
+  <!-- Purely presentational: mission/GPS values come in as props and every button
+       emits an event, keeping map + navigation state owned by this view. -->
+  <Transition name="mission-pop">
+    <MissionInfoCard
+      v-if="showMissionCard"
+      :mission="mission"
+      :next="next"
+      :stop-number="stopNumber"
+      :live-travel="liveTravel"
+      :distance="distance"
+      :late-by="lateBy"
+      :guidance="guidance"
+      :check="check"
+      :stamping="stamping"
+      :stamped-count="missionStore.stampedCount"
+      :total-visits="missionStore.visitLegs.length"
+      :mode-icon="modeIcon"
+      :format-distance="formatDistance"
+      @plan="router.push('/plan')"
+      @open-passport="router.push('/passport')"
+      @stamp="stampNextStop"
+      @change-map-style="mapStyleOpen = !mapStyleOpen"
+      @need-help="helpOpen = true"
+      @close="showMissionCard = false"
+    />
+  </Transition>
 
-		<button id="TopView" class="map-btn" type="button" v-on:click="Go3D = !Go3D, View(Go3D)"
-			aria-label="Toggle top-down view" title="Toggle top-down view">
-			<i class="bi-map"></i>
-		</button>
-	</div>
+  <!-- ── Demo-Walk controls (fake GPS, dev/demo only) ──────────────────── -->
+  <div v-if="demo" id="demo-controls" class="rounded-4">
+    <div class="demo-row">
+      <span class="demo-label">Speed</span>
+      <button class="btn rounded-pill btn-sm" :class="demoSpeed === 1 ? 'btn-warning' : 'btn-outline-warning'" @click="demoSpeed = 1">1x</button>
+      <button class="btn rounded-pill btn-sm" :class="demoSpeed === 6 ? 'btn-warning' : 'btn-outline-warning'" @click="demoSpeed = 6">6x</button>
+      <button class="btn rounded-pill btn-sm" :class="demoSpeed === 20 ? 'btn-warning' : 'btn-outline-warning'" @click="demoSpeed = 20">20x</button>
+    </div>
+    <div class="demo-row">
+      <span class="demo-label">WASD movement</span>
+      <button class="btn rounded-pill btn-sm" :class="wasdEnabled === true ? 'btn-warning' : 'btn-outline-warning'" @click="wasdEnabled = true">Yes</button>
+      <button class="btn rounded-pill btn-sm" :class="wasdEnabled === false ? 'btn-warning' : 'btn-outline-warning'" @click="wasdEnabled = false">No</button>
+    </div>
+    <div class="demo-row">
+      <span class="demo-label">CheckPoint</span>
+      <button class="btn rounded-pill btn-sm btn-outline-warning" :disabled="!next" @click="jumpNearNextStop(200)">Near</button>
+      <button class="btn rounded-pill btn-sm btn-outline-warning" :disabled="!next" @click="jumpNearNextStop(25)">At stop</button>
+    </div>
+    <div class="demo-hint">Tap the map to walk there.</div>
+  </div>
 
-	<div id="CenterInfo" class="rounded-4">
-		<!-- Social quest: "With Mei until 15:40", Go solo, members' live locations -->
-		<QuestCoopChip :get-map="() => (mapReady ? map : null)" />
-		<!-- No quest yet -->
-		<div v-if="!m" class="row align-items-center">
-			<div class="col-12">
-				<div class="stop-meta">No active quest</div>
-				<div class="stop-title">Plan a layover first</div>
-				<div class="stop-near">Your stops, route and stamps show up here once you build a quest.</div>
-				<button class="btn btn-warning btn-sm mt-3" @click="router.push('/plan')"><i class="bi bi-magic"></i>
-					Plan a layover</button>
-			</div>
-		</div>
+  <!-- ── "Need help?" replan dialog ────────────────────────────────────── -->
+  <template v-if="helpOpen">
+    <div class="map-backdrop" @click="helpOpen = false"></div>
+    <div id="HelpPop" class="rounded-4" role="dialog" aria-label="Need help?">
+      <div class="demo-label mb-2">Change the plan</div>
+      <p class="help-note">Stamped stops stay. Only the stops ahead get rewritten from where you are now.</p>
+      <button class="btn btn-warning btn-sm w-100 mb-2" :disabled="missionStore.status === 'planning'" @click="replan('behind')"><i class="bi bi-hourglass-split"></i> I'm behind schedule</button>
+      <button class="btn btn-warning btn-sm w-100 mb-2" :disabled="missionStore.status === 'planning'" @click="replan('less-walking')"><i class="bi bi-person-walking"></i> Less walking</button>
+      <button class="btn btn-warning btn-sm w-100 mb-2" :disabled="missionStore.status === 'planning' || next?.kind !== 'visit'" @click="replan('swap')"><i class="bi bi-shuffle"></i> Swap this stop</button>
+      <button class="btn btn-warning btn-sm w-100 mb-2" :disabled="missionStore.status === 'planning'" @click="replan('rain')"><i class="bi bi-cloud-rain-heavy-fill"></i> It's raining</button>
+      <button class="btn btn-outline-warning btn-sm w-100 mb-2" :disabled="next?.kind !== 'visit'" @click="skipNextStop"><i class="bi bi-skip-forward-fill"></i> Skip this stop</button>
+      <button class="btn btn-outline-warning btn-sm w-100" @click="router.push(mission ? `/mission/${mission.id}` : '/plan')"><i class="bi bi-list-ol"></i> See full itinerary</button>
+      <div v-if="missionStore.status === 'planning'" class="help-note mt-2">{{ missionStore.statusText || 'Replanning…' }}</div>
+    </div>
+  </template>
 
-		<!-- Every stop done and back home -->
-		<div v-else-if="!next" class="row align-items-center">
-			<div class="col-12">
-				<div class="stop-meta">Quest complete &middot; {{ store.stampedCount }}/{{ store.visitLegs.length }}
-					stamped</div>
-				<div class="stop-title">{{ m.title }}</div>
-				<div class="stop-near">Nice run. Your chops are in the passport.</div>
-				<button class="btn btn-warning btn-sm mt-3" @click="router.push('/passport')"><i class="bi bi-book"></i>
-					Open passport</button>
-			</div>
-		</div>
+  <!-- ── Map appearance dialog ─────────────────────────────────────────── -->
+  <div v-if="mapStyleOpen" class="map-backdrop" @click="mapStyleOpen = false"></div>
 
-		<!-- Heading to a stop (or home) -->
-		<div v-else class="row align-items-center">
-			<div class="col-7 col-sm-8">
-				<div class="stop-meta">
-					<template v-if="next.kind !== 'visit'">Head home &middot; </template>
-					<span class="bi" :class="modeIcon[liveTravel?.mode || next.travel_mode]"></span> {{
-						liveTravel?.minutes ??
-						next.travel_min }} min
-					<template v-if="next.kind === 'visit'"> &middot; Stay {{ next.stay_min }} min</template>
-				</div>
-				<div class="stop-title">{{ next.name }}</div>
-				<div class="stop-dist">
-					<template v-if="distance != null">{{ formatDist(distance) }} &middot; </template>
-					<span v-if="lateBy == null" class="muted">locating you…</span>
-					<span v-else-if="lateBy > 0" class="behind">{{ lateBy }} min behind plan</span>
-					<span v-else class="ontime">on time</span>
-				</div>
-				<div v-if="guidance" class="stop-guide"><i class="bi" :class="guidance.icon"></i> {{ guidance.text }}
-				</div>
-				<div class="stop-near">{{ check?.message }}</div>
-			</div>
-			<div class="col-5 col-sm-4 d-flex justify-content-end">
-				<button class="stamp-btn" :class="{ ready: check?.ok }" :disabled="stamping" @click="stampNext"
-					:aria-label="next.kind === 'return' ? 'Check in back home' : `Stamp ${next.name}`">
-					<span class="stamp-circle"><i class="bi"
-							:class="next.kind === 'return' ? 'bi-house-check-fill' : 'bi-patch-check-fill'"></i></span>
-					<span class="stamp-label">{{ stamping ? '…' : next.kind === 'return' ? "I'm back" : 'Stamp'
-						}}</span>
-				</button>
-			</div>
+  <div id="MapPop" class="rounded-4" v-if="mapStyleOpen">
+    <div class="demo-row">
+      <span class="demo-label">3D Mode</span>
+      <button class="btn rounded-pill btn-sm" :class="buildingsVisible === true ? 'btn-warning' : 'btn-outline-warning'" @click="setBuildingsVisible(true)">On</button>
+      <button class="btn rounded-pill btn-sm" :class="buildingsVisible === false ? 'btn-warning' : 'btn-outline-warning'" @click="setBuildingsVisible(false)">Off</button>
+    </div>
+    <div class="demo-row">
+      <span class="demo-label">Color Theme</span>
+      <button class="btn rounded-pill btn-sm" :class="mapTheme === 'theme' ? 'btn-warning' : 'btn-outline-warning'" @click="mapTheme = 'theme'">Zoot</button>
+      <button class="btn rounded-pill btn-sm" :class="mapTheme === 'simple' ? 'btn-warning' : 'btn-outline-warning'" @click="mapTheme = 'simple'">Simple</button>
+    </div>
+    <!-- Swaps the "you are here" avatar between the 3D character and the flat dot. -->
+    <div class="demo-row">
+      <span class="demo-label">3D Traveller</span>
+      <button class="btn rounded-pill btn-sm" :class="showTraveller3D === true ? 'btn-warning' : 'btn-outline-warning'" @click="showTraveller3D = true">On</button>
+      <button class="btn rounded-pill btn-sm" :class="showTraveller3D === false ? 'btn-warning' : 'btn-outline-warning'" @click="showTraveller3D = false">Off</button>
+    </div>
+    <div class="demo-row">
+      <span class="demo-label">Colorblind Mode</span>
+      <button class="btn rounded-pill btn-sm" :class="colorblindMode === true ? 'btn-warning' : 'btn-outline-warning'" @click="setColorblindMode(true)">On</button>
+      <button class="btn rounded-pill btn-sm" :class="colorblindMode === false ? 'btn-warning' : 'btn-outline-warning'" @click="setColorblindMode(false)">Off</button>
+    </div>
+  </div>
 
-			<div class="d-flex flex-wrap">
-				<button id="ChangeMap" class="btn btn-sm bg-warning" @click="MapStyle = !MapStyle">
-					<i class="bi bi-map"></i> Change Map Style
-				</button>
-				<button id="NeedHelp" class="btn btn-sm bg-danger" @click="helpOpen = true">
-					<i class="bi bi-question-circle-fill"></i> Need help?
-				</button>
-			</div>
-		</div>
-	</div>
+  <!-- ── Floating button that reopens the next-stop card ───────────────── -->
+  <!-- Shares the showMissionCard flag with the card itself, so only one of the two
+       is ever on screen and the transition reads as one motion. -->
+  <Transition name="fab-pop">
+    <button
+      v-if="!showMissionCard"
+      type="button"
+      class="map-nav-fab"
+      aria-label="Show next-stop card"
+      @click="showMissionCard = true"
+    >
+      <i class="bi bi-flag-fill" aria-hidden="true"></i>
+    </button>
+  </Transition>
 
-	<div v-if="demo" id="demo-controls" class="rounded-4">
-		<div class="demo-row">
-			<span class="demo-label">Speed</span>
-			<button class="btn rounded-pill btn-sm" :class="speed === 1 ? 'btn-warning' : 'btn-outline-warning'"
-				@click="speed = 1">1&times;</button>
-			<button class="btn rounded-pill btn-sm" :class="speed === 6 ? 'btn-warning' : 'btn-outline-warning'"
-				@click="speed = 6">6&times;</button>
-			<button class="btn rounded-pill btn-sm" :class="speed === 20 ? 'btn-warning' : 'btn-outline-warning'"
-				@click="speed = 20">20&times;</button>
-		</div>
-		<div class="demo-row">
-			<span class="demo-label">WASD movement</span>
-			<button class="btn rounded-pill btn-sm" :class="wasd === true ? 'btn-warning' : 'btn-outline-warning'"
-				@click="wasd = true">Yes</button>
-			<button class="btn rounded-pill btn-sm" :class="wasd === false ? 'btn-warning' : 'btn-outline-warning'"
-				@click="wasd = false">No</button>
-		</div>
-		<div class="demo-row">
-			<span class="demo-label">CheckPoint</span>
-			<button class="btn rounded-pill btn-sm btn-outline-warning" :disabled="!next"
-				@click="jumpTo(200)">Near</button>
-			<button class="btn rounded-pill btn-sm btn-outline-warning" :disabled="!next" @click="jumpTo(25)">At
-				stop</button>
-		</div>
-		<div class="demo-hint">Tap the map to walk there.</div>
-	</div>
-
-	<template v-if="helpOpen">
-		<div class="map-backdrop" @click="helpOpen = false"></div>
-		<div id="HelpPop" class="rounded-4" role="dialog" aria-label="Need help?">
-			<div class="demo-label mb-2">Change the plan</div>
-			<p class="help-note">Stamped stops stay. Only the stops ahead get rewritten from where you are now.</p>
-			<button class="btn btn-warning btn-sm w-100 mb-2" :disabled="store.status === 'planning'"
-				@click="replan('behind')"><i class="bi bi-hourglass-split"></i> I'm behind schedule</button>
-			<button class="btn btn-warning btn-sm w-100 mb-2" :disabled="store.status === 'planning'"
-				@click="replan('less-walking')"><i class="bi bi-person-walking"></i> Less walking</button>
-			<button class="btn btn-warning btn-sm w-100 mb-2"
-				:disabled="store.status === 'planning' || next?.kind !== 'visit'" @click="replan('swap')"><i
-					class="bi bi-shuffle"></i> Swap this stop</button>
-			<button class="btn btn-warning btn-sm w-100 mb-2" :disabled="store.status === 'planning'"
-				@click="replan('rain')"><i class="bi bi-cloud-rain-heavy-fill"></i> It's raining</button>
-			<button class="btn btn-outline-warning btn-sm w-100 mb-2" :disabled="next?.kind !== 'visit'"
-				@click="skipNext"><i class="bi bi-skip-forward-fill"></i> Skip this stop</button>
-			<button class="btn btn-outline-warning btn-sm w-100"
-				@click="router.push(m ? `/mission/${m.id}` : '/plan')"><i class="bi bi-list-ol"></i> See full
-				itinerary</button>
-			<div v-if="store.status === 'planning'" class="help-note mt-2">{{ store.statusText || 'Replanning…' }}</div>
-		</div>
-	</template>
-
-	<div v-if="MapStyle" class="map-backdrop" @click="MapStyle = false"></div>
-
-	<div id="MapPop" class="rounded-4" v-if="MapStyle">
-		<div class="demo-row">
-			<span class="demo-label">3D Mode</span>
-			<button class="btn rounded-pill btn-sm" :class="is3D === true ? 'btn-warning' : 'btn-outline-warning'"
-				@click="is3D = true, RemoveBuildings(is3D)">On</button>
-			<button class="btn rounded-pill btn-sm" :class="is3D === false ? 'btn-warning' : 'btn-outline-warning'"
-				@click="is3D = false, RemoveBuildings(is3D)">Off</button>
-		</div>
-		<div class="demo-row">
-			<span class="demo-label">Color Theme</span>
-			<button class="btn rounded-pill btn-sm"
-				:class="colorTheme === 'theme' ? 'btn-warning' : 'btn-outline-warning'"
-				@click="colorTheme = 'theme'">Zoot</button>
-			<button class="btn rounded-pill btn-sm"
-				:class="colorTheme === 'simple' ? 'btn-warning' : 'btn-outline-warning'"
-				@click="colorTheme = 'simple'">Simple</button>
-		</div>
-		<div class="demo-row">
-			<span class="demo-label">Colorblind Mode</span>
-			<button class="btn rounded-pill btn-sm" :class="colorblind === true ? 'btn-warning' : 'btn-outline-warning'"
-				@click="colorblind = true, ApplyColorblindMode(colorblind)">On</button>
-			<button class="btn rounded-pill btn-sm"
-				:class="colorblind === false ? 'btn-warning' : 'btn-outline-warning'"
-				@click="colorblind = false, ApplyColorblindMode(colorblind)">Off</button>
-		</div>
-	</div>
-
-	<AppNav />
+  <!-- ── Bottom navigation (own copy for this fullscreen view) ─────────── -->
+  <nav class="map-nav zt-glass" aria-label="Main">
+    <RouterLink v-for="item in navItemsBefore" :key="item.to" :to="item.to">
+      <i class="bi" :class="item.icon" aria-hidden="true"></i>
+      <span>{{ item.label }}</span>
+    </RouterLink>
+    <RouterLink v-for="item in navItemsAfter" :key="item.to" :to="item.to">
+      <i class="bi" :class="item.icon" aria-hidden="true"></i>
+      <span>{{ item.label }}</span>
+    </RouterLink>
+  </nav>
 </template>
 
 <style scoped>
 .quest-map {
 	position: absolute;
 	inset: 0;
+	/* Without an explicit z-index here, this element doesn't form its own stacking
+	   context, so z-index values set on things MapLibre draws inside it (e.g.
+	   .zt-stop-marker.next's z-index: 2) leak out and get compared directly against
+	   UI chrome like #CenterInfo (z-index: 1) — letting a marker that happens to
+	   project under the card paint on top of it. z-index: 0 contains the whole map,
+	   markers included, below every piece of UI layered on top of it. */
+	z-index: 0;
 }
 
 #top-left {
-	position: absolute;
-	top: 12px;
-	left: 12px;
-	z-index: 1;
-	font-size: 15px;
-	padding-right: 15px;
-	border-color: black;
-	border: 3px solid;
+  position: absolute;
+  top: clamp(8px, 3vw, 12px);
+  left: clamp(8px, 3vw, 12px);
+  z-index: 1;
+  font-size: clamp(12px, 3.6vw, 15px);
+  padding-right: clamp(10px, 3.6vw, 15px);
+  border-color: black;
+  border: clamp(2px, 0.7vw, 3px) solid;
 }
 
 #img-pill {
-	margin-right: 5px;
+  margin-right: 5px;
+  width: clamp(20px, 6vw, 25px);
+  height: clamp(20px, 6vw, 25px);
 }
 
 #top-left2 {
-	position: absolute;
-	top: 60px;
-	left: 12px;
-	z-index: 1;
-	font-size: 15px;
-	border-color: black;
-	border: 3px solid;
-	display: flex; /* lay items out in a row */
-	align-items: center;
-	gap: 14px; /* space between the temperature, rain, PSI and bolt */
+  position: absolute;
+  top: clamp(44px, 14vw, 60px);
+  left: clamp(8px, 3vw, 12px);
+  z-index: 1;
+  font-size: clamp(12px, 3.6vw, 15px);
+  border-color: black;
+  border: clamp(2px, 0.7vw, 3px) solid;
 }
-
-/* Each item: icon and text with a small gap between them. */
-.wx-item {
-	display: inline-flex;
-	align-items: center;
-	gap: 5px;               /* space between an icon and its number */
-}
-
 
 #top-left3 {
-	position: absolute;
-	top: 100px;
-	left: 12px;
-	z-index: 1;
-	font-size: 10px;
-	border: 3px solid;
-	padding: 5px;
+  position: absolute;
+  top: clamp(72px, 24vw, 100px);
+  left: clamp(8px, 3vw, 12px);
+  z-index: 1;
+  font-size: clamp(8px, 2.4vw, 10px);
+  border: clamp(2px, 0.7vw, 3px) solid;
+  padding: clamp(3px, 1.2vw, 5px);
+}
+
+#right-stack {
+  position: absolute;
+  top: clamp(8px, 3vw, 12px);
+  right: clamp(8px, 3vw, 12px);
+  z-index: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: clamp(10px, 3vw, 16px);
 }
 
 #top-right {
-	position: absolute;
-	top: 12px;
-	right: 12px;
-	padding: 14px;
-	line-height: 1.6;
-	text-align: left;
-	border: 4px solid;
+  padding: clamp(8px, 3.4vw, 14px);
+  line-height: 1.6;
+  text-align: left;
+  border: clamp(2px, 1vw, 4px) solid;
 }
 
 .time_left_from_trip {
-	font-size: 30px;
-	text-align: left;
+  font-size: clamp(20px, 7vw, 30px);
+  text-align: left;
 }
-
-#NeedHelp {
-	margin-top: 3px;
-	color: black;
-	max-width: fit-content;
-	border-color: rgb(238, 238, 107);
-	margin-left: 8px;
-	margin-top: 10px;
-}
-
 
 .map-btn {
-	position: absolute;
-	z-index: 1;
-	width: 60px;
-	height: 60px;
-	display: flex;
-	align-items: center;
-	justify-content: center;
-	font-size: 24px;
-	color: var(--zt-yellow-pale);
-	background: var(--zt-black);
-	border: 4px solid var(--zt-yellow);
-	border-radius: var(--zt-radius);
-	box-shadow: var(--zt-shadow);
-	cursor: pointer;
-}
-
-#TestRoute {
-	position: absolute;
-	top: 150px;
-	right: 12px;
-	z-index: 1;
-	color: black;
+  z-index: 1;
+  width: clamp(46px, 14vw, 60px);
+  height: clamp(46px, 14vw, 60px);
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: clamp(18px, 5.6vw, 24px);
+  color: var(--zt-yellow-pale);
+  background: var(--zt-black);
+  border: clamp(2px, 1vw, 4px) solid var(--zt-yellow);
+  border-radius: var(--zt-radius);
+  box-shadow: var(--zt-shadow);
+  cursor: pointer;
 }
 
 /* The map buttons slide open from the hamburger button. */
 .map-tools {
-	opacity: 0;
-	transform: translateY(-12px);
-	pointer-events: none;
-	transition: opacity 0.25s ease, transform 0.25s ease;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: clamp(10px, 3vw, 16px);
+  opacity: 0;
+  transform: translateY(-12px);
+  pointer-events: none;
+  transition: opacity 0.25s ease, transform 0.25s ease;
 }
 
 .map-tools.open {
@@ -916,130 +1357,16 @@ onUnmounted(() => {
 	pointer-events: auto;
 }
 
-#zoom {
-	top: 425px;
-	right: 12px;
-}
-
-#outlook {
-	top: 350px;
-	right: 12px;
-}
-
-#RealGps {
-	top: 275px;
-	right: 12px;
-}
-
-#TopView {
-	top: 500px;
-	right: 12px;
-}
-
-#MoreInfo {
-	top: 200px;
-	right: 12px;
-	z-index: 1;
-}
-
-#CenterInfo {
-	position: absolute;
-	left: 50%;
-	transform: translateX(-50%);
-	bottom: 96px;
-	max-width: 600px;
-	width: 90%;
-	z-index: 1;
-	text-align: left;
-	background: var(--zt-black);
-	border: 4px solid var(--zt-yellow);
-	box-shadow: var(--zt-shadow);
-	padding: 18px 20px;
-}
-
-.stop-meta {
-	color: var(--zt-yellow-pale);
-	opacity: 0.7;
-	font-size: 0.75rem;
-	font-weight: 800;
-	text-transform: uppercase;
-	letter-spacing: 0.05em;
-}
-
-.stop-title {
-	color: var(--zt-yellow-pale);
-	font-size: 1.6rem;
-	font-weight: 800;
-	margin: 2px 0;
-}
-
-.stop-dist {
-	font-size: 0.9rem;
-	color: var(--zt-yellow-pale);
-}
-
-.stop-dist .behind {
-	color: var(--zt-orange);
-	font-weight: 700;
-}
-
-.stop-near {
-	font-size: 0.8rem;
-	color: var(--zt-yellow-pale);
-	opacity: 0.7;
-	margin-top: 6px;
-}
-
-.stamp-btn {
-	width: 100px;
-	height: 100px;
-	border-radius: 50%;
-	border: 4px solid var(--zt-yellow);
-	background: transparent;
-	display: flex;
-	flex-direction: column;
-	align-items: center;
-	justify-content: center;
-	gap: 4px;
-	cursor: pointer;
-}
-
-.stamp-circle {
-	width: 42px;
-	height: 42px;
-	border-radius: 50%;
-	background: var(--zt-yellow-pale);
-	color: var(--zt-black);
-	display: flex;
-	align-items: center;
-	justify-content: center;
-	font-size: 20px;
-}
-
-.stamp-label {
-	color: var(--zt-yellow-pale);
-	font-size: 0.7rem;
-	font-weight: 800;
-	text-transform: uppercase;
-	letter-spacing: 0.05em;
-}
-
-#ChangeMap {
-	color: black;
-	text-align: left;
-	width: fit-content;
-	border-radius: 13px;
-	margin-top: 10px;
-}
+/* Card internals (#CenterInfo, .stop-*, .stamp-*) live in MissionInfoCard.vue. */
 
 #demo-controls {
-	position: absolute;
-	top: 140px;
-	left: 12px;
-	z-index: 1;
-	background: var(--zt-black);
-	border: 4px solid var(--zt-yellow);
-	padding: 12px 16px;
+  position: absolute;
+  top: clamp(100px, 32vw, 140px);
+  left: clamp(8px, 3vw, 12px);
+  z-index: 1;
+  background: var(--zt-black);
+  border: clamp(2px, 1vw, 4px) solid var(--zt-yellow);
+  padding: clamp(8px, 3vw, 12px) clamp(10px, 3.8vw, 16px);
 }
 
 .demo-row {
@@ -1053,13 +1380,13 @@ onUnmounted(() => {
 }
 
 .demo-label {
-	color: var(--zt-yellow-pale);
-	font-size: 0.75rem;
-	font-weight: 800;
-	text-transform: uppercase;
-	letter-spacing: 0.05em;
-	margin-right: 4px;
-	min-width: 110px;
+  color: var(--zt-yellow-pale);
+  font-size: clamp(0.65rem, 2.4vw, 0.75rem);
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  margin-right: 4px;
+  min-width: clamp(80px, 26vw, 110px);
 }
 
 .map-backdrop {
@@ -1072,15 +1399,15 @@ onUnmounted(() => {
 }
 
 #MapPop {
-	position: absolute;
-	top: 50%;
-	left: 50%;
-	transform: translate(-50%, -50%);
-	z-index: 2;
-	background: var(--zt-black);
-	border: 4px solid var(--zt-yellow);
-	box-shadow: var(--zt-shadow);
-	padding: 12px 16px;
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  z-index: 2;
+  background: var(--zt-black);
+  border: clamp(2px, 1vw, 4px) solid var(--zt-yellow);
+  box-shadow: var(--zt-shadow);
+  padding: clamp(8px, 3vw, 12px) clamp(10px, 3.8vw, 16px);
 }
 
 /* ── Mission wiring ── */
@@ -1094,6 +1421,7 @@ onUnmounted(() => {
 	cursor: default;
 }
 
+/* Countdown urgency: amber under 90 minutes, red (pulsing) under 45. */
 #top-right.amber {
 	background: var(--zt-orange) !important;
 }
@@ -1116,164 +1444,138 @@ onUnmounted(() => {
 }
 
 .time_back_from_trip {
-	font-size: 0.8rem;
+	font-size: clamp(0.7rem, 2.6vw, 0.8rem);
 }
 
-.stop-dist .ontime {
-	color: #5fd38d;
-	font-weight: 700;
-}
+/* Stop/stamp detail styles and @keyframes stamp-ready live in MissionInfoCard.vue. */
 
-.stop-dist .muted {
-	opacity: 0.7;
-}
-
-.stop-guide {
-	margin-top: 6px;
-	color: var(--zt-yellow);
-	font-size: 0.9rem;
-	font-weight: 700;
-}
-
-.stop-guide .bi {
-	margin-right: 4px;
-}
-
-.stamp-btn:disabled {
-	cursor: wait;
-}
-
-.stamp-btn:not(.ready) {
-	opacity: 0.55;
-	border-style: dashed;
-}
-
-.stamp-btn.ready {
-	background: var(--zt-yellow);
-	animation: stamp-ready 1.4s infinite;
-}
-
-.stamp-btn.ready .stamp-label {
-	color: var(--zt-black);
-}
-
-.stamp-btn.ready .stamp-circle {
-	background: var(--zt-black);
-	color: var(--zt-yellow);
-}
-
-@keyframes stamp-ready {
-	0% {
-		box-shadow: 0 0 0 0 rgba(255, 204, 0, 0.7);
-	}
-
-	70%,
-	100% {
-		box-shadow: 0 0 0 18px rgba(255, 204, 0, 0);
-	}
-}
-
-.demo-hint {
-	color: var(--zt-yellow-pale);
-	opacity: 0.7;
-	font-size: 0.7rem;
-	margin-top: 8px;
-}
+.demo-hint { color: var(--zt-yellow-pale); opacity: 0.7; font-size: clamp(0.62rem, 2.2vw, 0.7rem); margin-top: 8px; }
 
 #HelpPop {
-	position: absolute;
-	top: 50%;
-	left: 50%;
-	transform: translate(-50%, -50%);
-	z-index: 2;
-	width: min(340px, 90vw);
-	background: var(--zt-black);
-	border: 4px solid var(--zt-yellow);
-	box-shadow: var(--zt-shadow);
-	padding: 16px;
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  z-index: 2;
+  width: min(340px, 90vw);
+  background: var(--zt-black);
+  border: clamp(2px, 1vw, 4px) solid var(--zt-yellow);
+  box-shadow: var(--zt-shadow);
+  padding: clamp(10px, 4vw, 16px);
+}
+#HelpPop .btn-warning { color: var(--zt-black); font-weight: 700; text-align: left; }
+#HelpPop .btn-outline-warning { text-align: left; }
+.help-note { color: var(--zt-yellow-pale); opacity: 0.75; font-size: clamp(0.65rem, 2.4vw, 0.75rem); margin-bottom: 10px; }
+
+/* ── Bottom nav (own copy — edit freely, this only affects the 3D map view) ── */
+.map-nav {
+  position: fixed;
+  left: 50%;
+  transform: translateX(-50%);
+  bottom: max(12px, env(safe-area-inset-bottom));
+  width: min(520px, calc(100% - 24px));
+  height: var(--zt-nav-h);
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  border-radius: 26px;
+  box-shadow: var(--zt-shadow);
+  z-index: 1030;
+}
+.map-nav a {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 1px;
+  color: var(--zt-ink);
+  text-decoration: none;
+  font-size: 0.66rem;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  border-radius: 18px;
+  margin: 6px;
+  border: 2px solid transparent;
+  background: none;
+  padding: 0;
+  cursor: pointer;
+}
+.map-nav a i { font-size: 1.3rem; line-height: 1; }
+.map-nav a.router-link-active { color: #111; background: var(--zt-yellow); border-color: var(--zt-line); }
+
+/* Simple circular pill, floating above the nav bar instead of sitting in it. */
+.map-nav-fab {
+  position: fixed;
+  left: 50%;
+  transform: translateX(-50%);
+  bottom: calc(max(12px, env(safe-area-inset-bottom)) + var(--zt-nav-h) + 14px);
+  width: 56px;
+  height: 56px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--zt-black);
+  border: clamp(2px, 1vw, 4px) solid var(--zt-yellow);
+  color: var(--zt-yellow-pale);
+  font-size: 1.4rem;
+  line-height: 1;
+  cursor: pointer;
+  z-index: 1031;
 }
 
-#HelpPop .btn-warning {
-	color: var(--zt-black);
-	font-weight: 700;
-	text-align: left;
+/* Next-stop card pop in/out, driven by the floating flag button below. */
+.mission-pop-enter-active { animation: mission-pop-bounce 0.42s cubic-bezier(0.34, 1.56, 0.64, 1); }
+.mission-pop-leave-active { animation: mission-pop-bounce 0.2s ease reverse forwards; }
+@keyframes mission-pop-bounce {
+  from { opacity: 0; transform: translate(-50%, 28px) scale(0.9); }
+  to { opacity: 1; transform: translate(-50%, 0) scale(1); }
 }
 
-#HelpPop .btn-outline-warning {
-	text-align: left;
-}
-
-.help-note {
-	color: var(--zt-yellow-pale);
-	opacity: 0.75;
-	font-size: 0.75rem;
-	margin-bottom: 10px;
+/* The flag button's own fade/scale — same technique as mission-pop above, tuned
+   smaller and quicker since it's a small button, not a whole card. Runs on the
+   same showMissionCard flip as mission-pop, so the button shrinking away and the
+   card bouncing in (or the reverse) happen at the same time. */
+.fab-pop-enter-active { animation: fab-pop-bounce 0.3s cubic-bezier(0.34, 1.56, 0.64, 1); }
+.fab-pop-leave-active { animation: fab-pop-bounce 0.18s ease reverse forwards; }
+@keyframes fab-pop-bounce {
+  from { opacity: 0; transform: translate(-50%, 10px) scale(0.6); }
+  to { opacity: 1; transform: translate(-50%, 0) scale(1); }
 }
 </style>
 
 <!-- Map markers are created by MapLibre outside this component, so their styles can't be scoped. -->
 <style>
 .zt-stop-marker {
-	width: 34px;
-	height: 34px;
-	border-radius: 50%;
-	border: 3px solid #111;
-	background: #fff4c2;
-	color: #111;
-	font-weight: 800;
-	font-size: 0.95rem;
-	display: grid;
-	place-items: center;
-	box-shadow: 3px 3px 0 #111;
-	cursor: pointer;
-	padding: 0;
+  width: clamp(26px, 8vw, 34px);
+  height: clamp(26px, 8vw, 34px);
+  border-radius: 50%;
+  border: clamp(2px, 0.9vw, 3px) solid #111;
+  background: #fff4c2;
+  color: #111;
+  font-weight: 800;
+  font-size: clamp(0.78rem, 2.8vw, 0.95rem);
+  display: grid;
+  place-items: center;
+  box-shadow: 3px 3px 0 #111;
+  cursor: pointer;
+  padding: 0;
 }
+.zt-stop-marker.next { background: #f83878; color: #fff; width: clamp(32px, 10vw, 42px); height: clamp(32px, 10vw, 42px); font-size: clamp(0.92rem, 3.2vw, 1.1rem); z-index: 2; animation: zt-marker-pulse 1.4s infinite; }
+.zt-stop-marker.done { background: #111; color: #ffcc00; border-color: #ffcc00; box-shadow: none; }
+@keyframes zt-marker-pulse { 0% { box-shadow: 3px 3px 0 #111, 0 0 0 0 rgba(248, 56, 120, 0.7); } 70%, 100% { box-shadow: 3px 3px 0 #111, 0 0 0 16px rgba(248, 56, 120, 0); } }
 
-.zt-stop-marker.next {
-	background: #f83878;
-	color: #fff;
-	width: 42px;
-	height: 42px;
-	font-size: 1.1rem;
-	z-index: 2;
-	animation: zt-marker-pulse 1.4s infinite;
-}
-
-.zt-stop-marker.done {
-	background: #111;
-	color: #ffcc00;
-	border-color: #ffcc00;
-	box-shadow: none;
-}
-
-@keyframes zt-marker-pulse {
-	0% {
-		box-shadow: 3px 3px 0 #111, 0 0 0 0 rgba(248, 56, 120, 0.7);
-	}
-
-	70%,
-	100% {
-		box-shadow: 3px 3px 0 #111, 0 0 0 16px rgba(248, 56, 120, 0);
-	}
-}
-
-.zt-player-marker {
-	position: relative;
-	width: 40px;
-	height: 40px;
-	pointer-events: none;
-}
-
+.zt-player-marker { position: relative; width: clamp(30px, 10vw, 40px); height: clamp(30px, 10vw, 40px); pointer-events: none; }
 .zt-player-marker .core {
-	position: absolute;
-	inset: 4px;
-	border-radius: 50%;
-	background: #ffcc00;
-	border: 3px solid #111;
-	color: #111;
-	display: grid;
-	place-items: center;
-	font-size: 1rem;
+  position: absolute;
+  inset: 4px;
+  border-radius: 50%;
+  background: #ffcc00;
+  border: clamp(2px, 0.9vw, 3px) solid #111;
+  color: #111;
+  display: grid;
+  place-items: center;
+  font-size: clamp(0.8rem, 2.8vw, 1rem);
 }
 
 .zt-player-marker .pulse {
