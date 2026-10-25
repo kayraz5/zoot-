@@ -283,9 +283,21 @@ export function drawIdentity(ctx, { name, style, level, title, xp, stamps, chops
   pageNumber(ctx, 1, true)
 }
 
+// A real stamp image (public/stamps), slightly tilted like a hand stamp
+function drawStampArt(ctx, img, { x, y, r, seed }) {
+  const random = seededRandom(seed)
+  ctx.save()
+  ctx.translate(x, y)
+  ctx.rotate((random() - 0.5) * 0.35)
+  ctx.globalAlpha = 0.95
+  ctx.drawImage(img, -r, -r, r * 2, r * 2)
+  ctx.restore()
+}
+
 // One page per area: title, area chop (earned at `target` places, hidden until the slam reveals it)
 // and `target` place slots. `places` is every place in the area, already in display order.
-export function drawAreaPage(ctx, { area, places, stampsByPlace, target, pageNo, left, revealed = true }) {
+// `art` has loaded stamp images ({ places: { [placeId]: img }, area: img }); without one, the chop is drawn.
+export function drawAreaPage(ctx, { area, places, stampsByPlace, target, pageNo, left, revealed = true, art = { places: {}, area: null } }) {
   paper(ctx, '#fffbea', left)
   ctx.fillStyle = MUTED
   ctx.textAlign = 'left'
@@ -301,8 +313,10 @@ export function drawAreaPage(ctx, { area, places, stampsByPlace, target, pageNo,
   ctx.font = '700 15px Poppins, sans-serif'
   ctx.fillText(earned ? `${stampedCount} / ${places.length} places stamped` : `${stampedCount} / ${target} toward the area chop`, 44, 132)
 
-  // Area chop in the top right, or a dashed placeholder with a faint glyph
-  if (earned && revealed) {
+  // Area chop in the top right (real artwork if there is one), or a dashed placeholder with a faint glyph
+  if (earned && revealed && art.area) {
+    drawStampArt(ctx, art.area, { x: 392, y: 104, r: 66, seed: area.id })
+  } else if (earned && revealed) {
     drawChop(ctx, {
       x: 392, y: 104, r: 64,
       ink: area.ink, glyph: area.glyph, label: area.id, sub: 'SINGAPORE', seed: area.id, alpha: 0.88
@@ -332,6 +346,15 @@ export function drawAreaPage(ctx, { area, places, stampsByPlace, target, pageNo,
     const y = 262 + Math.floor(i / 2) * 140
     const stamp = stampsByPlace[place.id]
 
+    if (stamp && art.places[place.id]) {
+      drawStampArt(ctx, art.places[place.id], { x, y, r: 54, seed: place.id })
+      // The artwork has the name; the date goes underneath
+      ctx.fillStyle = area.ink
+      ctx.textAlign = 'center'
+      ctx.font = '800 11px Poppins, sans-serif'
+      ctx.fillText(stamp.date, x, y + 68)
+      return
+    }
     if (stamp) {
       drawChop(ctx, {
         x, y, r: 52, ink: area.ink, glyph: area.glyph, label: chopLabel(place.name, area.id),
