@@ -2,6 +2,7 @@
 const items = [
   { to: '/map', icon: 'bi-geo-alt-fill', label: 'Map' },
   { to: '/mission', icon: 'bi-signpost-split-fill', label: 'Mission' },
+  { to: '/explore', icon: 'bi-compass-fill', label: 'Explore' },
   { to: '/quests', icon: 'bi-people-fill', label: 'Quests' },
   { to: '/passport', icon: 'bi-journal-bookmark-fill', label: 'Passport' },
   { to: '/me', icon: 'bi-person-circle', label: 'Me' }
@@ -82,5 +83,11 @@ const items = [
     color: var(--zt-black);
     background: var(--zt-yellow);
     border-color: #4dd4ff;
+}
+
+/* Six tabs: tighten spacing and labels on narrow phones so "Passport" still fits. */
+@media (max-width: 440px) {
+    .zt-nav a { margin: 6px 2px; font-size: 0.58rem; letter-spacing: 0.01em; }
+    .zt-nav a i { font-size: 1.15rem; }
 }
 </style>

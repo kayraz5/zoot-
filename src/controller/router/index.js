@@ -20,6 +20,8 @@ const routes = [
   { path: '/place/:id', name: 'place', component: () => import('../../view/views/PlaceView.vue'), meta: { nav: true } },
   { path: '/passport', name: 'passport', component: () => import('../../view/views/PassportView.vue'), meta: { auth: true, nav: true } },
   { path: '/codex', name: 'codex', component: () => import('../../view/views/CodexView.vue'), meta: { auth: true, nav: true } },
+  // Browse every place in the catalog (Kayra). Open without an account, like /place/:id.
+  { path: '/explore', name: 'explore', component: () => import('../../view/views/ExploreView.vue'), meta: { nav: true } },
   { path: '/me', name: 'me', component: () => import('../../view/views/ProfileView.vue'), meta: { auth: true, nav: true } },
   { path: '/swipe', name: 'swipe', component: () => import('../../view/views/SwipeView.vue'), meta: { auth: true, nav: true } },
   // Social quests: hosts open a window of stops, guests join part of it (docs/social-quests-spec.md).
