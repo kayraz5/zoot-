@@ -5,7 +5,6 @@ import { useUiStore } from '../../model/stores/ui.js'
 import { useUserStore } from '../../model/stores/user.js'
 import { usePassportStore, CHOP_TARGET } from '../../model/stores/passport.js'
 import { AREAS } from '../../model/data/origins.js'
-import { chopLabel } from '../gl/pageArt.js'
 import { placeStampUrl } from '../../model/services/stampArt.js'
 
 // Pop-up after a stamp, or after returning to the airport/hotel.
