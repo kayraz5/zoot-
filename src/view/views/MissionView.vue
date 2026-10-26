@@ -113,7 +113,7 @@ const replans = [
             <span v-else class="zt-pill paper" :title="m.fallback_reason || ''"><i class="bi bi-cpu"></i> Offline</span>
             <span v-if="m.replans" class="zt-pill pale">Replanned ×{{ m.replans }}</span>
           </div>
-          <TimeToGate :must-return-ms="store.mustReturnMs" />
+          <TimeToGate :must-return-ms="store.mustReturnMs" :start-ms="Date.parse(m.start_iso)" />
         </div>
         <h1 class="title">{{ m.title }}</h1>
         <div class="meta">
