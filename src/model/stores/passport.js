@@ -1,5 +1,7 @@
 import { defineStore, acceptHMRUpdate } from 'pinia'
 import { getDb } from '../services/db/index.js'
+import { entryStatus, withTransitVisa, CAN_LEAVE } from '../services/immigration.js'
+import entrySnapshot from '../data/sgEntrySnapshot.js'
 
 // Stamps, area chops and seen places (passport + Codex). An area's chop is earned at CHOP_TARGET places.
 // Slammed chops and seen places are saved per user in passport_pages (localStorage for guests).
@@ -19,10 +21,25 @@ export const usePassportStore = defineStore('passport', {
     fresh: [], // places stamped this session that the passport hasn't slammed in yet
     openTo: null, // place the passport should flip to when it opens (set by "See in passport")
     nationality: null, // passport country for the entry check (ISO alpha-2), kept private in passport_pages
-    transitVisa: null // holds a visa that qualifies for the 96 h transit facility (true/false, null = not asked)
+    transitVisa: null, // holds a visa that qualifies for the 96 h transit facility (true/false, null = not asked)
+    liveEntry: null // { code, status } from /api/entry-rule, once the profile's entry check has fetched it
   }),
 
   getters: {
+    // For the planner: 'yes', 'no', 'ask' (transit-visa question unanswered on the profile) or null (no passport set).
+    // Uses the live rule when the entry check fetched one this session, otherwise the saved snapshot.
+    canLeaveAirport(state) {
+      const code = state.nationality
+      if (!code) return null
+      const live = state.liveEntry?.code === code ? state.liveEntry.status : null
+      const status = withTransitVisa(
+        live || entryStatus(code, { icaSlugs: entrySnapshot.ica.slugs, indexRule: entrySnapshot.index.rules[code] }),
+        state.transitVisa
+      )
+      if (status === 'ask') return 'ask'
+      return CAN_LEAVE.includes(status) ? 'yes' : 'no'
+    },
+
     stampedIds(state) {
       return new Set(state.stamps.map((stamp) => stamp.place_id))
     },

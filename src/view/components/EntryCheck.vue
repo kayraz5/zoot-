@@ -3,7 +3,7 @@ import { computed, ref, watch } from 'vue'
 import { usePassportStore } from '../../model/stores/passport.js'
 import snapshot from '../../model/data/sgEntrySnapshot.js'
 import {
-  entryStatus, icaLink, countryName, VFTF, VFTF_VISA_COUNTRIES, ICA_VFTF_PAGE, ICA_ARRIVAL_CARD_PAGE
+  entryStatus, withTransitVisa, CAN_LEAVE, icaLink, countryName, VFTF, VFTF_VISA_COUNTRIES, ICA_VFTF_PAGE, ICA_ARRIVAL_CARD_PAGE
 } from '../../model/services/immigration.js'
 
 // "Can I leave Changi?" for the traveller's passport, on the profile page.
@@ -33,6 +33,7 @@ async function check(code) {
     const res = await fetch(`/api/entry-rule?passport=${code}`)
     if (!res.ok) throw new Error(`entry-rule ${res.status}`)
     result.value = await res.json()
+    passport.liveEntry = { code, status: result.value.status } // the planner's warning uses it too
   } catch (err) {
     console.warn('[entry-check] using the saved rules:', err.message)
     result.value = fromSnapshot(code)
@@ -48,15 +49,9 @@ function choose(code) {
 }
 
 // India's transit facility also needs a visa for one of the VFTF countries, so ask before answering
-const status = computed(() => {
-  const s = result.value?.status
-  if (s !== 'vftf-visa') return s
-  if (passport.transitVisa === true) return 'vftf'
-  if (passport.transitVisa === false) return 'visa'
-  return 'ask'
-})
+const status = computed(() => withTransitVisa(result.value?.status, passport.transitVisa))
 
-const canLeave = computed(() => ['free', 'vftf', 'home'].includes(status.value))
+const canLeave = computed(() => CAN_LEAVE.includes(status.value))
 const checkedOn = computed(() => result.value && new Date(result.value.checkedOn).toLocaleDateString('en-SG', { day: 'numeric', month: 'short', year: 'numeric' }))
 </script>
 
