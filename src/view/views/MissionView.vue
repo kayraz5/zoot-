@@ -175,6 +175,9 @@ const replans = [
                 </div>
               </div>
               <p class="small mb-2 why">{{ leg.why }}</p>
+              <p v-if="leg.kind === 'visit' && placeById.get(leg.place_id)?.hours_verified === false" class="tiny fw-800 mb-2 hours-note">
+                <i class="bi bi-exclamation-circle"></i> Opening hours not confirmed, check before going
+              </p>
               <div v-if="leg.sidequest" class="zt-pill pale mb-2"><i class="bi bi-gem"></i> Sidequest</div>
               <template v-if="leg.fixed && leg.status === 'pending'">
                 <div class="d-flex gap-2 flex-wrap align-items-center">
@@ -262,6 +265,8 @@ const replans = [
 .stop-card { box-shadow: var(--zt-shadow-sm); }
 .stop-card.joined { border-color: var(--zt-pink); }
 .why { color: var(--zt-muted); }
+.hours-note { color: #b45309; }
+[data-bs-theme='dark'] .hours-note { color: var(--zt-yellow); }
 .edit-panel { border-top: 2px dashed var(--zt-soft-line); padding-top: 12px; }
 .rain-alert { background: #111; color: var(--zt-yellow); border: var(--zt-bw) solid #111; border-radius: 18px; box-shadow: 4px 4px 0 var(--zt-yellow); }
 [data-bs-theme='dark'] .rain-alert { border-color: var(--zt-yellow); }

@@ -152,9 +152,11 @@ const KEY_DIRECTIONS = {
 // it without affecting the shared nav used by every other page.
 const navItemsBefore = [
   { to: '/map', icon: 'bi-geo-alt-fill', label: 'Map' },
-  { to: '/mission', icon: 'bi-signpost-split-fill', label: 'Mission' }
+  { to: '/mission', icon: 'bi-signpost-split-fill', label: 'Mission' },
+  { to: '/explore', icon: 'bi-compass-fill', label: 'Explore' }
 ]
 const navItemsAfter = [
+  { to: '/quests', icon: 'bi-people-fill', label: 'Quests' },
   { to: '/passport', icon: 'bi-journal-bookmark-fill', label: 'Passport' },
   { to: '/me', icon: 'bi-person-circle', label: 'Me' }
 ]
@@ -1828,7 +1830,8 @@ function writeMissionCardFlag(open) {
   width: min(520px, calc(100% - 24px));
   height: var(--zt-nav-h);
   display: grid;
-  grid-template-columns: repeat(4, 1fr);
+  grid-auto-flow: column;
+  grid-auto-columns: 1fr; /* one column per tab, like the shared AppNav */
   border-radius: 26px;
   box-shadow: var(--zt-shadow);
   z-index: 1030;
@@ -1853,6 +1856,11 @@ function writeMissionCardFlag(open) {
   cursor: pointer;
 }
 .map-nav a i { font-size: 1.3rem; line-height: 1; }
+/* Six tabs: tighten spacing and labels on narrow phones so "Passport" still fits. */
+@media (max-width: 440px) {
+  .map-nav a { margin: 6px 2px; font-size: 0.58rem; letter-spacing: 0.01em; }
+  .map-nav a i { font-size: 1.15rem; }
+}
 .map-nav a.router-link-active { color: #111; background: var(--zt-yellow); border-color: var(--zt-line); }
 
 /* Simple circular pill, floating above the nav bar instead of sitting in it. */
