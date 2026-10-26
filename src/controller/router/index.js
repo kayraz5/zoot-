@@ -12,6 +12,9 @@ const routes = [
   { path: '/onboard', name: 'onboard', component: () => import('../../view/views/OnboardView.vue'), meta: { auth: true } },
   { path: '/plan', name: 'plan', component: () => import('../../view/views/PlanView.vue'), meta: { auth: true, onboarded: true, nav: true } },
   { path: '/mission', name: 'mission-active', component: () => import('../../view/views/MissionView.vue'), meta: { auth: true, nav: true } },
+  // Focused timeline editor: durations/order, with the bottom nav hidden so it
+  // doesn't compete with the controls.
+  { path: '/mission/:id/schedule', name: 'mission-schedule', component: () => import('../../view/views/ScheduleView.vue'), meta: { auth: true, nav: false } },
   { path: '/mission/:id', name: 'mission', component: () => import('../../view/views/MissionView.vue'), meta: { auth: true, nav: true } },
   { path: '/map', name: 'map', component: () => import('../../view/views/3D_Map.vue'), meta: { auth: true, fullscreen: true } },
   // Dressing room for the 3D traveller (src/view/gl/traveller.js). No auth so it's
@@ -20,6 +23,8 @@ const routes = [
   { path: '/place/:id', name: 'place', component: () => import('../../view/views/PlaceView.vue'), meta: { nav: true } },
   { path: '/passport', name: 'passport', component: () => import('../../view/views/PassportView.vue'), meta: { auth: true, nav: true } },
   { path: '/codex', name: 'codex', component: () => import('../../view/views/CodexView.vue'), meta: { auth: true, nav: true } },
+  // Browse every place in the catalog (Kayra). Open without an account, like /place/:id.
+  { path: '/explore', name: 'explore', component: () => import('../../view/views/ExploreView.vue'), meta: { nav: true } },
   { path: '/me', name: 'me', component: () => import('../../view/views/ProfileView.vue'), meta: { auth: true, nav: true } },
   { path: '/swipe', name: 'swipe', component: () => import('../../view/views/SwipeView.vue'), meta: { auth: true, nav: true } },
   // Social quests: hosts open a window of stops, guests join part of it (docs/social-quests-spec.md).

@@ -148,6 +148,7 @@ async function signOut() {
         </nav>
 
         <template v-if="tab === 'profile'">
+        <!-- Shrey's entry check (b92164e); dropped in a later merge, restored. -->
         <EntryCheck />
 
         <section class="zt-card p-3 mt-3">

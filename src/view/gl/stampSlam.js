@@ -40,6 +40,17 @@ export class StampSlam {
       this.stamp.add(mesh)
     }
 
+    // Textured face on top of the stamp head. The passport pre-generates one PNG
+    // per location; showing it on the 3D stamp keeps the animation consistent
+    // with the page it lands on. Hidden when the location has no art.
+    this.faceImage = null
+    this.faceMaterial = new THREE.MeshBasicMaterial({ transparent: true, depthWrite: false })
+    this.face = new THREE.Mesh(new THREE.CircleGeometry(0.46, 48), this.faceMaterial)
+    this.face.rotation.x = -Math.PI / 2
+    this.face.position.y = 0.256
+    this.face.visible = false
+    this.stamp.add(this.face)
+
     // Ink ring that spreads out on impact
     this.ring = new THREE.Mesh(new THREE.RingGeometry(0.5, 0.56, 48), new THREE.MeshBasicMaterial({ transparent: true, depthWrite: false }))
     this.ring.rotation.x = -Math.PI / 2
@@ -55,8 +66,32 @@ export class StampSlam {
     return raycaster.ray.intersectPlane(new THREE.Plane(new THREE.Vector3(0, 1, 0), 0), new THREE.Vector3())
   }
 
-  /** Slam down at canvas pixel (x, y) with a pad `size` px wide. onImpact runs as it hits; resolves when done. */
-  slam({ x, y, size, ink }, onImpact) {
+  /** Put a location's stamp PNG on the stamp face (null hides it). */
+  applyFace(image) {
+    if (!image) {
+      this.face.visible = false
+      return
+    }
+
+    if (this.faceImage !== image) {
+      this.faceImage = image
+      this.faceMaterial.map?.dispose()
+      const texture = new THREE.Texture(image)
+      texture.colorSpace = THREE.SRGBColorSpace
+      texture.needsUpdate = true
+      this.faceMaterial.map = texture
+      this.faceMaterial.needsUpdate = true
+    }
+
+    this.face.visible = true
+  }
+
+  /**
+   * Slam down at canvas pixel (x, y) with a pad `size` px wide.
+   * `image` is the location's stamp PNG (or null); onImpact runs as it hits;
+   * resolves when the animation finishes.
+   */
+  slam({ x, y, size, ink, image = null }, onImpact) {
     const { clientWidth: width, clientHeight: height } = this.canvas
     this.renderer.setSize(width, height, false)
     this.camera.aspect = width / height
@@ -69,6 +104,7 @@ export class StampSlam {
 
     this.ink.color.set(ink)
     this.ring.material.color.set(ink)
+    this.applyFace(image)
     this.stamp.position.copy(at)
     this.ring.position.set(at.x, 0.002, at.z)
     this.stamp.visible = true
@@ -120,6 +156,8 @@ export class StampSlam {
       object.geometry.dispose()
       object.material.dispose()
     })
+    // Materials do not dispose their maps; free the face texture explicitly.
+    this.faceMaterial.map?.dispose()
     this.renderer.dispose()
   }
 }

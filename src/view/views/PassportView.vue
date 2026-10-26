@@ -265,7 +265,7 @@ async function slamStamp(placeId) {
     navigator.vibrate?.(40)
     await repaintPage(page)
   }
-  if (stampSlam && at) await stampSlam.slam({ x: at.x, y: at.y, size: 104 * at.scale, ink: AREAS[page - FIRST_AREA_PAGE].ink }, reveal)
+  if (stampSlam && at) await stampSlam.slam({ x: at.x, y: at.y, size: 104 * at.scale, ink: AREAS[page - FIRST_AREA_PAGE].ink, image: artImages.get(placeStamp(placeId)) }, reveal)
   else await reveal() // no WebGL: just show it
   await wait(300)
 }
@@ -279,7 +279,7 @@ async function slamChop(areaId) {
     navigator.vibrate?.(40)
     await repaintPage(page)
   }
-  if (stampSlam && at) await stampSlam.slam({ x: at.x, y: at.y, size: 128 * at.scale, ink: AREAS[page - FIRST_AREA_PAGE].ink }, reveal)
+  if (stampSlam && at) await stampSlam.slam({ x: at.x, y: at.y, size: 128 * at.scale, ink: AREAS[page - FIRST_AREA_PAGE].ink, image: artImages.get(areaStamp(areaId)) }, reveal)
   else await reveal()
   passport.consumeSlam(areaId)
   await wait(300)

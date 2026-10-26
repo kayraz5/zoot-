@@ -9,6 +9,7 @@ import { useUiStore } from '../../model/stores/ui.js'
 import { hm, usePlanTime, usePrePickedInterests } from '../components/plan/planUi.js'
 import LayoverDialog from '../components/plan/LayoverDialog.vue'
 import LayoverSummary from '../components/plan/LayoverSummary.vue'
+import EntryBanner from '../components/plan/EntryBanner.vue'
 import TimeBudgetCard from '../components/plan/TimeBudgetCard.vue'
 import OriginPicker from '../components/plan/OriginPicker.vue'
 import InterestTiles from '../components/plan/InterestTiles.vue'
@@ -107,6 +108,7 @@ async function submit() {
 			<div class="plan-main d-grid gap-3">
 				<template v-if="showStep(1)">
 					<LayoverSummary @edit="editingLayover = true" />
+					<EntryBanner />
 					<TimeBudgetCard v-if="!wide" />
 					<OriginPicker />
 				</template>
