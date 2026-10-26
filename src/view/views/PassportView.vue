@@ -5,7 +5,6 @@ import { StampSlam } from '../gl/stampSlam.js'
 import { drawCover, drawIdentity, drawAreaPage, drawBackPage, PAGE_W, PAGE_H } from '../gl/pageArt.js'
 import { AREAS, ORIGINS, STYLES } from '../../model/data/origins.js'
 import { catalog, placeById, loadCatalog } from '../../model/services/catalog.js'
-import seedPlaces from '../../model/data/places.sg.json'
 import { usePassportStore, CHOP_TARGET } from '../../model/stores/passport.js'
 import { useUserStore } from '../../model/stores/user.js'
 import { useMissionStore } from '../../model/stores/mission.js'
@@ -70,9 +69,8 @@ const stampsByPlace = computed(() => {
   return result
 })
 
-// Unstamped places: hand-picked seed places first (in file order), then ones with a Wikipedia article
-const seedOrder = new Map(seedPlaces.map((place, i) => [place.id, i]))
-const placeRank = (place) => seedOrder.get(place.id) ?? seedPlaces.length + (place.blurb_source === 'wikipedia' ? 0 : 1000)
+// Unstamped places: hand-picked (seed) places first, then ones with a Wikipedia article, then the rest
+const placeRank = (place) => (place.source === 'seed' ? 0 : place.blurb_source === 'wikipedia' ? 1 : 2)
 
 // An area page's places: stamped ones first (oldest first), then the best-known unstamped ones
 function areaPlaces(areaId) {
