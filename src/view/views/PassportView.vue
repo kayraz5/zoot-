@@ -11,6 +11,11 @@ import { useUserStore } from '../../model/stores/user.js'
 import { useMissionStore } from '../../model/stores/mission.js'
 import { DEFAULT_COVER } from '../../model/services/brand.js'
 import { getDb } from '../../model/services/db/index.js'
+import {
+  areaStampUrl,
+  loadedStampImage,
+  preloadStampImages
+} from '../../model/services/stampArt.js'
 
 // Passport page: flipbook-vue turns the pages, and a Three.js stamp slams newly earned area chops
 const passport = usePassportStore()
@@ -64,6 +69,22 @@ const stampsByPlace = computed(() => {
   }
   return result
 })
+
+/**
+ * Places whose stamps are actually painted on an area page (the first CHOP_TARGET
+ * slots of each area), used to preload only the art that is needed.
+ */
+function stampedPlaces() {
+  const places = []
+  for (const area of AREAS) {
+    places.push(
+      ...areaPlaces(area.id)
+        .slice(0, CHOP_TARGET)
+        .filter((place) => passport.stampedIds.has(place.id))
+    )
+  }
+  return places
+}
 
 // Unstamped places: hand-picked seed places first (in file order), then ones with a Wikipedia article
 const seedOrder = new Map(seedPlaces.map((place, i) => [place.id, i]))
@@ -219,8 +240,19 @@ async function playSlams() {
       navigator.vibrate?.(40)
       await repaintPage(page)
     }
-    if (stampSlam && at) await stampSlam.slam({ x: at.x, y: at.y, size: 128 * at.scale, ink: AREAS[areaIndex].ink }, reveal)
-    else await reveal() // no WebGL: just show the chop
+    if (stampSlam && at) {
+      // The 3D stamp shows the same area art that the page will reveal.
+      const areaImage = loadedStampImage(areaStampUrl(areaId))
+      await stampSlam.slam({
+        x: at.x,
+        y: at.y,
+        size: 128 * at.scale,
+        ink: AREAS[areaIndex].ink,
+        image: areaImage
+      }, reveal)
+    } else {
+      await reveal() // no WebGL: just show the chop
+    }
     passport.consumeSlam(areaId)
     await wait(400)
   }
@@ -246,6 +278,8 @@ watch(
   () => [passport.stamps.length, passport.seen.size, user.profile, catalog.value, badges.value],
   async () => {
     if (!pages.value.length || busy.value) return
+    // New stamps may bring art that wasn't loaded for the first paint.
+    await preloadStampImages(stampedPlaces(), AREAS)
     await repaintAll()
     if (passport.pendingSlams.length) runSlams()
   }
@@ -262,6 +296,10 @@ onMounted(async () => {
       loadMissions()
     ])
   } catch {}
+
+  // Load each stamped place's PNG (and area chops) before the canvas is painted;
+  // any that fail simply fall back to the drawn chop.
+  await preloadStampImages(stampedPlaces(), AREAS)
 
   await repaintAll()
   await nextTick()

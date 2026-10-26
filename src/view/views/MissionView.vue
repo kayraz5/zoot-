@@ -81,11 +81,6 @@ function onPick(place) {
   const { mode, leg } = picker.value
   run(() => (mode === 'swap' ? store.swapStop(leg, place) : store.addStop(place, leg?.place_id ?? null)))
 }
-// Stay and order tweaks keep the panel open so they can be repeated.
-async function tweak(action) {
-  busy.value = true
-  try { await action() } catch (err) { ui.toast(err.message, 'danger') } finally { busy.value = false }
-}
 watch(() => m.value?.id, () => { editing.value = null; picker.value = null })
 
 const replans = [
@@ -124,6 +119,11 @@ const replans = [
         <div class="meta">
           <span><i class="bi bi-geo-alt"></i> From {{ m.origin.label }}</span>
           <span><i class="bi bi-patch-check"></i> {{ store.stampedCount }}/{{ store.visitLegs.length }} stamped</span>
+        </div>
+        <div class="mt-2">
+          <RouterLink :to="`/mission/${m.id}/schedule`" class="btn btn-sm btn-soft">
+            <i class="bi bi-calendar3"></i> Edit schedule
+          </RouterLink>
         </div>
       </header>
 
@@ -187,24 +187,13 @@ const replans = [
                 <div class="d-flex gap-2 flex-wrap">
                   <RouterLink :to="`/map?focus=${leg.seq}`" class="btn btn-sm btn-soft"><i class="bi bi-geo"></i> On map</RouterLink>
                   <button class="btn btn-sm btn-soft" :class="{ active: editing === leg.place_id }" :aria-expanded="editing === leg.place_id" @click="toggleEdit(leg)">
-                    <i class="bi bi-pencil"></i> Edit
+                    <i class="bi bi-pencil"></i> Change stop
                   </button>
                   <button class="btn btn-sm btn-link text-muted" @click="store.skip(leg)">Skip</button>
                 </div>
                 <div v-if="editing === leg.place_id" class="edit-panel mt-3">
-                  <div class="d-flex align-items-center gap-2 flex-wrap">
-                    <span class="tiny fw-800">Stay</span>
-                    <div class="btn-group btn-group-sm" role="group" aria-label="Stay length">
-                      <button class="btn btn-soft" :disabled="busy || leg.stay_min <= 10" @click="tweak(() => store.changeStay(leg, -15))" aria-label="15 minutes shorter">−15</button>
-                      <span class="btn btn-soft disabled mono stay-now">{{ leg.stay_min }} min</span>
-                      <button class="btn btn-soft" :disabled="busy" @click="tweak(() => store.changeStay(leg, 15))" aria-label="15 minutes longer">+15</button>
-                    </div>
-                    <div class="btn-group btn-group-sm ms-auto" role="group" aria-label="Order">
-                      <button class="btn btn-soft" :disabled="busy || pendingVisits[0] === leg" @click="tweak(() => store.moveStop(leg, -1))" aria-label="Move earlier"><i class="bi bi-arrow-up"></i></button>
-                      <button class="btn btn-soft" :disabled="busy || pendingVisits.at(-1) === leg" @click="tweak(() => store.moveStop(leg, 1))" aria-label="Move later"><i class="bi bi-arrow-down"></i></button>
-                    </div>
-                  </div>
-                  <div class="d-flex gap-2 flex-wrap mt-2">
+                  <div class="tiny fw-800 mb-2">Change this stop</div>
+                  <div class="d-flex gap-2 flex-wrap">
                     <button class="btn btn-sm btn-soft" :disabled="busy" @click="openSwap(leg)"><i class="bi bi-arrow-left-right"></i> Swap</button>
                     <button class="btn btn-sm btn-soft" :disabled="busy" @click="openAdd(leg)"><i class="bi bi-plus-lg"></i> Add after</button>
                     <button class="btn btn-sm btn-link text-danger ms-auto" :disabled="busy" @click="run(() => store.removeStop(leg))"><i class="bi bi-trash"></i> Remove</button>
@@ -274,7 +263,6 @@ const replans = [
 .stop-card.joined { border-color: var(--zt-pink); }
 .why { color: var(--zt-muted); }
 .edit-panel { border-top: 2px dashed var(--zt-soft-line); padding-top: 12px; }
-.stay-now { min-width: 5.5em; opacity: 1; }
 .rain-alert { background: #111; color: var(--zt-yellow); border: var(--zt-bw) solid #111; border-radius: 18px; box-shadow: 4px 4px 0 var(--zt-yellow); }
 [data-bs-theme='dark'] .rain-alert { border-color: var(--zt-yellow); }
 .rain-alert .btn { --bs-btn-bg: var(--zt-yellow); --bs-btn-color: #111; --bs-btn-border-color: var(--zt-yellow); }
