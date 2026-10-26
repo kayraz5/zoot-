@@ -31,7 +31,7 @@ const results = computed(() => {
 		.filter((p) => !q || [p.name, p.area, ...(p.tags || [])].some((s) => s?.toLowerCase().includes(q)))
 		.filter((p) => !wanted.length || wanted.some((tag) => p.tags?.includes(tag)))
 		.filter((p) => !area.value || p.area === area.value)
-		.filter((p) => !openNow.value || isOpenDuringVisit(p, t, t + 60000))
+		.filter((p) => !openNow.value || (p.hours_verified !== false && isOpenDuringVisit(p, t, t + 60000)))
 		.filter((p) => !indoorOnly.value || p.indoor)
 		.filter((p) => !freeOnly.value || !p.cost_band)
 		.sort((a, b) => a.name.localeCompare(b.name))

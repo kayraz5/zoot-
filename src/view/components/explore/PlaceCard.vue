@@ -38,6 +38,8 @@ async function load() {
 
 const price = computed(() => (props.place.cost_band ? '$'.repeat(props.place.cost_band) : 'Free'))
 const openNow = computed(() => isOpenDuringVisit(props.place, now(), now() + 60000))
+// Guessed hours (OSM had none) can't say "open now" honestly.
+const hoursUnknown = computed(() => props.place.hours_verified === false)
 </script>
 
 <template>
@@ -46,7 +48,8 @@ const openNow = computed(() => isOpenDuringVisit(props.place, now(), now() + 600
 			<div class="media">
 				<img v-if="photo" :src="photo.src" :alt="photo.alt || place.name" loading="lazy" />
 				<PlaceArt v-else :place="place" :height="150" :rounded="false" />
-				<span class="badge-open" :class="{ closed: !openNow }">{{ openNow ? 'Open now' : 'Closed now' }}</span>
+				<span v-if="hoursUnknown" class="badge-open unknown">Hours not confirmed</span>
+				<span v-else class="badge-open" :class="{ closed: !openNow }">{{ openNow ? 'Open now' : 'Closed now' }}</span>
 				<span v-if="photo?.credit" class="credit" :title="`${photo.credit}${photo.license ? ' · ' + photo.license : ''}`">© {{ photo.credit }}</span>
 			</div>
 			<div class="body">
@@ -79,6 +82,7 @@ const openNow = computed(() => isOpenDuringVisit(props.place, now(), now() + 600
 	font-size: 0.68rem; font-weight: 800; background: var(--zt-yellow); color: #111; border: 2px solid #111;
 }
 .badge-open.closed { background: #fff; color: #555; border-color: #555; }
+.badge-open.unknown { background: #fff1d6; color: #7c2d12; border-color: #b45309; }
 .credit {
 	position: absolute; right: 6px; bottom: 6px; max-width: 70%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 	font-size: 0.58rem; color: #fff; background: rgba(0, 0, 0, 0.45); padding: 1px 6px; border-radius: 6px;

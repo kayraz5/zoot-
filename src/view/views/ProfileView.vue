@@ -8,6 +8,7 @@ import {STYLES} from '../../model/data/origins.js';
 import {DEV_PANEL} from '../../model/services/config.js';
 import {COVERS, DEFAULT_COVER, onColor} from '../../model/services/brand.js';
 import {useCharacterStore} from '../../model/stores/character.js';
+import EntryCheck from '../components/EntryCheck.vue';
 
 // Loaded only when the Character tab is opened. The studio pulls in all of
 // Three.js (~540 kB), and most visits to this page are just checking XP or
@@ -147,6 +148,9 @@ async function signOut() {
         </nav>
 
         <template v-if="tab === 'profile'">
+        <!-- Shrey's entry check (b92164e); dropped in a later merge, restored. -->
+        <EntryCheck />
+
         <section class="zt-card p-3 mt-3">
             <div class="small fw-800 mb-2">Passport cover</div>
             <div class="d-flex gap-2">
