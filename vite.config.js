@@ -1,8 +1,47 @@
+import { existsSync, readdirSync } from 'node:fs'
 import { fileURLToPath, URL } from 'node:url'
 
 import { defineConfig, loadEnv } from 'vite'
 import vue from '@vitejs/plugin-vue'
 import vueDevTools from 'vite-plugin-vue-devtools'
+
+const STAMP_DIR = fileURLToPath(new URL('./public/stamps', import.meta.url))
+
+/**
+ * Expose the PNG filenames in public/stamps as the virtual module `virtual:stamps`.
+ *
+ * Stamp art is matched by filename at runtime (see model/services/stampArt.js), so
+ * dropping a new PNG into the folder is enough — there is no hand-maintained list
+ * to keep in sync. In dev, adding/removing a file reloads the page.
+ */
+function stampManifest() {
+  const virtualId = 'virtual:stamps'
+  const resolvedId = '\0' + virtualId
+
+  return {
+    name: 'zoot-stamp-manifest',
+    resolveId(id) {
+      if (id === virtualId) return resolvedId
+    },
+    load(id) {
+      if (id !== resolvedId) return
+      const files = existsSync(STAMP_DIR)
+        ? readdirSync(STAMP_DIR)
+            .filter((file) => file.toLowerCase().endsWith('.png'))
+            .sort()
+        : []
+      return `export default ${JSON.stringify(files)}`
+    },
+    configureServer(server) {
+      server.watcher.add(STAMP_DIR)
+      const reloadForStamp = (file) => {
+        if (file.startsWith(STAMP_DIR)) server.ws.send({ type: 'full-reload' })
+      }
+      server.watcher.on('add', reloadForStamp)
+      server.watcher.on('unlink', reloadForStamp)
+    }
+  }
+}
 
 /**
  * Dev only: serve the Vercel functions in api/ from the Vite server, so /api/plan
@@ -45,6 +84,7 @@ export default defineConfig({
     vue(),
     vueDevTools(),
     vercelApiDev(),
+    stampManifest(),
   ],
   resolve: {
     alias: {

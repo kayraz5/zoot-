@@ -5,7 +5,7 @@ import { useUiStore } from '../../model/stores/ui.js'
 import { useUserStore } from '../../model/stores/user.js'
 import { usePassportStore, CHOP_TARGET } from '../../model/stores/passport.js'
 import { AREAS } from '../../model/data/origins.js'
-import { chopLabel } from '../gl/pageArt.js'
+import { placeStampUrl } from '../../model/services/stampArt.js'
 
 // Pop-up after a stamp, or after returning to the airport/hotel.
 const ui = useUiStore()
@@ -17,6 +17,8 @@ const celebration = computed(() => ui.celebration)
 const area = computed(() => AREAS.find((a) => a.id === celebration.value?.area))
 const ink = computed(() => area.value?.ink || '#111111')
 const glyph = computed(() => area.value?.glyph || '✦')
+// The place's pre-generated stamp, matched by PNG filename; null → drawn chop.
+const stampArt = computed(() => placeStampUrl(celebration.value?.place?.name))
 // Different places stamped in this area, toward its chop
 const areaCount = computed(() => passport.byArea[celebration.value?.area]?.length || 0)
 
@@ -45,8 +47,7 @@ function goToPassport() {
         <template v-else>
           <div class="chop-stage mb-2">
             <div class="splat"></div>
-            <!-- The place's own stamp; the area chop only once it's earned -->
-            <div class="chop" :class="{ earned: celebration.chopEarned }" :style="{ '--ink': ink }">
+            <div class="chop" :style="{ '--ink': ink }">
               <span class="glyph">{{ glyph }}</span>
               <span class="ring-text">{{ celebration.chopEarned ? celebration.area : chopLabel(celebration.place?.name || '', celebration.area) }}</span>
             </div>
@@ -73,6 +74,17 @@ function goToPassport() {
 .title { font-size: 2rem; }
 .chop-stage { position: relative; height: 150px; display: grid; place-items: center; }
 .chop-stage > * { grid-area: 1 / 1; }
+.stamp-art {
+  width: 150px; height: 150px; object-fit: contain;
+  transform: rotate(-8deg);
+  filter: drop-shadow(2px 4px 0 rgba(17, 17, 17, 0.18));
+  animation: stamp-art-slam 0.55s cubic-bezier(0.3, 0.1, 0.3, 1.5) both;
+}
+@keyframes stamp-art-slam {
+  0% { transform: scale(2.4) rotate(-26deg); opacity: 0; }
+  60% { transform: scale(0.94) rotate(-9deg); opacity: 1; }
+  100% { transform: scale(1) rotate(-8deg); }
+}
 .chop {
   width: 120px; height: 120px; border-radius: 50%; border: 6px double var(--ink); color: var(--ink);
   display: grid; place-items: center; position: relative; transform: rotate(-12deg);

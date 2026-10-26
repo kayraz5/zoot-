@@ -1,4 +1,5 @@
 import { BRAND, DEFAULT_COVER, onColor } from '../../model/services/brand.js'
+import { areaStampUrl, loadedStampImage, placeStampUrl } from '../../model/services/stampArt.js'
 
 // Canvas drawings for each passport page (512×716). The passport turns them into page images for flipbook-vue.
 
@@ -147,6 +148,21 @@ function drawChopInk(ctx, { x, y, r, ink, glyph, label, sub, seed, alpha = 0.9, 
   }
   ctx.restore()
   speckle(ctx, x, y, r * 1.05, seed)
+}
+
+/**
+ * Draw one of the pre-generated stamp PNGs in place of a drawn chop.
+ * The PNG already carries its own ink, border and texture, so this only adds the
+ * same gentle rotation/alpha the drawn chops use.
+ */
+function drawStampImage(ctx, image, { x, y, r, seed, alpha = 0.9 }) {
+  const random = seededRandom(seed)
+  ctx.save()
+  ctx.translate(x, y)
+  ctx.rotate((random() - 0.5) * 0.22)
+  ctx.globalAlpha = alpha
+  ctx.drawImage(image, -r, -r, r * 2, r * 2)
+  ctx.restore()
 }
 
 export function drawCover(ctx, { color = DEFAULT_COVER, name = 'Field Traveller', otter = null }) {
@@ -301,12 +317,21 @@ export function drawAreaPage(ctx, { area, places, stampsByPlace, target, pageNo,
   ctx.font = '700 15px Poppins, sans-serif'
   ctx.fillText(earned ? `${stampedCount} / ${places.length} places stamped` : `${stampedCount} / ${target} toward the area chop`, 44, 132)
 
-  // Area chop in the top right, or a dashed placeholder with a faint glyph
+  // Area chop in the top right, or a dashed placeholder with a faint glyph.
+  // Prefer the pre-generated area PNG; fall back to the drawn chop.
   if (earned && revealed) {
-    drawChop(ctx, {
-      x: 392, y: 104, r: 64,
-      ink: area.ink, glyph: area.glyph, label: area.id, sub: 'SINGAPORE', seed: area.id, alpha: 0.88
-    })
+    const areaStamp = loadedStampImage(areaStampUrl(area.id))
+    if (areaStamp) {
+      drawStampImage(ctx, areaStamp, {
+        x: 392, y: 104, r: 62 * (0.9 + 0.1 * inkProgress),
+        seed: area.id, alpha: 0.9 * inkProgress
+      })
+    } else {
+      drawChop(ctx, {
+        x: 392, y: 104, r: 64 * (0.85 + 0.15 * inkProgress),
+        ink: area.ink, glyph: area.glyph, label: area.id, sub: 'SINGAPORE', seed: area.id, alpha: 0.88 * inkProgress
+      })
+    }
   } else {
     ctx.save()
     ctx.setLineDash([6, 7])
@@ -333,6 +358,18 @@ export function drawAreaPage(ctx, { area, places, stampsByPlace, target, pageNo,
     const stamp = stampsByPlace[place.id]
 
     if (stamp) {
+      // Use this place's pre-generated stamp when one exists, with the stamp
+      // date underneath; otherwise keep the drawn area chop.
+      const stampImage = loadedStampImage(placeStampUrl(place.name))
+      if (stampImage) {
+        drawStampImage(ctx, stampImage, { x, y, r: 50, seed: place.id, alpha: 0.9 })
+        ctx.fillStyle = MUTED
+        ctx.textAlign = 'center'
+        ctx.font = '700 10px Poppins, sans-serif'
+        ctx.fillText(stamp.date, x, y + 62)
+        return
+      }
+
       drawChop(ctx, {
         x, y, r: 52, ink: area.ink, glyph: area.glyph, label: chopLabel(place.name, area.id),
         sub: stamp.date, seed: place.id, alpha: 0.85, square: i % 3 === 1
