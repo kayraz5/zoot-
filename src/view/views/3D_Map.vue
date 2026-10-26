@@ -66,6 +66,8 @@ import { TravellerLayer, bearingBetween } from '../gl/travellerLayer.js'
 // clicks come back as events so this view stays the single owner of map state.
 import MissionInfoCard from '../components/MissionInfoCard.vue'
 import AirportHelp from '../components/AirportHelp.vue'
+// Social quests: live member pins + back-to-own-plan when joined stops end (no UI of its own).
+import QuestMapLive from '../components/QuestMapLive.vue'
 // Mission-derived values shared with drawing and the HUD (mission, next, here,
 // check-in status, guidance, countdown…).
 import { useMissionNav } from '../composables/useMissionNav.js'
@@ -1451,6 +1453,9 @@ function writeMissionCardFlag(open) {
       </div>
     </div>
   </div>
+
+  <!-- Social quests: always on, even when the card below is hidden. -->
+  <QuestMapLive :get-map="() => (mapReady ? map : null)" />
 
   <!-- ── Next-stop card (the "center console") ─────────────────────────── -->
   <!-- Purely presentational: mission/GPS values come in as props and every button

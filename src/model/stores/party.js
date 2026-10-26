@@ -15,7 +15,9 @@ export const usePartyStore = defineStore('party', {
     hosted: null, // my open window for the active mission (+ roster), or null
     hostedFor: null, // mission id `hosted` was loaded for
     demoIds: new Set(),
-    dialog: null // centred prompt (CenterDialog.vue): { title, body, icon, confirmText, cancelText, tone, resolve }
+    dialog: null, // centred prompt (CenterDialog.vue): { title, body, icon, confirmText, cancelText, tone, resolve }
+    liveOthers: [], // other members' live positions on the map (QuestMapLive.vue keeps this up to date)
+    liveRefresh: 0 // bump to make QuestMapLive re-read locations now (e.g. after the demo moved people)
   }),
   actions: {
     /** Centred prompt that blurs the page. Resolves true (confirm) or false (cancel). */
