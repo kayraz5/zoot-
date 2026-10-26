@@ -2,6 +2,7 @@
 import { useRouter } from 'vue-router'
 import { useUserStore } from '../../model/stores/user.js'
 import { useUiStore } from '../../model/stores/ui.js'
+import { catalog } from '../../model/services/catalog.js'
 
 /** Landing page. Copy and layout follow the Zoot pitch deck (Matthew: design QA). */
 const router = useRouter()
@@ -53,7 +54,7 @@ const scrollToTop = () => window.scrollTo({ top: 0, behavior: 'smooth' })
               <RouterLink to="/place/supertree-grove" class="btn btn-soft btn-lg">Peek at a stop</RouterLink>
             </div>
             <div class="stats">
-              <div><b>89</b><span>Singapore stops</span></div>
+              <div><b>{{ catalog.length }}</b><span>Singapore stops</span></div>
               <div><b>90</b><span>min airport buffer</span></div>
               <div><b>4</b><span>travel styles</span></div>
             </div>
