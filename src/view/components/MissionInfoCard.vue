@@ -1,4 +1,7 @@
 <script setup>
+import { computed } from 'vue'
+import { placeStampUrl } from '../../model/services/stampArt.js'
+
 /**
  * Next-stop card ("center console") shown at the bottom of the map.
  *
@@ -6,7 +9,7 @@
  * for drawing too) and passes them in as props. Actions are emitted as events, so
  * the map view remains the single owner of navigation and map state.
  */
-defineProps({
+const props = defineProps({
   mission: { type: Object, default: null },       // the active mission, or null if none
   next: { type: Object, default: null },           // the stop you're heading to, or null if the quest is done
   stopNumber: { type: String, default: '' },       // e.g. "2/5"
@@ -23,6 +26,10 @@ defineProps({
 })
 
 defineEmits(['plan', 'open-passport', 'stamp', 'change-map-style', 'need-help', 'close'])
+
+// The next place's pre-generated stamp art, matched by PNG filename. Null for the
+// return leg or a place without art — the generic stamp icon is the fallback.
+const stampArt = computed(() => placeStampUrl(props.next?.name))
 </script>
 
 <template>
@@ -75,7 +82,10 @@ defineEmits(['plan', 'open-passport', 'stamp', 'change-map-style', 'need-help', 
       <div class="col-5 col-sm-4 d-flex justify-content-end">
         <button class="stamp-btn" :class="{ ready: check?.ok }" :disabled="stamping" @click="$emit('stamp')"
           :aria-label="next.kind === 'return' ? 'Check in back home' : `Stamp ${next.name}`">
-          <span class="stamp-circle"><i class="bi" :class="next.kind === 'return' ? 'bi-house-check-fill' : 'bi-patch-check-fill'"></i></span>
+          <span class="stamp-circle" :class="{ 'has-art': stampArt }">
+            <img v-if="stampArt" :src="stampArt" alt="" class="stamp-art" />
+            <i v-else class="bi" :class="next.kind === 'return' ? 'bi-house-check-fill' : 'bi-patch-check-fill'"></i>
+          </span>
           <span class="stamp-label">{{ stamping ? '…' : next.kind === 'return' ? "I'm back" : 'Stamp' }}</span>
         </button>
       </div>
@@ -101,7 +111,10 @@ defineEmits(['plan', 'open-passport', 'stamp', 'change-map-style', 'need-help', 
   position: absolute;
   left: 50%;
   transform: translateX(-50%);
-  bottom: clamp(70px, 20vw, 100px);
+  /* Dock above the bottom nav instead of overlapping it: the nav's own inset +
+     its height + a shared breathing gap, so the card and the nav read as two
+     separate surfaces. The old 70–100px clamp sat inside the 80px nav. */
+  bottom: calc(var(--zt-nav-inset) + var(--zt-nav-h) + var(--zt-nav-clearance));
   max-width: 600px;
   width: 90%;
   z-index: 1;
@@ -209,6 +222,11 @@ defineEmits(['plan', 'open-passport', 'stamp', 'change-map-style', 'need-help', 
   justify-content: center;
   font-size: clamp(16px, 4.8cqw, 20px);
 }
+
+/* The location's own stamp art replaces the generic icon inside the button. */
+.stamp-circle.has-art,
+.stamp-btn.ready .stamp-circle.has-art { background: transparent; }
+.stamp-circle .stamp-art { width: 100%; height: 100%; object-fit: contain; }
 
 .stamp-label {
   color: var(--zt-yellow-pale);

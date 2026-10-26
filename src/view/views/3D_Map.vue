@@ -26,6 +26,9 @@
  *   - `mission`     the active mission object; `missionStore` is its Pinia store.
  *   - `next`        the next leg to walk to (visit or return).
  *   - `flatMode`    top-down free-roam view (pan on, 3D traveller/pins off).
+ *   - `otterView`   third-person camera locked behind the traveller's heading.
+ *   - `displayHeading` smoothed facing (compass or movement) shared by the
+ *     character and the otter-view camera.
  *   - `here`        the traveller's current { lat, lng }, or null before a GPS fix.
  *   - Positions are { lat, lng }; MapLibre expects [lng, lat].
  *
@@ -54,7 +57,7 @@ import destination from '@turf/destination'
 import { point } from '@turf/helpers'
 
 // 3D stop pins (WebGL custom layers) — see gl/pinPoint.js.
-import { PinLayer, syncStopPins } from '../gl/pinPoint.js'
+import { PinLayer, syncStopPins, updatePinProximity } from '../gl/pinPoint.js'
 // The 3D traveller: traveller.js is the body, travellerAssets.js the outfits, and
 // travellerLayer.js the MapLibre wrapper (it also exports the bearing helper).
 import { TravellerLayer, bearingBetween } from '../gl/travellerLayer.js'
@@ -62,6 +65,7 @@ import { TravellerLayer, bearingBetween } from '../gl/travellerLayer.js'
 // Presentational next-stop card. All mission/GPS data is passed as props; button
 // clicks come back as events so this view stays the single owner of map state.
 import MissionInfoCard from '../components/MissionInfoCard.vue'
+import AirportHelp from '../components/AirportHelp.vue'
 // Mission-derived values shared with drawing and the HUD (mission, next, here,
 // check-in status, guidance, countdown…).
 import { useMissionNav } from '../composables/useMissionNav.js'
@@ -72,7 +76,15 @@ import { useUiStore } from '../../model/stores/ui.js'
 // imports, so reading it here is cheap.
 import { useCharacterStore } from '../../model/stores/character.js'
 
-import { geo, hasFix, startGps, setFake, teleport } from '../../model/services/geo.js'
+import {
+  geo,
+  hasFix,
+  startGps,
+  setFake,
+  teleport,
+  startHeading,
+  stopHeading
+} from '../../model/services/geo.js'
 import { distanceM } from '../../model/services/travel.js'
 import { addQuestLayers, createPlayerMarker, setFence, setQuestColors, syncStopMarkers } from '../map/questLayers.js'
 import { loadCatalog } from '../../model/services/catalog.js'
@@ -83,6 +95,9 @@ import { formatTime } from '../../model/services/hours.js'
 import { getWalkRoute, getDriveRoute } from '../../model/services/routing.js'
 // Same contract for MRT legs: walk + real track geometry + walk, stitched together.
 import { getMrtRoute } from '../../model/services/mrtRoute.js'
+// Trim a resolved route to the traveller's current position so the drawn line
+// starts exactly at the character (no straight "tail" from a stale route origin).
+import { trimRouteAtPosition } from '../../model/services/routeGeometry.js'
 
 // ─────────────────────────────────────────────────────────────────────────────
 // 2. Module constants
@@ -93,8 +108,37 @@ const ROUTE_LAYER_ID = 'mission-route-line'
 // A decorative Marina Bay Sands pin, added once the style has loaded.
 const MBS_DEMO_PIN = { id: 'mbs-pin', lng: 103.8607, lat: 1.2830 }
 
+/**
+ * Otter view: a third-person camera that sits behind the traveller and looks the
+ * way they are heading, so the screen roughly matches what they see in real life.
+ * `lookAheadM` pushes the focus point in front of the character, which leaves him
+ * in the lower part of the screen instead of dead centre.
+ */
+const OTTER_VIEW = {
+  pitch: 62,
+  zoom: 18,
+  lookAheadM: 12,
+  smoothMs: 120 // time constant for smoothing position jumps
+}
+
+// Time constant for turning the character/camera. ~95% of a turn settles in ~3×.
+const HEADING_SMOOTH_MS = 160
+
 /** Pick the right route resolver for a leg's travel mode. */
 const ROUTE_BY_MODE = { walk: getWalkRoute, taxi: getDriveRoute, mrt: getMrtRoute }
+
+/**
+ * Live-route refresh policy. The drawn line is re-trimmed to the traveller every
+ * frame, so these only control how often the road geometry is re-fetched:
+ *  - check deviation after this long, so a walk off the route reacts quickly;
+ *  - refresh anyway at least this often (new turns/corners ahead);
+ *  - never hit the routers more often than the minimum interval;
+ *  - treat this much deviation as "the route no longer fits: re-route now".
+ */
+const ROUTE_CHECK_AFTER_MS = 250
+const ROUTE_REFRESH_MS = 800
+const ROUTE_MIN_INTERVAL_MS = 500
+const ROUTE_DEVIATION_M = 20
 
 /** Demo-Walk keyboard controls: key → bearing offset relative to the map's north. */
 const KEY_DIRECTIONS = {
@@ -167,6 +211,7 @@ const mapReady = ref(false)             // style loaded + quest layers added
 const following = ref(true)             // camera tracks the traveller until a user gesture
 const stamping = ref(false)             // a stamp request is in flight
 const helpOpen = ref(false)             // "Need help?" replan dialog
+const airportOpen = ref(false)          // "Get to the airport" dialog
 const showMissionCard = ref(readMissionCardFlag())
 
 const flatMode = ref(false)             // true = top-down free-roam (pan enabled, no 3D)
@@ -177,6 +222,7 @@ const mapTheme = ref('theme')           // 'theme' | 'simple'
 const colorblindMode = ref(false)       // high-contrast map palette
 const showTraveller3D = ref(true)       // 3D character vs flat dot
 const showStopPins3D = ref(true)        // 3D tower pins vs flat numbered dots
+const otterView = ref(false)            // third-person camera locked behind the traveller
 
 const demoSpeed = ref(20)               // Demo-Walk multiplier (1×, 6×, 20×)
 const wasdEnabled = ref(true)           // keyboard movement during Demo-Walk
@@ -209,7 +255,12 @@ let map = null                          // MapLibre map instance
 let player = null                       // flat "you are here" DOM marker
 let traveller3D = null                  // 3D character layer (null while using the dot)
 let lastTravellerAt = null              // previous fix, used to work out facing
+let travellerHeading = null             // last direction of travel (degrees), for otter view
+let travellerHeadingAt = 0              // when that direction was recorded
 let travellerStopTimer = 0              // drops the walk cycle after the fixes stop
+let displayHeading = null               // smoothed bearing used by the character + camera
+let otterCamera = null                  // { lng, lat } smoothed otter-view focus point
+let movementFrameBearing = null         // frozen WASD reference while no compass is available
 
 // Per-leg render state. Keys are derived from seq + place_id so a leg keeps the
 // same identity across replans (see legKey()).
@@ -225,6 +276,8 @@ let lastFrame = 0
 let noFixTimer = 0
 let retryTimer = 0
 let lastRouteAt = 0
+let routeInFlight = false               // one live-route request at a time
+let liveDeviationM = Infinity           // how far the traveller is from the resolved live route
 const keys = new Set()                  // pressed Demo-Walk keys (w/a/s/d + arrows)
 let orbit = null                        // active drag-to-orbit gesture, or null
 
@@ -237,6 +290,9 @@ onMounted(async () => {
   await loadCatalog()
   await missionStore.loadActive()
   if (!geo.fake) startGps()
+  // Compass: works without a prompt on Android/desktop. On iOS this first attempt
+  // is outside a gesture, so it quietly fails and is retried from a tap below.
+  startHeading().catch(() => {})
 
   // GPS can be slow or denied; only nag once we know a mission cares about it.
   noFixTimer = window.setTimeout(() => {
@@ -272,6 +328,7 @@ onUnmounted(() => {
   clearTimeout(travellerStopTimer)
   window.removeEventListener('keydown', onDemoKeyDown)
   window.removeEventListener('keyup', onDemoKeyUp)
+  stopHeading()
   detachOrbitListeners()
   markers.clear()
   pins.clear()
@@ -479,6 +536,9 @@ function setFlatMode(isFlat) {
   flatMode.value = isFlat
 
   if (isFlat) {
+    // Flat free-roam and a locked third-person camera are mutually exclusive.
+    otterView.value = false
+    otterCamera = null
     following.value = false
     map.dragPan.enable()
     animateToFlat()
@@ -551,6 +611,9 @@ function syncStopVisuals() {
     syncStopPins(map, pins, [])
     syncStopMarkers(map, markers, missionStore.legs, next.value, flyTo)
   }
+
+  // New pins should immediately use the right idle/close animation.
+  updatePinProximity(pins, here.value)
 }
 
 /** Draw the check-in ring around the next stop (wider at home). */
@@ -572,11 +635,18 @@ function drawRoute() {
   const segments = []
   const target = next.value
   if (target) {
-    const origin = here.value || previousPoint(target)
     const live = liveRoute.value
     if (live && live.to === target) {
-      segments.push([[origin.lng, origin.lat], ...live.coords])
+      // Re-trim every frame: the line begins at the character's exact position and
+      // only the path ahead is drawn, so there is no stale tail as they move.
+      const trimmed = trimRouteAtPosition(live.coords, here.value)
+      liveDeviationM = trimmed.distanceM
+      if (trimmed.coords.length > 1) segments.push(trimmed.coords)
+    } else {
+      liveDeviationM = Infinity
     }
+  } else {
+    liveDeviationM = Infinity
   }
   for (const segment of plannedSegments.value) segments.push(segment.coords)
 
@@ -666,9 +736,13 @@ async function refreshPlannedRoutes() {
 }
 
 /**
- * Refresh the geometry for the leg currently being walked. Throttled while moving
- * (Demo-Walk at 20× would otherwise hammer the routers) and skipped when the
- * traveller has barely moved or the target has not changed.
+ * Refresh the road geometry for the leg currently being walked.
+ *
+ * The visible line is re-trimmed to the traveller in drawRoute() on every frame,
+ * so this only has to keep the underlying path honest: re-fetch after a short
+ * cadence (new corners ahead), when the traveller wanders off the line, or when
+ * the leg changes. Calls are rate-limited so Demo-Walk at 20× cannot hammer the
+ * routers. `force` bypasses the policy (new mission/stamp).
  */
 async function refreshLiveRoute(force = false) {
   clearTimeout(retryTimer)
@@ -681,21 +755,41 @@ async function refreshLiveRoute(force = false) {
   if (!target || !here.value || !resolveRoute) return drawRoute()
 
   const current = liveRoute.value
-  const movedMeters = current ? distanceM(current.from, here.value) : Infinity
-  if (!force && current?.to === target && movedMeters < 25) return drawRoute()
+  const sameTarget = current?.to === target
+  const ageMs = Date.now() - lastRouteAt
 
-  const waitMs = 3000 - (Date.now() - lastRouteAt)
-  if (!force && waitMs > 0) {
-    retryTimer = window.setTimeout(() => refreshLiveRoute(), waitMs)
-    return drawRoute()
+  if (!force && sameTarget) {
+    // Just fetched or checked: the trimmed line is already current.
+    if (ageMs < ROUTE_CHECK_AFTER_MS) return drawRoute()
+
+    // Only re-query early when the traveller is clearly off the resolved path.
+    if (ageMs < ROUTE_REFRESH_MS && liveDeviationM < ROUTE_DEVIATION_M) {
+      return drawRoute()
+    }
+
+    // Respect the router rate limit; retry when the window opens again.
+    if (ageMs < ROUTE_MIN_INTERVAL_MS) {
+      retryTimer = window.setTimeout(() => refreshLiveRoute(), ROUTE_MIN_INTERVAL_MS - ageMs)
+      return drawRoute()
+    }
   }
-  lastRouteAt = Date.now()
 
-  const from = { ...here.value }
-  const route = await resolveRoute(from, target)
-  // Ignore late responses for a target that is no longer next.
-  if (route && next.value === target) {
-    liveRoute.value = { coords: route.coords, from, to: target }
+  // Never run two router requests for the same leg at once.
+  if (routeInFlight) return drawRoute()
+
+  routeInFlight = true
+  lastRouteAt = Date.now()
+  try {
+    const from = { ...here.value }
+    const route = await resolveRoute(from, target)
+    // Ignore late responses for a target that is no longer next.
+    if (route && next.value === target) {
+      liveRoute.value = { coords: route.coords, from, to: target }
+    }
+  } catch (err) {
+    console.warn('[3D_Map] live route failed', err)
+  } finally {
+    routeInFlight = false
   }
   drawRoute()
 }
@@ -742,16 +836,19 @@ function syncPlayerAvatar() {
 }
 
 /**
- * Keep the 3D character on the latest fix, facing the direction of travel and
- * playing the walk cycle while he is actually moving.
+ * Keep the 3D character on the latest fix and play the walk cycle while moving.
+ * Facing is applied by the frame loop (see updateFacing), which can use the
+ * compass and smooth the turn; here we only record the movement direction.
  */
 function moveTraveller(position) {
   if (!traveller3D) return
   traveller3D.setLngLat(position.lng, position.lat)
 
-  // Only turn on a real step: GPS jitter would otherwise spin him on the spot.
+  // Only update on a real step: GPS jitter would otherwise spin him on the spot.
   if (lastTravellerAt && distanceM(lastTravellerAt, position) > 3) {
-    traveller3D.setBearing(bearingBetween(lastTravellerAt, position))
+    // Fallback heading when the device has no compass (or Demo-Walk is driving).
+    travellerHeading = bearingBetween(lastTravellerAt, position)
+    travellerHeadingAt = Date.now()
     traveller3D.setMoving(true)
 
     // Fixes stop arriving when you stop walking, so re-arm an idle timer instead.
@@ -796,6 +893,12 @@ function onOrbitPointerMove(event) {
 
   const dx = event.clientX - orbit.x
   const dy = event.clientY - orbit.y
+  // A deliberate drag means "let me look around", so release the otter-view lock.
+  // A few pixels of jitter from a tap should not.
+  if (otterView.value && (Math.abs(dx) > 4 || Math.abs(dy) > 4)) {
+    otterView.value = false
+    otterCamera = null
+  }
   const around = here.value ? [here.value.lng, here.value.lat] : undefined
 
   map.jumpTo({
@@ -821,6 +924,9 @@ function onOrbitPointerUp(event) {
 
 /** Fly to a stop, and stop following until the user recentres. */
 function flyTo(place, zoom = 17) {
+  // Looking at a specific stop overrides the camera lock.
+  otterView.value = false
+  otterCamera = null
   map?.flyTo({ center: [place.lng, place.lat], zoom, duration: 1200 })
   following.value = false
 }
@@ -828,13 +934,24 @@ function flyTo(place, zoom = 17) {
 /** Recentre on the traveller (or explain why we cannot). */
 function centerOnMe(notifyOnFail = true) {
   following.value = true
-  if (!geo.fake) startGps()
-
-  if (here.value) {
-    map.flyTo({ center: [here.value.lng, here.value.lat], zoom: 18, duration: 1500 })
-  } else if (notifyOnFail) {
-    ui.toast('Waiting for GPS… Allow location access, or turn on Demo-Walk.', 'dark')
+  if (!geo.fake) {
+    startGps()
+    // A tap is a valid gesture for the iOS compass permission prompt.
+    startHeading().catch(() => {})
   }
+
+  if (!here.value) {
+    if (notifyOnFail) ui.toast('Waiting for GPS… Allow location access, or turn on Demo-Walk.', 'dark')
+    return
+  }
+
+  // In otter view, "recentre" means re-lock behind the character, not a plain fly-to.
+  if (otterView.value) {
+    applyOtterView()
+    return
+  }
+
+  map.flyTo({ center: [here.value.lng, here.value.lat], zoom: 18, duration: 1500 })
 }
 
 function zoomIn() {
@@ -851,6 +968,144 @@ function animateToFlat() {
 
 function animateTo3D() {
   map.easeTo({ pitch: 56, bearing: -18, duration: 600 })
+}
+
+/**
+ * Direction the traveller is facing, in degrees clockwise from north.
+ * Priority: live compass → recent movement → next stop → last known → camera.
+ */
+function facingHeading() {
+  // Compass is the truest "where you face"; Demo-Walk simulates movement, so the
+  // fake walk direction wins there.
+  if (!geo.fake && geo.heading != null) return geo.heading
+
+  // Recent movement: the direction the character is actually walking.
+  if (travellerHeading != null && Date.now() - travellerHeadingAt < 3000) {
+    return travellerHeading
+  }
+
+  // Standing still: look toward the next stop so the view points somewhere useful.
+  if (here.value && next.value) return bearingDegrees(here.value, next.value)
+
+  if (travellerHeading != null) return travellerHeading
+  return map?.getBearing() ?? 0
+}
+
+/** Interpolate between two bearings along the shortest arc (359° → 0° safe). */
+function lerpAngle(from, to, t) {
+  const delta = ((to - from + 540) % 360) - 180
+  return (from + delta * t + 360) % 360
+}
+
+/**
+ * Per-frame facing update: smooth the heading so compass changes and WASD
+ * direction changes do not snap the character or the camera.
+ */
+function updateFacing(deltaMs) {
+  if (!mapReady.value) return
+
+  const target = facingHeading()
+  const blend = 1 - Math.exp(-deltaMs / HEADING_SMOOTH_MS)
+  displayHeading = displayHeading == null ? target : lerpAngle(displayHeading, target, blend)
+
+  // The character always follows the smoothed heading, whether it came from the
+  // compass or from a change of walking direction.
+  traveller3D?.setBearing(displayHeading)
+
+  if (otterView.value && following.value && here.value) updateOtterCamera(deltaMs)
+}
+
+/**
+ * Follow the traveller in third-person: smooth the focus point (so GPS fixes and
+ * fast Demo-Walk steps do not jerk the view) and rotate with `displayHeading`,
+ * which is already smoothed.
+ */
+function updateOtterCamera(deltaMs) {
+  if (!map || !here.value || displayHeading == null) return
+
+  const focus = pointAtOffset(here.value, displayHeading, OTTER_VIEW.lookAheadM)
+
+  if (!otterCamera) {
+    otterCamera = { lng: focus.lng, lat: focus.lat, bearing: displayHeading }
+    map.jumpTo({ center: [focus.lng, focus.lat], bearing: displayHeading })
+    return
+  }
+
+  const blend = 1 - Math.exp(-deltaMs / OTTER_VIEW.smoothMs)
+  otterCamera.lng += (focus.lng - otterCamera.lng) * blend
+  otterCamera.lat += (focus.lat - otterCamera.lat) * blend
+
+  // Skip sub-pixel updates while stationary: avoids re-rendering for nothing.
+  const bearingDelta = Math.abs(((displayHeading - otterCamera.bearing + 540) % 360) - 180)
+  const remainingGap = Math.abs(focus.lng - otterCamera.lng) + Math.abs(focus.lat - otterCamera.lat)
+  if (bearingDelta < 0.05 && remainingGap < 1e-7) return
+
+  otterCamera.bearing = displayHeading
+  map.jumpTo({
+    center: [otterCamera.lng, otterCamera.lat],
+    bearing: displayHeading
+  })
+}
+
+/**
+ * Snap into the otter view. Following is handled every frame by updateOtterCamera;
+ * this only sets the starting camera, pitch and zoom.
+ */
+function applyOtterView() {
+  if (!map || !here.value) return
+
+  displayHeading = facingHeading()
+  const focus = pointAtOffset(here.value, displayHeading, OTTER_VIEW.lookAheadM)
+  otterCamera = { lng: focus.lng, lat: focus.lat, bearing: displayHeading }
+
+  map.jumpTo({
+    center: [focus.lng, focus.lat],
+    bearing: displayHeading,
+    pitch: OTTER_VIEW.pitch,
+    zoom: OTTER_VIEW.zoom
+  })
+}
+
+/**
+ * Toggle the third-person "otter view": the camera sits behind the character and
+ * looks along their heading (compass when available). Leaving it restores the
+ * normal guided 3D camera.
+ */
+function toggleOtterView() {
+  otterView.value = !otterView.value
+
+  if (!otterView.value) {
+    otterCamera = null
+    following.value = true
+    if (here.value) {
+      map.easeTo({
+        center: [here.value.lng, here.value.lat],
+        pitch: 56,
+        bearing: -18,
+        zoom: 18,
+        duration: 900
+      })
+    } else {
+      animateTo3D()
+    }
+    return
+  }
+
+  // Otter view is inherently 3D and follows the character.
+  if (flatMode.value) setFlatMode(false)
+  following.value = true
+  showTraveller3D.value = true
+  // Called from the click gesture, which is what iOS requires to grant compass access.
+  if (!geo.fake) startHeading().catch(() => {})
+
+  otterCamera = null
+  applyOtterView()
+
+  if (!here.value) {
+    ui.toast('Waiting for GPS… the camera will lock on once it finds you.', 'dark', 3500)
+  } else {
+    ui.toast('Otter view on: the camera follows the way you face.', 'dark', 3000)
+  }
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -889,6 +1144,12 @@ async function skipNextStop() {
   ui.toast('Stop skipped. On to the next one.', 'dark')
 }
 
+/** Open the "I need to get to the airport" planner. */
+function openAirportHelp() {
+  helpOpen.value = false
+  airportOpen.value = true
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 // 11. Demo-Walk (fake GPS you move with WASD / taps)
 // ─────────────────────────────────────────────────────────────────────────────
@@ -900,7 +1161,8 @@ function bearingDegrees(a, b) {
   const x =
     Math.cos(rad(a.lat)) * Math.sin(rad(b.lat)) -
     Math.sin(rad(a.lat)) * Math.cos(rad(b.lat)) * Math.cos(rad(b.lng - a.lng))
-  return (Math.atan2(y, x) * 180) / Math.PI
+  // Normalised to 0–360 so it matches compass headings and lerpAngle().
+  return ((Math.atan2(y, x) * 180) / Math.PI + 360) % 360
 }
 
 /** A point `meters` from `origin` along `bearing` (degrees). */
@@ -954,16 +1216,39 @@ function onDemoKeyUp(event) {
   keys.delete(event.key.toLowerCase())
 }
 
-/** Frame loop: move the fake GPS while WASD keys are held, then request the next frame. */
+/**
+ * Bearing that WASD movement is measured against.
+ *
+ * With a compass — or outside otter view — the camera bearing is stable relative
+ * to the world, so movement can safely be camera-relative. Without a compass in
+ * otter view, the camera turns to follow the movement heading; using its live
+ * bearing would make every step re-aim the next (a spiral). Freezing the reference
+ * for the duration of a key press keeps the direction stable.
+ */
+function movementReferenceBearing() {
+  const hasCompass = !geo.fake && geo.heading != null
+  if (!otterView.value || hasCompass) {
+    movementFrameBearing = null
+    return map.getBearing()
+  }
+  if (movementFrameBearing == null) movementFrameBearing = map.getBearing()
+  return movementFrameBearing
+}
+
+/**
+ * Frame loop: move the fake GPS while WASD keys are held, smooth the facing, then
+ * request the next frame. This also drives the smoothed otter-view camera.
+ */
 function demoWalkLoop(timestamp) {
   const deltaMs = Math.min(100, timestamp - (lastFrame || timestamp))
   lastFrame = timestamp
 
   if (keys.size && geo.fake && hasFix() && map) {
+    const referenceBearing = movementReferenceBearing()
     let directionX = 0
     let directionY = 0
     for (const key of keys) {
-      const angle = ((KEY_DIRECTIONS[key] + map.getBearing()) * Math.PI) / 180
+      const angle = ((KEY_DIRECTIONS[key] + referenceBearing) * Math.PI) / 180
       directionX += Math.sin(angle)
       directionY += Math.cos(angle)
     }
@@ -974,8 +1259,11 @@ function demoWalkLoop(timestamp) {
       teleport(pointAtOffset(here.value, bearing, (metersPerSecond * deltaMs) / 1000))
       following.value = true
     }
+  } else {
+    movementFrameBearing = null
   }
 
+  updateFacing(deltaMs)
   raf = requestAnimationFrame(demoWalkLoop)
 }
 
@@ -1000,7 +1288,16 @@ watch(
 )
 
 watch(check, drawFence)
-watch(showTraveller3D, syncPlayerAvatar)
+watch(showTraveller3D, (visible) => {
+  // Otter view needs the 3D character; hiding him releases the camera lock and
+  // restores the normal guided camera.
+  if (!visible && otterView.value) {
+    otterView.value = false
+    otterCamera = null
+    map?.easeTo({ pitch: 56, bearing: -18, duration: 700 })
+  }
+  syncPlayerAvatar()
+})
 watch(showStopPins3D, syncStopVisuals)
 
 // Saving a look in Me → Character recolours the existing character in place.
@@ -1015,11 +1312,17 @@ watch(mapTheme, () => {
 })
 
 function onHereChanged() {
-  if (!mapReady.value || !here.value) return
+  if (!mapReady.value) return
+
+  // Pins switch to their close animation as the traveller approaches (and back).
+  updatePinProximity(pins, here.value)
+  if (!here.value) return
 
   syncPlayerAvatar()
 
-  if (following.value) {
+  // Otter view is followed every frame in updateOtterCamera; a normal follow can
+  // recentre here. Keeping them exclusive avoids two camera writers fighting.
+  if (!otterView.value && following.value) {
     // Following always means street level, even if the user had zoomed out.
     const zoom = map.getZoom() < 15.5 ? 16.8 : undefined
     if (geo.fake && !zoom) map.jumpTo({ center: [here.value.lng, here.value.lat] })
@@ -1034,6 +1337,9 @@ function onMissionLegsChanged() {
   drawMission()
   refreshPlannedRoutes()
   refreshLiveRoute(true)
+  // A new next stop can change which way "forward" is while standing still; the
+  // frame loop will turn toward it smoothly.
+  if (otterView.value) travellerHeadingAt = 0
 }
 
 function syncTravellerAppearance() {
@@ -1110,6 +1416,21 @@ function writeMissionCardFlag(open) {
     </div>
 
     <div class="map-tools" :class="{ open: mapToolsOpen }">
+      <!-- Otter view: locks the camera behind the traveller and looks along his
+           heading, so the screen roughly matches the real street ahead. -->
+      <button
+        id="OtterView"
+        type="button"
+        class="map-btn"
+        :class="{ active: otterView }"
+        :aria-pressed="otterView"
+        aria-label="Otter view: third-person camera behind the traveller"
+        title="Otter view"
+        @click="toggleOtterView()"
+      >
+        <i class="bi bi-binoculars-fill" aria-hidden="true"></i>
+      </button>
+
       <div id="zoom" class="map-btn" @click="zoomIn">
         <i class="bi bi-zoom-in"></i>
       </div>
@@ -1182,6 +1503,11 @@ function writeMissionCardFlag(open) {
   <template v-if="helpOpen">
     <div class="map-backdrop" @click="helpOpen = false"></div>
     <div id="HelpPop" class="rounded-4" role="dialog" aria-label="Need help?">
+      <button class="btn btn-danger btn-sm w-100 mb-2 airport-cta" @click="openAirportHelp">
+        <i class="bi bi-airplane-fill"></i> I need to get to the airport
+      </button>
+      <p class="help-note">Quickest way from where you are, with MRT or Grab steps.</p>
+
       <div class="demo-label mb-2">Change the plan</div>
       <p class="help-note">Stamped stops stay. Only the stops ahead get rewritten from where you are now.</p>
       <button class="btn btn-warning btn-sm w-100 mb-2" :disabled="missionStore.status === 'planning'" @click="replan('behind')"><i class="bi bi-hourglass-split"></i> I'm behind schedule</button>
@@ -1193,6 +1519,14 @@ function writeMissionCardFlag(open) {
       <div v-if="missionStore.status === 'planning'" class="help-note mt-2">{{ missionStore.statusText || 'Replanning…' }}</div>
     </div>
   </template>
+
+  <!-- ── "I need to get to the airport" dialog ─────────────────────────── -->
+  <AirportHelp
+    v-if="airportOpen"
+    :mission="mission"
+    :position="here"
+    @close="airportOpen = false"
+  />
 
   <!-- ── Map appearance dialog ─────────────────────────────────────────── -->
   <div v-if="mapStyleOpen" class="map-backdrop" @click="mapStyleOpen = false"></div>
@@ -1307,7 +1641,7 @@ function writeMissionCardFlag(open) {
   display: flex;
   flex-direction: column;
   align-items: flex-end;
-  gap: clamp(10px, 3vw, 16px);
+  gap: clamp(6px, 2vw, 10px);
 }
 
 #top-right {
@@ -1322,21 +1656,25 @@ function writeMissionCardFlag(open) {
   text-align: left;
 }
 
+/* Compact enough to stack five controls inside a phone-width drawer. */
 .map-btn {
   z-index: 1;
-  width: clamp(46px, 14vw, 60px);
-  height: clamp(46px, 14vw, 60px);
+  width: clamp(40px, 10.5vw, 48px);
+  height: clamp(40px, 10.5vw, 48px);
   flex-shrink: 0;
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: clamp(18px, 5.6vw, 24px);
+  padding: 0;
+  font-family: inherit;
+  font-size: clamp(15px, 4.4vw, 20px);
   color: var(--zt-yellow-pale);
   background: var(--zt-black);
-  border: clamp(2px, 1vw, 4px) solid var(--zt-yellow);
-  border-radius: var(--zt-radius);
-  box-shadow: var(--zt-shadow);
+  border: clamp(2px, 0.7vw, 3px) solid var(--zt-yellow);
+  border-radius: clamp(12px, 3.4vw, 16px);
+  box-shadow: var(--zt-shadow-sm);
   cursor: pointer;
+  touch-action: manipulation;
 }
 
 /* The map buttons slide open from the hamburger button. */
@@ -1344,7 +1682,7 @@ function writeMissionCardFlag(open) {
   display: flex;
   flex-direction: column;
   align-items: flex-end;
-  gap: clamp(10px, 3vw, 16px);
+  gap: clamp(6px, 2vw, 10px);
   opacity: 0;
   transform: translateY(-12px);
   pointer-events: none;
@@ -1355,6 +1693,17 @@ function writeMissionCardFlag(open) {
 	opacity: 1;
 	transform: translateY(0);
 	pointer-events: auto;
+}
+
+/* Landscape / very short screens: let the drawer scroll instead of overflowing.
+   Padding keeps the buttons' hard shadows from being clipped by the scroll box. */
+@media (max-height: 640px) {
+  .map-tools {
+    max-height: calc(100vh - 170px);
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    padding: 0 4px 4px 0;
+  }
 }
 
 /* Card internals (#CenterInfo, .stop-*, .stamp-*) live in MissionInfoCard.vue. */
@@ -1458,6 +1807,8 @@ function writeMissionCardFlag(open) {
   transform: translate(-50%, -50%);
   z-index: 2;
   width: min(340px, 90vw);
+  max-height: 86vh;
+  overflow-y: auto;
   background: var(--zt-black);
   border: clamp(2px, 1vw, 4px) solid var(--zt-yellow);
   box-shadow: var(--zt-shadow);
@@ -1465,6 +1816,7 @@ function writeMissionCardFlag(open) {
 }
 #HelpPop .btn-warning { color: var(--zt-black); font-weight: 700; text-align: left; }
 #HelpPop .btn-outline-warning { text-align: left; }
+#HelpPop .airport-cta { font-weight: 800; text-align: left; }
 .help-note { color: var(--zt-yellow-pale); opacity: 0.75; font-size: clamp(0.65rem, 2.4vw, 0.75rem); margin-bottom: 10px; }
 
 /* ── Bottom nav (own copy — edit freely, this only affects the 3D map view) ── */
@@ -1472,7 +1824,7 @@ function writeMissionCardFlag(open) {
   position: fixed;
   left: 50%;
   transform: translateX(-50%);
-  bottom: max(12px, env(safe-area-inset-bottom));
+  bottom: var(--zt-nav-inset);
   width: min(520px, calc(100% - 24px));
   height: var(--zt-nav-h);
   display: grid;
@@ -1508,7 +1860,8 @@ function writeMissionCardFlag(open) {
   position: fixed;
   left: 50%;
   transform: translateX(-50%);
-  bottom: calc(max(12px, env(safe-area-inset-bottom)) + var(--zt-nav-h) + 14px);
+  /* Same dock as the card: clears the nav plus the shared breathing gap. */
+  bottom: calc(var(--zt-nav-inset) + var(--zt-nav-h) + var(--zt-nav-clearance));
   width: 56px;
   height: 56px;
   border-radius: 50%;

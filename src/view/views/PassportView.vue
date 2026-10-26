@@ -12,6 +12,11 @@ import { useMissionStore } from '../../model/stores/mission.js'
 import { DEFAULT_COVER } from '../../model/services/brand.js'
 import { getDb } from '../../model/services/db/index.js'
 import entrySnapshot from '../../model/data/sgEntrySnapshot.js'
+import {
+  areaStampUrl,
+  loadedStampImage,
+  preloadStampImages
+} from '../../model/services/stampArt.js'
 
 // Passport page: flipbook-vue turns the pages, and a Three.js stamp slams newly earned area chops
 const passport = usePassportStore()
@@ -68,6 +73,22 @@ const stampsByPlace = computed(() => {
   }
   return result
 })
+
+/**
+ * Places whose stamps are actually painted on an area page (the first CHOP_TARGET
+ * slots of each area), used to preload only the art that is needed.
+ */
+function stampedPlaces() {
+  const places = []
+  for (const area of AREAS) {
+    places.push(
+      ...areaPlaces(area.id)
+        .slice(0, CHOP_TARGET)
+        .filter((place) => passport.stampedIds.has(place.id))
+    )
+  }
+  return places
+}
 
 // Unstamped places: hand-picked seed places first (in file order), then ones with a Wikipedia article
 const seedOrder = new Map(seedPlaces.map((place, i) => [place.id, i]))
@@ -217,62 +238,34 @@ function pagePoint(i, x, y) {
   return { x: page.left - box.left + x * scale, y: page.top - box.top + y * scale, scale }
 }
 
-// Passport page for an area, or -1 if it isn't one of the passport's areas
-function areaPage(areaId) {
-  const index = AREAS.findIndex((a) => a.id === areaId)
-  return index < 0 ? -1 : FIRST_AREA_PAGE + index
-}
+// Turn to each newly earned area and slam its chop onto the page
+async function playSlams() {
+  for (const areaId of [...passport.pendingSlams]) {
+    if (!book.value) return // left the page mid-slam
+    const areaIndex = AREAS.findIndex((a) => a.id === areaId)
+    if (areaIndex < 0) {
+      passport.consumeSlam(areaId)
+      continue
+    }
 
-// Slam a new place stamp into its slot (same 2 × 3 layout as drawAreaPage; places past the 6th aren't on the page)
-async function slamStamp(placeId) {
-  const place = placeById.value.get(placeId)
-  const page = areaPage(place?.area)
-  const slot = areaPlaces(place.area).findIndex((p) => p.id === placeId)
-  const at = slot >= 0 && slot < CHOP_TARGET && pagePoint(page, 136 + (slot % 2) * 240, 262 + Math.floor(slot / 2) * 140)
-  const reveal = async () => {
-    hiddenStamps.delete(placeId)
-    passport.markShown(placeId)
-    navigator.vibrate?.(40)
-    await repaintPage(page)
+    const page = FIRST_AREA_PAGE + areaIndex
+    goToPage(page)
+    await nextTick()
+    await wait(400)
+    const at = pagePoint(page, 392, 104)
+    const reveal = async () => {
+      revealedAreas.add(areaId)
+      navigator.vibrate?.(40)
+      await repaintPage(page)
+    }
+    if (stampSlam && at) await stampSlam.slam({ x: at.x, y: at.y, size: 128 * at.scale, ink: AREAS[areaIndex].ink }, reveal)
+    else await reveal() // no WebGL: just show the chop
+    passport.consumeSlam(areaId)
+    await wait(400)
   }
-  if (stampSlam && at) await stampSlam.slam({ x: at.x, y: at.y, size: 104 * at.scale, ink: AREAS[page - FIRST_AREA_PAGE].ink }, reveal)
-  else await reveal() // no WebGL: just show it
-  await wait(300)
 }
 
-// Slam a newly earned area chop onto its page
-async function slamChop(areaId) {
-  const page = areaPage(areaId)
-  const at = pagePoint(page, 392, 104)
-  const reveal = async () => {
-    revealedAreas.add(areaId)
-    navigator.vibrate?.(40)
-    await repaintPage(page)
-  }
-  if (stampSlam && at) await stampSlam.slam({ x: at.x, y: at.y, size: 128 * at.scale, ink: AREAS[page - FIRST_AREA_PAGE].ink }, reveal)
-  else await reveal()
-  passport.consumeSlam(areaId)
-  await wait(300)
-}
-
-// Open pages once a turn has settled (flipbook-vue clears its flip state only after the new page images load)
-const settledPages = computed(() => (book.value && !book.value.flip.direction ? openPages.value.join(',') : null))
-watch(settledPages, (pages) => {
-  if (!pages) return
-  updatePageLabel()
-  slamOpenPages()
-})
-
-// After every flip, drag or jump: slam in the unseen stamps on the open pages, then any area chop earned there
-async function slamOpenPages() {
-  if (busy.value || !book.value || book.value.flip?.direction) return
-  for (const areaId of passport.pendingSlams) if (areaPage(areaId) < 0) passport.consumeSlam(areaId)
-
-  const open = openPages.value
-  const stamps = [...hiddenStamps].filter((placeId) => open.includes(areaPage(placeById.value.get(placeId)?.area)))
-  const chops = passport.pendingSlams.filter((areaId) => open.includes(areaPage(areaId)))
-  if (!stamps.length && !chops.length) return
-
+async function runSlams() {
   busy.value = true
   await wait(300) // let the turned page settle
   for (const placeId of stamps) await slamStamp(placeId)
@@ -293,6 +286,8 @@ watch(
   () => [passport.stamps.length, passport.seen.size, user.profile, catalog.value, badges.value, entry.value, passport.nationality],
   async () => {
     if (!pages.value.length || busy.value) return
+    // New stamps may bring art that wasn't loaded for the first paint.
+    await preloadStampImages(stampedPlaces(), AREAS)
     await repaintAll()
     await nextTick()
     slamOpenPages()
@@ -314,6 +309,10 @@ onMounted(async () => {
       loadMissions()
     ])
   } catch {}
+
+  // Load each stamped place's PNG (and area chops) before the canvas is painted;
+  // any that fail simply fall back to the drawn chop.
+  await preloadStampImages(stampedPlaces(), AREAS)
 
   await repaintAll()
   await nextTick()

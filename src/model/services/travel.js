@@ -157,13 +157,18 @@ export function transit(a, b) {
     to: hb.name,
     fromHub: ha.id,
     toHub: hb.id,
+    walkMin: ha.walk_min + hb.walk_min,
+    walkToHubMin: ha.walk_min,
+    walkFromHubMin: hb.walk_min,
+    waitMin: MRT_WAIT_MIN,
     lines: ride.lines,
     path: ride.path,
     edgeLines: ride.edgeLines
   }
 }
 
-function taxiMinutes(a, b) {
+/** Door-to-door taxi/Grab estimate: detoured road distance at 28 km/h plus pickup. */
+export function taxiMinutes(a, b) {
   return Math.round(((distanceM(a, b) * 1.35) / 1000 / 28) * 60 + 6)
 }
 
