@@ -1,6 +1,23 @@
 import { acceptHMRUpdate, defineStore } from 'pinia'
+import { watch } from 'vue'
 import * as social from '../services/social.js'
 import { useUiStore } from './ui.js'
+import { useUserStore } from './user.js'
+
+const READ_KEY = 'zoot.chatRead' // { [partyId]: ms } when I last had that quest's chat open
+let unwatchChat = null
+let checkingCoop = false
+
+/** Resolves once fn() is truthy. */
+function until(fn) {
+  return new Promise((resolve) => {
+    if (fn()) return resolve()
+    const stop = watch(fn, (v) => { if (v) { stop(); resolve() } })
+  })
+}
+function readTimes() {
+  try { return JSON.parse(localStorage.getItem(READ_KEY) || '{}') } catch { return {} }
+}
 
 /**
  * Social quests: the feed, one quest's detail, and the window I'm hosting.
@@ -17,12 +34,29 @@ export const usePartyStore = defineStore('party', {
     demoIds: new Set(),
     dialog: null, // centred prompt (CenterDialog.vue): { title, body, icon, confirmText, cancelText, tone, resolve }
     liveOthers: [], // other members' live positions on the map (QuestMapLive.vue keeps this up to date)
-    liveRefresh: 0 // bump to make QuestMapLive re-read locations now (e.g. after the demo moved people)
+    liveRefresh: 0, // bump to make QuestMapLive re-read locations now (e.g. after the demo moved people)
+    // Quest chat (QuestChatDrawer.vue). Started by whoever shows it or its unread badge.
+    chat: { partyId: null, quest: null, messages: [], loading: false, error: null },
+    chatUsers: 0, // how many screens are using the chat right now
+    chatReadAt: readTimes()
   }),
+  getters: {
+    /** Messages from other people (not system lines) since I last had this chat open. */
+    unread(s) {
+      const me = useUserStore().userId
+      const since = s.chatReadAt[s.chat.partyId] || 0
+      return s.chat.messages.filter((m) => m.user_id && m.user_id !== me && Date.parse(m.created_at) > since).length
+    },
+    /** Sending closes 30 min after the window ends, or when the host closes it (the database enforces it too). */
+    chatOpen(s) {
+      const q = s.chat.quest
+      return !!q && q.status !== 'closed' && Date.now() < Date.parse(q.ends_at) + 30 * 60000
+    }
+  },
   actions: {
-    /** Centred prompt that blurs the page. Resolves true (confirm) or false (cancel). */
-    ask({ title, body = '', icon = 'bi-people-fill', confirmText = 'OK', cancelText = 'Cancel', tone = 'primary' }) {
-      this.dialog?.resolve(false)
+    /** Centred prompt that blurs the page. Resolves true (confirm) or false (cancel). Waits its turn if one is showing. */
+    async ask({ title, body = '', icon = 'bi-people-fill', confirmText = 'OK', cancelText = 'Cancel', tone = 'primary' }) {
+      while (this.dialog) await until(() => !this.dialog)
       return new Promise((resolve) => {
         this.dialog = { title, body, icon, confirmText, cancelText, tone, resolve }
       })
@@ -35,6 +69,88 @@ export const usePartyStore = defineStore('party', {
       const d = this.dialog
       this.dialog = null
       d?.resolve(value)
+    },
+
+    // ── Chat ──
+    /** Load a quest's chat and follow new messages. Pair every call with stopChat(). */
+    async startChat(partyId) {
+      this.chatUsers++
+      if (this.chat.partyId === partyId) return
+      this.resetChat()
+      this.chat = { partyId, quest: null, messages: [], loading: true, error: null }
+      try {
+        const [quest, messages] = await Promise.all([social.getQuest(partyId), social.listMessages(partyId)])
+        if (this.chat.partyId !== partyId) return
+        this.chat.quest = quest
+        this.chat.messages = messages
+        unwatchChat = await social.watchMessages(partyId, (m) => this.addMessage(m))
+      } catch (err) {
+        if (this.chat.partyId === partyId) this.chat.error = err.message
+      } finally {
+        if (this.chat.partyId === partyId) this.chat.loading = false
+      }
+    },
+    stopChat() {
+      this.chatUsers = Math.max(0, this.chatUsers - 1)
+      if (!this.chatUsers) this.resetChat()
+    },
+    resetChat() {
+      unwatchChat?.()
+      unwatchChat = null
+      this.chat = { partyId: null, quest: null, messages: [], loading: false, error: null }
+    },
+    addMessage(m) {
+      if (m.party_id !== this.chat.partyId || this.chat.messages.some((x) => x.id === m.id)) return
+      this.chat.messages.push(m)
+      // New people may join mid-quest: refresh names/avatars.
+      if (m.user_id && !this.chat.quest?.roster?.some((r) => r.user_id === m.user_id)) {
+        social.getQuest(m.party_id).then((q) => { if (q && this.chat.partyId === m.party_id) this.chat.quest = q }).catch(() => {})
+      }
+    },
+    async sendChat(body, type = 'text') {
+      if (!body.trim()) return
+      this.addMessage(await social.sendMessage(this.chat.partyId, body, type))
+      this.markChatRead()
+    },
+    markChatRead() {
+      if (!this.chat.partyId) return
+      this.chatReadAt = { ...this.chatReadAt, [this.chat.partyId]: Date.now() }
+      try { localStorage.setItem(READ_KEY, JSON.stringify(this.chatReadAt)) } catch {}
+    },
+    /** Block someone: their messages disappear here at once; the database hides them everywhere from now on. */
+    async block(userId) {
+      await social.blockUser(userId)
+      this.chat.messages = this.chat.messages.filter((m) => m.user_id !== userId)
+      this.open = this.open.filter((q) => q.host_id !== userId)
+    },
+
+    // ── Co-op stamps ──
+    /**
+     * Show any co-op stamps I haven't seen ("You and Mei were both at Maxwell for the first time"),
+     * after the stamp celebration closes, then refresh my XP. Called after stamping, when the map
+     * opens, and when the database tells us a partner arrived after me.
+     */
+    async checkCoop() {
+      if (checkingCoop) return
+      checkingCoop = true
+      try {
+        let rows
+        try { rows = await social.coopUnseen() } catch { return } // guest mode / offline
+        if (!rows?.length) return
+        const ui = useUiStore()
+        await until(() => !ui.celebration)
+        await social.markCoopSeen(rows.map((r) => r.id))
+        const user = useUserStore()
+        social.myProfile().then((p) => p && user.setProfile(p)).catch(() => {})
+        for (const r of rows) {
+          await this.notice({
+            title: 'Co-op stamp!', icon: 'bi-people-fill', tone: 'success', confirmText: 'Nice!',
+            body: `You and ${r.partners} were both at ${r.place_name} for the first time. +${r.bonus_xp} bonus XP each.`
+          })
+        }
+      } finally {
+        checkingCoop = false
+      }
     },
 
     async run(statusKey, fn) {

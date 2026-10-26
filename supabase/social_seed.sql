@@ -56,6 +56,9 @@ returns jsonb language sql as $$
   from public.places p where p.id = p_place;
 $$;
 
+-- Demo travellers start with no stamps, so every place is a first visit for them (co-op stamps).
+delete from public.stamps where user_id in (select user_id from public.demo_users);
+
 -- Re-running replaces the demo windows (members + chat cascade).
 delete from public.parties where id in ('d1000000-0000-4000-8000-000000000001', 'd1000000-0000-4000-8000-000000000002');
 delete from public.parties where host_id in (select user_id from public.demo_users);

@@ -7,10 +7,11 @@ import { useUiStore } from '../../model/stores/ui.js'
 import { formatTime } from '../../model/services/hours.js'
 import { DEV_PANEL } from '../../model/services/config.js'
 import { useActiveQuest } from '../composables/useActiveQuest.js'
+import QuestChatDrawer from './QuestChatDrawer.vue'
 
 /**
  * Map chip for a social quest: "With Mei until 15:40 · Your plan resumes: Gardens", Go solo.
- * Hosts with guests see "Hosting Lina until …". Tapping it opens my plan.
+ * Hosts with guests see "Hosting Lina until …". Tapping it opens my plan; 💬 opens the quest chat.
  * Display only: live locations and the automatic return when my stops end are handled by
  * QuestMapLive, which stays on even when the card holding this chip is closed.
  */
@@ -21,6 +22,7 @@ const router = useRouter()
 const { joined, active, started, live, guestNames, resume } = useActiveQuest()
 
 const busy = ref(false)
+const chatOpen = ref(false)
 async function goSolo() {
   const ok = await party.ask({
     title: 'Go solo?', icon: 'bi-person-walking', confirmText: 'Go solo', cancelText: 'Stay',
@@ -68,9 +70,14 @@ async function demoLocate() {
       </template>
     </div>
     <div class="d-flex gap-1 flex-none">
+      <button type="button" class="coop-btn chat" :aria-label="party.unread ? `Chat, ${party.unread} unread` : 'Chat'" title="Chat" @click.stop="chatOpen = true">
+        <i class="bi bi-chat-dots-fill"></i>
+        <span v-if="party.unread" class="badge-dot">{{ party.unread > 9 ? '9+' : party.unread }}</span>
+      </button>
       <button v-if="DEV_PANEL && live" type="button" class="coop-btn" title="Demo: put the others on the map" aria-label="Demo: put the others on the map" @click.stop="demoLocate"><i class="bi bi-robot"></i></button>
       <button v-if="active.role === 'guest'" type="button" class="coop-btn solo" :disabled="busy" @click.stop="goSolo">Go solo</button>
     </div>
+    <QuestChatDrawer :open="chatOpen" :party-id="active.id" @close="chatOpen = false" />
   </div>
 </template>
 
@@ -81,6 +88,8 @@ async function demoLocate() {
 .coop-sub { font-size: 0.75rem; font-weight: 600; opacity: 0.85; }
 .coop-btn { display: inline-grid; place-items: center; min-width: 32px; height: 32px; padding: 0 8px; border-radius: 99px; border: 2px solid #111; background: #fff4c2; color: #111; font-weight: 800; font-size: 0.75rem; text-decoration: none; }
 .coop-btn.solo { background: #111; color: #ffcc00; }
+.coop-btn.chat { position: relative; }
+.badge-dot { position: absolute; top: -6px; right: -6px; min-width: 18px; height: 18px; padding: 0 4px; border-radius: 99px; background: #111; color: #ffcc00; font-size: 0.65rem; line-height: 18px; text-align: center; }
 .coop-btn:disabled { opacity: 0.6; }
 .min-w-0 { min-width: 0; }
 .flex-none { flex: none; }

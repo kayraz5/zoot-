@@ -13,7 +13,9 @@ import { useActiveQuest } from '../composables/useActiveQuest.js'
 /**
  * The social-quest side of the map, with no UI of its own (the chip is QuestCoopChip):
  *  - shares my location with the other members while the quest is live, and draws theirs as pins;
- *  - when my joined stops are over, puts me back on my own plan.
+ *  - when my joined stops are over, puts me back on my own plan;
+ *  - follows the quest chat (for the unread badge on the chip) and co-op stamps ("Mei arrived
+ *    after you: co-op stamp!").
  * Mounted once by the map view and always on, even when the next-stop card is hidden.
  * getMap: () => the MapLibre map, or null before it has loaded.
  */
@@ -28,9 +30,21 @@ const SEND_EVERY_MS = 15000
 const STALE_MS = 2 * 60000
 
 // Hosts: find my open window so "Hosting Lina until …" and the pins work too.
-onMounted(() => {
+let unwatchCoop = null
+onMounted(async () => {
   if (store.mission) party.loadHosted(store.mission).catch(() => {}) // guest mode / offline: nothing to host
+  // Co-op stamps can land while I'm elsewhere (my partner stamps after me): show any I missed, then listen.
+  party.checkCoop()
+  try { unwatchCoop = await social.watchMyCoop(() => party.checkCoop()) } catch { /* guest mode */ }
 })
+onUnmounted(() => unwatchCoop?.())
+
+// ── Chat: keep the quest's messages loaded so the chip can show unread ones ──
+watch(() => active.value?.id, (id, old) => {
+  if (old) party.stopChat()
+  if (id) party.startChat(id)
+}, { immediate: true })
+onUnmounted(() => { if (active.value?.id) party.stopChat() })
 
 // ── My joined stops are over → back to my own plan ──
 // immediate: also when the map opens after they already ended.
