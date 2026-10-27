@@ -270,7 +270,13 @@ $$;
 -- ════════════════════════════════════════════════════════════════════════
 create or replace function public.parties_before_insert()
 returns trigger language plpgsql set search_path = public as $$
+declare
+  v_joined text;
 begin
+  -- One quest at a time: someone who has joined another quest can't host one too.
+  select p.title into v_joined from parties p join party_members m on m.party_id = p.id
+   where m.user_id = new.host_id and m.role = 'member' and p.status <> 'closed' and p.ends_at > now() limit 1;
+  if found then raise exception 'You''ve joined "%". Go solo there first to host your own quest.', v_joined; end if;
   new.stops := normalize_window(new.stops);
   new.status := 'open';
   new.window_version := 1;
@@ -444,6 +450,9 @@ begin
     raise exception 'Ends too late for your flight: these stops end at % and you need % min to get back, but you must be at the airport by %.',
       sg_hhmm(v_end), greatest(coalesce(p_back_min, 0), 0), sg_hhmm(p_airport_by);
   end if;
+
+  -- One quest at a time: joining deletes the quest I'm hosting (the app asked me first).
+  delete from parties where host_id = v_uid and id <> p_party and status <> 'closed' and ends_at > now();
 
   insert into party_members (party_id, user_id, role, from_seq, to_seq)
   values (p_party, v_uid, 'member', p_from, p_to) returning * into v_row;
@@ -775,6 +784,16 @@ begin
   end if;
   raise exception 'Unknown action %', p_action;
 end $$;
+
+-- ════════════════════════════════════════════════════════════════════════
+-- One quest at a time: remove quests hosted by someone who is a guest in another running quest
+-- (could happen before this rule existed). Safe to re-run.
+-- ════════════════════════════════════════════════════════════════════════
+delete from public.parties h
+ where h.status <> 'closed' and h.ends_at > now()
+   and exists (select 1 from public.party_members m join public.parties o on o.id = m.party_id
+                where m.user_id = h.host_id and m.role = 'member' and o.id <> h.id
+                  and o.status <> 'closed' and o.ends_at > now());
 
 -- ════════════════════════════════════════════════════════════════════════
 -- Grants + Realtime
