@@ -11,6 +11,7 @@
 --                    stops, airport and return-by are never sent here, so they can't leak.
 --   party_members  = who's in, and which stops (from_seq..to_seq) they joined
 --   messages       = chat for joined members (text | chip | system)
+--   coop_stamps    = co-op stamps: two members, same place, same time, both there for the first time
 --   blocks/reports = safety;  party_locations = live location, joined members only
 -- ════════════════════════════════════════════════════════════════════════
 
@@ -154,6 +155,21 @@ insert into public.app_config (key, value) values ('dev_social', '1') on conflic
 
 -- ════════════════════════════════════════════════════════════════════════
 -- Helpers
+-- ── 5. Co-op stamps ─────────────────────────────────────────────────────
+-- One row per stamp that earned the co-op bonus. Written only by the stamps trigger below.
+create table if not exists public.coop_stamps (
+  id bigint generated always as identity primary key,
+  stamp_id uuid not null unique references public.stamps (id) on delete cascade,
+  user_id uuid not null references auth.users (id) on delete cascade,
+  party_id uuid references public.parties (id) on delete set null,
+  place_id text not null references public.places (id),
+  partner_ids uuid[] not null default '{}',
+  bonus_xp int not null,
+  notified boolean not null default false,   -- the app has shown "Co-op stamp!" to this person
+  created_at timestamptz not null default now()
+);
+create index if not exists coop_stamps_user_idx on public.coop_stamps (user_id, notified);
+
 -- ════════════════════════════════════════════════════════════════════════
 create or replace function public.is_party_member(p_party uuid)
 returns boolean language sql stable security definer set search_path = public as $$
@@ -295,6 +311,93 @@ end $$;
 drop trigger if exists party_members_after_delete on public.party_members;
 create trigger party_members_after_delete after delete on public.party_members
   for each row execute function public.party_members_after_delete();
+
+-- ── Check-ins and co-op stamps ──────────────────────────────────────────
+-- Is this place one of the stops this member joined? (The host's range is the whole window.)
+create or replace function public.member_has_place(p_party uuid, p_user uuid, p_place text)
+returns boolean language sql stable security definer set search_path = public as $$
+  select exists (
+    select 1 from party_members m join parties p on p.id = m.party_id,
+         jsonb_array_elements(p.stops) with ordinality as t(e, i)
+     where m.party_id = p_party and m.user_id = p_user
+       and t.i between m.from_seq and m.to_seq and t.e ->> 'place_id' = p_place);
+$$;
+
+-- First visit: no earlier stamp by this person at this place, on any day.
+create or replace function public.first_stamp_here(p_user uuid, p_place text, p_at timestamptz)
+returns boolean language sql stable security definer set search_path = public as $$
+  select not exists (select 1 from stamps s where s.user_id = p_user and s.place_id = p_place and s.stamped_at < p_at);
+$$;
+
+-- Give one stamp the co-op bonus (+20% of its XP, at least 1), once; later partners are only added to the list.
+-- Returns the bonus given now (0 if this stamp already had it).
+create or replace function public.award_coop(p_stamp stamps, p_party uuid, p_partner uuid)
+returns int language plpgsql security definer set search_path = public as $$
+declare
+  v_bonus int := greatest(1, round(coalesce(p_stamp.xp, 0) * 0.2)::int);
+  v_new boolean;
+begin
+  insert into coop_stamps (stamp_id, user_id, party_id, place_id, partner_ids, bonus_xp)
+  values (p_stamp.id, p_stamp.user_id, p_party, p_stamp.place_id, array[p_partner], v_bonus)
+  on conflict (stamp_id) do update
+    set partner_ids = array(select distinct unnest(coop_stamps.partner_ids || excluded.partner_ids))
+  returning (xmax = 0) into v_new;
+  if not v_new then return 0; end if;
+  perform set_config('app.xp_write', 'on', true);
+  update profiles set xp = xp + v_bonus where id = p_stamp.user_id;
+  return v_bonus;
+end $$;
+
+/**
+ * A stamp was saved (stamp_place has already checked the GPS distance on the server).
+ * For each running quest where this place is one of the person's joined stops:
+ *   - post "Mei checked in at Maxwell Food Centre" in the chat;
+ *   - co-op: if another member of the same quest stamped the same place within 30 min, and it is
+ *     the FIRST visit there for both of them, both get the co-op stamp and +20% XP. Whoever
+ *     stamped first gets theirs now, retroactively.
+ */
+create or replace function public.stamps_after_insert_social()
+returns trigger language plpgsql security definer set search_path = public as $$
+declare
+  v_p record;
+  v_other stamps;
+  v_place text;
+  v_names text[];
+begin
+  select name into v_place from places where id = new.place_id;
+  for v_p in
+    select p.id from parties p join party_members m on m.party_id = p.id
+     where m.user_id = new.user_id and p.status <> 'closed'
+       and new.stamped_at between p.starts_at - interval '1 hour' and p.ends_at + interval '30 minutes'
+       and member_has_place(p.id, new.user_id, new.place_id)
+  loop
+    perform post_system(v_p.id, display_name_of(new.user_id) || ' checked in at ' || v_place,
+      jsonb_build_object('kind', 'checkin', 'user_id', new.user_id, 'place_id', new.place_id));
+    continue when not first_stamp_here(new.user_id, new.place_id, new.stamped_at);
+
+    v_names := '{}';
+    for v_other in
+      select s.* from stamps s join party_members m on m.party_id = v_p.id and m.user_id = s.user_id
+       where s.place_id = new.place_id and s.user_id <> new.user_id
+         and abs(extract(epoch from (s.stamped_at - new.stamped_at))) <= 1800
+         and member_has_place(v_p.id, s.user_id, s.place_id)
+         and first_stamp_here(s.user_id, s.place_id, s.stamped_at)
+    loop
+      perform award_coop(v_other, v_p.id, new.user_id);   -- the one who got there first
+      perform award_coop(new, v_p.id, v_other.user_id);
+      v_names := v_names || display_name_of(v_other.user_id);
+    end loop;
+    if coalesce(array_length(v_names, 1), 0) > 0 then
+      perform post_system(v_p.id,
+        '🤝 ' || display_name_of(new.user_id) || ' & ' || array_to_string(v_names, ' & ') || ' earned a co-op stamp at ' || v_place || ' (+20% XP)',
+        jsonb_build_object('kind', 'coop', 'place_id', new.place_id));
+    end if;
+  end loop;
+  return null;
+end $$;
+drop trigger if exists stamps_after_insert_social on public.stamps;
+create trigger stamps_after_insert_social after insert on public.stamps
+  for each row execute function public.stamps_after_insert_social();
 
 -- ════════════════════════════════════════════════════════════════════════
 -- RPCs (what the app calls)
@@ -471,6 +574,22 @@ begin
 end $$;
 
 -- "Who's going": public profile + joined range for anyone who can see the quest.
+-- My co-op stamps the app hasn't shown yet (e.g. I stamped first and my partner arrived later).
+create or replace function public.coop_unseen()
+returns table (id bigint, place_id text, place_name text, bonus_xp int, partners text, party_id uuid)
+language sql stable security definer set search_path = public as $$
+  select c.id, c.place_id, pl.name, c.bonus_xp,
+         (select string_agg(display_name_of(u), ' & ') from unnest(c.partner_ids) u), c.party_id
+    from coop_stamps c join places pl on pl.id = c.place_id
+   where c.user_id = auth.uid() and not c.notified
+   order by c.created_at;
+$$;
+
+create or replace function public.mark_coop_seen(p_ids bigint[])
+returns void language sql security definer set search_path = public as $$
+  update coop_stamps set notified = true where user_id = auth.uid() and id = any(p_ids);
+$$;
+
 create or replace function public.quest_roster(p_party uuid)
 returns table (user_id uuid, role text, from_seq int, to_seq int, display_name text, avatar_seed int,
                cover_color text, style text, xp int, is_verified boolean, home_city text)
@@ -491,6 +610,7 @@ alter table public.blocks enable row level security;
 alter table public.reports enable row level security;
 alter table public.party_locations enable row level security;
 alter table public.demo_users enable row level security;
+alter table public.coop_stamps enable row level security;
 
 -- Windows: browse open/full ones that haven't ended (unless blocked); members always see theirs.
 -- Rows only ever contain the window's stops, so nothing hidden can be read.
@@ -520,6 +640,9 @@ create policy "messages members post" on public.messages for insert with check (
   user_id = auth.uid() and type in ('text', 'chip') and public.is_party_member(party_id)
   and exists (select 1 from public.parties p where p.id = party_id and p.status <> 'closed' and now() < p.ends_at + interval '30 minutes')
 );
+
+drop policy if exists "coop own read" on public.coop_stamps;
+create policy "coop own read" on public.coop_stamps for select using (user_id = auth.uid());
 
 drop policy if exists "blocks own" on public.blocks;
 create policy "blocks own" on public.blocks for all using (blocker_id = auth.uid()) with check (blocker_id = auth.uid());
@@ -562,6 +685,7 @@ declare
   v_body text;
   v_m party_members;
   v_stop jsonb;
+  v_place_id text;
 begin
   if coalesce((select value from app_config where key = 'dev_social'), '0') <> '1' then
     raise exception 'The multiplayer simulator is switched off (app_config.dev_social)';
@@ -613,19 +737,41 @@ begin
     if v_n = 0 then raise exception 'No demo travellers in this quest yet'; end if;
     return v_n || ' demo traveller' || case when v_n = 1 then '' else 's' end || ' placed on the map';
 
-  elsif p_action in ('chat', 'checkin') then
+  elsif p_action = 'chat' then
     select * into v_m from party_members m
      where m.party_id = p_party and m.user_id <> v_uid and m.user_id in (select user_id from demo_users) order by random() limit 1;
     if v_m.user_id is null then raise exception 'No demo travellers in this quest yet'; end if;
-    if p_action = 'chat' then
-      v_body := (array['Running 5 min late', 'I''m at the meeting point', 'This place is amazing', 'Grabbing a drink, back in 2', 'Which exit are you at?'])[1 + floor(random() * 5)::int];
-      insert into messages (party_id, user_id, type, body)
-      values (p_party, v_m.user_id, case when v_body in ('Running 5 min late', 'I''m at the meeting point') then 'chip' else 'text' end, v_body);
-      return display_name_of(v_m.user_id) || ': ' || v_body;
+    v_body := (array['Running 5 min late', 'I''m at the meeting point', 'On my way', 'This place is amazing', 'Where are you?'])[1 + floor(random() * 5)::int];
+    insert into messages (party_id, user_id, type, body)
+    values (p_party, v_m.user_id, case when v_body in ('Running 5 min late', 'I''m at the meeting point', 'On my way', 'Where are you?') then 'chip' else 'text' end, v_body);
+    return display_name_of(v_m.user_id) || ': ' || v_body;
+
+  elsif p_action = 'checkin' then
+    -- A demo traveller really stamps (so the check-in message and co-op stamps are the real thing).
+    -- If I stamped one of this quest's places today, they arrive there; otherwise at their current stop.
+    select s.place_id into v_place_id from stamps s
+     where s.user_id = v_uid and member_has_place(p_party, v_uid, s.place_id)
+       and (s.stamped_at at time zone 'Asia/Singapore')::date = (now() at time zone 'Asia/Singapore')::date
+     order by s.stamped_at desc limit 1;
+    select * into v_m from party_members m
+     where m.party_id = p_party and m.user_id <> v_uid and m.user_id in (select user_id from demo_users)
+       and (v_place_id is null or member_has_place(p_party, m.user_id, v_place_id))
+     order by random() limit 1;
+    if v_m.user_id is null then raise exception 'No demo travellers in this quest yet'; end if;
+    if v_place_id is null then
+      select e ->> 'place_id' into v_place_id from jsonb_array_elements(v_party.stops) with ordinality as t(e, i)
+       where i between v_m.from_seq and v_m.to_seq
+       order by ((e ->> 'depart_iso')::timestamptz <= now()), i limit 1;
     end if;
-    perform post_system(p_party, display_name_of(v_m.user_id) || ' checked in at ' || (v_party.stops -> (v_m.from_seq - 1) ->> 'name'),
-      jsonb_build_object('kind', 'checkin', 'user_id', v_m.user_id, 'place_id', v_party.stops -> (v_m.from_seq - 1) ->> 'place_id'));
-    return display_name_of(v_m.user_id) || ' checked in';
+    if exists (select 1 from stamps s where s.user_id = v_m.user_id and s.place_id = v_place_id
+                 and (s.stamped_at at time zone 'Asia/Singapore')::date = (now() at time zone 'Asia/Singapore')::date) then
+      raise exception '% already checked in there today', display_name_of(v_m.user_id);
+    end if;
+    insert into stamps (user_id, place_id, lat, lng, accuracy_m, xp)
+    select v_m.user_id, pl.id, pl.lat, pl.lng, 10,
+           coalesce((select (e ->> 'xp')::int from jsonb_array_elements(v_party.stops) e where e ->> 'place_id' = pl.id limit 1), 40)
+      from places pl where pl.id = v_place_id;
+    return display_name_of(v_m.user_id) || ' checked in at ' || (select name from places where id = v_place_id);
   end if;
   raise exception 'Unknown action %', p_action;
 end $$;
@@ -642,8 +788,12 @@ grant execute on function public.update_window(uuid, jsonb) to authenticated;
 grant execute on function public.delete_quest(uuid) to authenticated;
 grant execute on function public.quest_roster(uuid) to authenticated;
 grant execute on function public.dev_simulate(uuid, text) to authenticated;
+grant execute on function public.coop_unseen() to authenticated;
+grant execute on function public.mark_coop_seen(bigint[]) to authenticated;
+revoke all on function public.award_coop(stamps, uuid, uuid) from public, anon, authenticated;
 
 do $$ begin alter publication supabase_realtime add table public.party_members; exception when others then null; end $$;
 do $$ begin alter publication supabase_realtime add table public.parties; exception when others then null; end $$;
 do $$ begin alter publication supabase_realtime add table public.party_locations; exception when others then null; end $$;
 do $$ begin alter publication supabase_realtime add table public.messages; exception when others then null; end $$;
+do $$ begin alter publication supabase_realtime add table public.coop_stamps; exception when others then null; end $$;

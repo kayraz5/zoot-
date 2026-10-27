@@ -327,6 +327,8 @@ export const useMissionStore = defineStore('mission', {
         if (l) await this.reorderByProximity()
       }
       ui.celebrate({ place, xp: leg.xp, chopEarned, area: place.area })
+      // Stamped together with someone from my quest? Co-op stamp notice after the celebration.
+      usePartyStore().checkCoop()
       return stamp
     },
 

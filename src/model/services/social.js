@@ -290,3 +290,87 @@ export async function watchLocations(partyId, onChange) {
     .subscribe()
   return () => client.removeChannel(channel)
 }
+
+// ── Chat: one per quest, members only (RLS), messages from people I blocked are never returned ──
+
+export const QUICK_REPLIES = ['Running 5 min late', "I'm at the meeting point", 'On my way', 'Where are you?', 'Here! 👋']
+export const MESSAGE_MAX = 280
+
+export async function listMessages(partyId) {
+  const client = await sb()
+  return must(await client.from('messages').select('id, party_id, user_id, type, body, meta, created_at')
+    .eq('party_id', partyId).order('created_at', { ascending: true }).limit(200))
+}
+
+/** type: 'text', or 'chip' for a quick reply. The database refuses it once the quest's chat has closed. */
+export async function sendMessage(partyId, body, type = 'text') {
+  const client = await sb()
+  const me = await myId(client)
+  return must(await client.from('messages').insert({ party_id: partyId, user_id: me, type, body: body.trim().slice(0, MESSAGE_MAX) })
+    .select('id, party_id, user_id, type, body, meta, created_at').single())
+}
+
+/** Calls onMessage(row) for each new message in this quest. Returns an unsubscribe function. */
+export async function watchMessages(partyId, onMessage) {
+  const client = await sb()
+  const channel = client.channel(`messages:${partyId}`)
+    .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'messages', filter: `party_id=eq.${partyId}` }, (e) => onMessage(e.new))
+    .subscribe()
+  return () => client.removeChannel(channel)
+}
+
+// ── Safety ──
+
+export const REPORT_REASONS = [
+  { id: 'harassment', label: 'Harassment' },
+  { id: 'spam', label: 'Spam' },
+  { id: 'unsafe', label: 'Unsafe behaviour' },
+  { id: 'inappropriate', label: 'Inappropriate' },
+  { id: 'other', label: 'Something else' }
+]
+
+/** Their messages, quests and live location disappear for me (the database hides them everywhere). */
+export async function blockUser(userId) {
+  const client = await sb()
+  const me = await myId(client)
+  const { error } = await client.from('blocks').insert({ blocker_id: me, blocked_id: userId })
+  if (error && error.code !== '23505') throw new Error(error.message) // already blocked is fine
+}
+
+export async function reportUser({ userId, partyId = null, messageId = null, reason, details = '' }) {
+  const client = await sb()
+  const me = await myId(client)
+  must(await client.from('reports').insert({
+    reporter_id: me, reported_id: userId, party_id: partyId, message_id: messageId, reason, details: details.trim().slice(0, 500) || null
+  }))
+}
+
+// ── Co-op stamps (given by the database when two members stamp the same place together) ──
+
+/** My co-op stamps not shown yet: [{ id, place_name, partners, bonus_xp }] */
+export async function coopUnseen() {
+  const client = await sb()
+  return must(await client.rpc('coop_unseen'))
+}
+
+export async function markCoopSeen(ids) {
+  const client = await sb()
+  must(await client.rpc('mark_coop_seen', { p_ids: ids }))
+}
+
+/** Calls onChange() when I get a new co-op stamp (e.g. my partner arrived after me). */
+export async function watchMyCoop(onChange) {
+  const client = await sb()
+  const me = await myId(client)
+  const channel = client.channel(`coop:${me}`)
+    .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'coop_stamps', filter: `user_id=eq.${me}` }, onChange)
+    .subscribe()
+  return () => client.removeChannel(channel)
+}
+
+/** My profile as stored now (XP changes on the server when a co-op bonus lands). */
+export async function myProfile() {
+  const client = await sb()
+  const me = await myId(client)
+  return must(await client.from('profiles').select('*').eq('id', me).maybeSingle())
+}

@@ -15,6 +15,7 @@ vi.mock('../model/services/social.js', async (orig) => ({
 vi.mock('../model/services/db/index.js', () => ({ getDb: async () => ({ kind: 'local', saveMission: async () => {} }) }))
 
 import QuestCoopChip from '../view/components/QuestCoopChip.vue'
+import QuestMapLive from '../view/components/QuestMapLive.vue'
 import { useMissionStore } from '../model/stores/mission.js'
 import { usePartyStore } from '../model/stores/party.js'
 
@@ -29,7 +30,7 @@ function setup(legs) {
     id: 'm1', origin: { label: 'Changi Airport', lat: 1.3644, lng: 103.9915 }, start_iso: min(-120), must_return_iso: min(700), buffers: { exit_min: 30 }, prefs: {}, legs: [...legs, { kind: 'return', status: 'pending', arrive_by: min(600) }],
     joined: { q1: { title: 'Chinatown', host_name: 'Mei', from: 1, to: 2, removed: [] } }
   }
-  const w = mount(QuestCoopChip, { props: { getMap: () => null }, global: { stubs: { RouterLink: true } } })
+  const w = mount(QuestCoopChip, { global: { stubs: { RouterLink: true } } })
   return { w, store }
 }
 
@@ -70,5 +71,16 @@ describe('QuestCoopChip: the map HUD while I am with someone', () => {
     await done
     expect(store.mission.joined).toEqual({})
     expect(store.legs.filter((l) => l.kind === 'visit').map((l) => l.place_id)).toEqual(['museum', 'gardens'])
+  })
+
+  it('the always-on map layer returns me to my own plan by itself when my stops end', async () => {
+    const { store } = setup([block('maxwell', -60, -5), leg('gardens', 90, 150)])
+    mount(QuestMapLive, { props: { getMap: () => null } })
+    await flushPromises()
+    const party = usePartyStore()
+    expect(party.dialog?.title).toBe('Your stops with Mei are done')
+    party.answer(true)
+    await flushPromises()
+    expect(store.mission.joined).toEqual({})
   })
 })

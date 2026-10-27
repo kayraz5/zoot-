@@ -1,6 +1,8 @@
 <script setup>
 import { computed } from 'vue'
 import { placeStampUrl } from '../../model/services/stampArt.js'
+// Social quests: "With Mei until 15:40", Go solo (renders nothing when not in a quest).
+import QuestCoopChip from './QuestCoopChip.vue'
 
 /**
  * Next-stop card ("center console") shown at the bottom of the map.
@@ -41,6 +43,9 @@ const stampArt = computed(() => placeStampUrl(props.next?.name))
       <i class="bi bi-x-lg" aria-hidden="true"></i>
     </button>
 
+    <!-- me-4 keeps it clear of the close button above -->
+    <QuestCoopChip class="me-4" />
+
     <!-- No quest yet -->
     <div v-if="!mission" class="row align-items-center">
       <div class="col-12">
@@ -65,7 +70,7 @@ const stampArt = computed(() => placeStampUrl(props.next?.name))
     <div v-else class="row align-items-center">
       <div class="col-7 col-sm-8">
         <div class="stop-meta">
-          <template v-if="next.kind === 'visit'">Next stop {{ stopNumber }} &middot; </template><template v-else>Head home &middot; </template>
+          <template v-if="next.kind !== 'visit'">Head home &middot; </template>
           <span class="bi" :class="modeIcon[liveTravel?.mode || next.travel_mode]"></span> {{ liveTravel?.minutes ?? next.travel_min }} min
           <template v-if="next.kind === 'visit'"> &middot; Stay {{ next.stay_min }} min</template>
         </div>
@@ -77,7 +82,8 @@ const stampArt = computed(() => placeStampUrl(props.next?.name))
           <span v-else class="ontime">on time</span>
         </div>
         <div v-if="guidance" class="stop-guide"><i class="bi" :class="guidance.icon"></i> {{ guidance.text }}</div>
-        <div class="stop-near">{{ check?.message }}</div>
+        <!-- "868 m away. Get within 80 m" repeats the distance above; GPS / in-range messages still show. -->
+        <div v-if="check?.code !== 'far'" class="stop-near">{{ check?.message }}</div>
       </div>
       <div class="col-5 col-sm-4 d-flex justify-content-end">
         <button class="stamp-btn" :class="{ ready: check?.ok }" :disabled="stamping" @click="$emit('stamp')"
