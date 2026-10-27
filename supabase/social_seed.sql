@@ -5,8 +5,9 @@
 --
 --   Mei   opens Chinatown (4 stops, starts in ~30 min). Lina has joined stops 1–2.
 --         Mei's other stops, airport and return-by were never sent; only the window is stored.
---   Lina  opens a late Gardens by the Bay window, so most layovers see "Ends after your return-by".
---   Arjun is free: dev_simulate('guest_joins') uses him to join YOUR window.
+--   Arjun opens a late Gardens by the Bay window, so most layovers see "Ends after your return-by".
+--         (One quest at a time: Lina is Mei's guest, so she can't also host one.)
+--   dev_simulate('guest_joins') picks one of them to join YOUR window (demo only; bots may be in two quests).
 -- The fake accounts have no password and can't sign in.
 -- ════════════════════════════════════════════════════════════════════════
 
@@ -90,11 +91,11 @@ insert into public.messages (party_id, user_id, type, body) values
   ('d1000000-0000-4000-8000-000000000001', 'd0000000-0000-4000-8000-000000000001', 'text', 'Hi! I''ll be at Maxwell in 30, wearing a yellow cap.'),
   ('d1000000-0000-4000-8000-000000000001', 'd0000000-0000-4000-8000-000000000003', 'chip', 'Running 5 min late');
 
--- ── Lina: late window (most short layovers can't fit it) ────────────────
+-- ── Arjun: late window (most short layovers can't fit it) ───────────────
 insert into public.parties (id, host_id, title, style, capacity, starts_at, meeting_place_id, note, stops)
 values (
   'd1000000-0000-4000-8000-000000000002',
-  'd0000000-0000-4000-8000-000000000003',
+  'd0000000-0000-4000-8000-000000000002',
   'Gardens by the Bay light show',
   'party',
   3,

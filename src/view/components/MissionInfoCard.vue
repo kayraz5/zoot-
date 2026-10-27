@@ -3,6 +3,8 @@ import { computed } from 'vue'
 import { placeStampUrl } from '../../model/services/stampArt.js'
 // Social quests: "With Mei until 15:40", Go solo (renders nothing when not in a quest).
 import QuestCoopChip from './QuestCoopChip.vue'
+import QuestChatButton from './QuestChatButton.vue' // "Chat with Mei" (only while in a social quest)
+import QuestGoSolo from './QuestGoSolo.vue'         // "Go solo" link (only after joining someone's quest)
 
 /**
  * Next-stop card ("center console") shown at the bottom of the map.
@@ -96,13 +98,15 @@ const stampArt = computed(() => placeStampUrl(props.next?.name))
         </button>
       </div>
 
-      <div class="d-flex flex-wrap card-actions">
-        <button id="ChangeMap" class="btn btn-sm bg-warning" @click="$emit('change-map-style')">
-          <i class="bi bi-map"></i> Change Map Style
-        </button>
-        <button id="NeedHelp" class="btn btn-sm bg-danger" @click="$emit('need-help')">
-          <i class="bi bi-question-circle-fill"></i> Need help?
-        </button>
+      <div class="col-12">
+        <!-- Social quest: the main button. Renders nothing when not in a quest. -->
+        <QuestChatButton class="mt-2" />
+        <!-- Small text links in the corners: Go solo (in a quest) · Map style · Need help? -->
+        <div class="card-links">
+          <QuestGoSolo />
+          <button id="ChangeMap" type="button" class="card-link" @click="$emit('change-map-style')">Map style</button>
+          <button id="NeedHelp" type="button" class="card-link" @click="$emit('need-help')">Need help?</button>
+        </div>
       </div>
     </div>
   </div>
@@ -242,23 +246,38 @@ const stampArt = computed(() => placeStampUrl(props.next?.name))
   letter-spacing: 0.05em;
 }
 
-/* Both action buttons share one sizing rule so they always match height; without
-   `width: fit-content`, "Need help?" wraps and becomes taller than "Change Map". */
-.card-actions {
+/* Small underlined text links spread to the corners (Go solo · Map style · Need help?). */
+.card-links {
+  display: flex;
+  justify-content: space-between;
   align-items: center;
-  gap: 8px;
+  gap: 12px;
   margin-top: 10px;
 }
-
-#ChangeMap,
-#NeedHelp {
-  text-align: left;
-  width: fit-content;
+.card-link {
+  padding: 0;
+  border: 0;
+  background: none;
+  font-weight: 800;
+  font-size: 0.85rem;
+  text-decoration: underline;
+  text-underline-offset: 3px;
   white-space: nowrap;
-  border-radius: 13px;
-  margin: 0;
 }
+#ChangeMap { color: var(--zt-yellow-pale); opacity: 0.7; }
+#NeedHelp { color: #ff6b6b; }
 
-#ChangeMap { color: black; }
-#NeedHelp { color: white; }
+/* Phones: a smaller card so it covers less of the map. */
+@media (max-width: 575.98px) {
+  #CenterInfo { padding: 10px 12px; }
+  .stop-title { font-size: 1.05rem; margin: 0; line-height: 1.2; }
+  .stop-meta { font-size: 0.65rem; }
+  .stop-dist, .stop-guide { font-size: 0.78rem; }
+  .stop-guide, .stop-near { margin-top: 2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .stop-near { font-size: 0.72rem; }
+  .stamp-btn { width: 64px; height: 64px; gap: 2px; }
+  .stamp-circle { width: 28px; height: 28px; font-size: 15px; }
+  .stamp-label { font-size: 0.6rem; }
+  .card-links { margin-top: 8px; }
+}
 </style>

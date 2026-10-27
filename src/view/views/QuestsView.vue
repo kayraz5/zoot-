@@ -21,15 +21,18 @@ onMounted(async () => {
 
 // A current layover to check against (an old mission whose airport time has passed doesn't count).
 const hasPlan = computed(() => !!mission.mission && airportBy(mission.mission) > Date.now())
+/** The quest I've joined (one at a time): shown first and highlighted; the rest fade back. */
+const joinedId = computed(() => mission.joinedQuest?.id || Object.keys(mission.mission?.joined || {})[0] || null)
 const rows = computed(() => party.open.map((q) => ({
+  joined: q.id === joinedId.value,
   quest: q,
   mine: q.host_id === user.userId,
   fit: hasPlan.value ? stopsFit(q.stops, mission.mission) : null
 })))
 const visible = computed(() => rows.value
-  .filter((r) => !onlyFits.value || r.mine || r.fit?.ok)
+  .filter((r) => !onlyFits.value || r.mine || r.joined || r.fit?.ok)
   .filter((r) => !soon.value || Date.parse(r.quest.starts_at) - Date.now() <= 60 * 60000)
-  .sort((a, b) => Number(b.mine) - Number(a.mine)))
+  .sort((a, b) => Number(b.joined) - Number(a.joined) || Number(b.mine) - Number(a.mine)))
 </script>
 
 <template>
@@ -52,7 +55,8 @@ const visible = computed(() => rows.value
       <button type="button" class="zt-chip" :class="{ active: soon }" :aria-pressed="soon" @click="soon = !soon">
         <i class="bi bi-lightning-charge"></i> Starts within 1 h
       </button>
-      <RouterLink to="/mission" class="zt-chip text-decoration-none"><i class="bi bi-people-fill"></i> Open my stops</RouterLink>
+      <!-- One quest at a time: no hosting while I've joined someone's quest -->
+      <RouterLink v-if="!joinedId" to="/mission" class="zt-chip text-decoration-none"><i class="bi bi-people-fill"></i> Open my stops</RouterLink>
     </div>
 
     <div v-if="party.openStatus.loading && !party.open.length" class="d-grid gap-3" aria-busy="true">
@@ -84,7 +88,8 @@ const visible = computed(() => rows.value
     </div>
 
     <div v-else class="d-grid gap-3">
-      <QuestCard v-for="r in visible" :key="r.quest.id" :quest="r.quest" :fit="r.fit" :mine="r.mine" />
+      <QuestCard v-for="r in visible" :key="r.quest.id" :quest="r.quest" :fit="r.fit" :mine="r.mine" :joined="r.joined"
+        :dimmed="!!joinedId && !r.joined" />
       <button class="btn btn-link btn-sm text-muted" :disabled="party.openStatus.loading" @click="party.loadOpen()">
         <i class="bi bi-arrow-clockwise"></i> {{ party.openStatus.loading ? 'Refreshing…' : 'Refresh' }}
       </button>
