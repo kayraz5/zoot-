@@ -4,6 +4,7 @@ import { RouterLink } from 'vue-router'
 import { usePartyStore } from '../../model/stores/party.js'
 import { useUiStore } from '../../model/stores/ui.js'
 import { useUserStore } from '../../model/stores/user.js'
+import { useMissionStore } from '../../model/stores/mission.js'
 import { openableStops, GuestModeError, defaultQuestTitle } from '../../model/services/social.js'
 import { formatTime } from '../../model/services/hours.js'
 import { DEV_PANEL } from '../../model/services/config.js'
@@ -19,6 +20,9 @@ const emit = defineEmits(['close'])
 const party = usePartyStore()
 const ui = useUiStore()
 const user = useUserStore()
+const missionStore = useMissionStore()
+/** One quest at a time: joined someone else's quest → can't host. */
+const joinedElsewhere = computed(() => missionStore.joinedQuest)
 
 const loading = ref(false)
 const error = ref(null)
@@ -94,6 +98,14 @@ const rangeOf = (m) => (m.from_seq === m.to_seq ? `stop ${m.from_seq}` : `stops 
         </div>
 
         <div v-else-if="error" class="alert alert-danger small mb-0">Couldn't check your open quest: {{ error }}</div>
+
+        <!-- One quest at a time -->
+        <div v-else-if="joinedElsewhere && !hosted" class="text-center py-2">
+          <i class="bi bi-people-fill display-6 text-muted"></i>
+          <p class="fw-800 mb-1 mt-2">You've joined {{ joinedElsewhere.host_name }}'s quest</p>
+          <p class="small text-muted mb-3">One quest at a time. Go solo there first if you'd rather host your own.</p>
+          <RouterLink :to="`/quests/${joinedElsewhere.id}`" class="btn btn-primary" @click="emit('close')">Go to that quest</RouterLink>
+        </div>
 
         <!-- Already open -->
         <div v-else-if="hosted">

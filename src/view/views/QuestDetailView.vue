@@ -36,6 +36,7 @@ async function load() {
   loadCatalog() // meeting-point photos
   await mission.loadActive()
   await party.loadQuest(route.params.id)
+  if (mission.mission) party.loadHosted(mission.mission).catch(() => {}) // am I hosting? (one quest at a time)
   // The host may have closed the quest or changed my stops since I joined.
   if (mission.mission?.joined) await mission.checkJoined()
 }
@@ -99,10 +100,24 @@ const otherQuest = computed(() => {
 const pickMode = computed(() => !!q.value && !isHost.value && !q.value.mine && hasPlan.value && !otherQuest.value
   && q.value.status === 'open' && canPick.value)
 const confirmOpen = ref(false)
+/** My own open quest, if I'm hosting one (joining this quest deletes it). */
+const myHosted = computed(() => (party.hosted && party.hosted.status !== 'closed' && party.hosted.id !== q.value?.id ? party.hosted : null))
 async function join() {
+  if (myHosted.value) {
+    const guests = (myHosted.value.roster || []).filter((m) => m.role !== 'host').map((m) => m.display_name)
+    const ok = await party.ask({
+      title: 'Delete your open quest?', icon: 'bi-exclamation-triangle-fill', tone: 'danger',
+      confirmText: 'Delete & join', cancelText: 'Keep mine',
+      body: `One quest at a time: joining ${host.value?.display_name || 'this'}'s quest deletes your open quest "${myHosted.value.title}".`
+        + (guests.length ? ` ${guests.join(', ')} will go back to their own plan.` : '')
+    })
+    if (!ok) return
+  }
   busy.value = true
   try {
     await mission.joinQuest(q.value, pick.value.from, pick.value.to)
+    party.hosted = null // the database deleted it as part of the join
+    party.loadOpen()
     confirmOpen.value = false
     askNotifyPermission() // so chat messages reach me while the app is in the background
     ui.toast(`You're in! Meet ${host.value?.display_name || 'the host'} at ${q.value.stops[pick.value.from - 1].name}.`, 'success', 5000)
@@ -181,6 +196,7 @@ async function leave() {
               <template v-if="goingAt(index).length"> · <i class="bi bi-people-fill"></i> {{ goingAt(index).map((m) => m.display_name).join(', ') }}</template>
             </template>
           </StopRangePicker>
+          <p v-if="myHosted" class="small fw-800 text-danger mt-2 mb-0"><i class="bi bi-exclamation-triangle-fill"></i> Joining deletes your open quest "{{ myHosted.title }}".</p>
           <p v-if="preview?.ok" class="small mt-2 mb-2" :class="preview.bigChange ? 'text-danger fw-800' : 'text-muted'">
             <template v-if="preview.removed.length"><i class="bi bi-arrow-repeat"></i> Replaces {{ preview.removed.length }} of your stops.</template>
             <template v-else><i class="bi bi-check2-circle"></i> Fits around your plan; none of your stops are removed.</template>
