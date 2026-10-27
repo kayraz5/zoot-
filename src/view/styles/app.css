@@ -26,7 +26,12 @@
   --zt-shadow: 4px 4px 0 var(--zt-shadow-color);
   --zt-shadow-sm: 3px 3px 0 var(--zt-shadow-color);
   --zt-radius: 20px;
+  /* Bottom-nav geometry, shared so floating UI can dock above the nav without
+     guessing: nav height, the gap it keeps from the screen edge, and the gap
+     any card floating over the map leaves between itself and the nav. */
   --zt-nav-h: 68px;
+  --zt-nav-inset: max(12px, env(safe-area-inset-bottom));
+  --zt-nav-clearance: clamp(12px, 3.4vw, 18px);
   --zt-font-display: 'Bebas Neue', 'Fredoka', sans-serif;
   --zt-font-head: 'Fredoka', 'Poppins', sans-serif;
 
@@ -164,7 +169,7 @@ a { text-underline-offset: 3px; }
 /* ── Bottom nav ─────────────────────────────────────────────────────── */
 .zt-nav {
   position: fixed; left: 50%; transform: translateX(-50%);
-  bottom: max(12px, env(safe-area-inset-bottom));
+  bottom: var(--zt-nav-inset);
   width: min(520px, calc(100% - 24px)); height: var(--zt-nav-h);
   display: grid; grid-auto-flow: column; grid-auto-columns: 1fr; /* one column per tab, however many there are */
   border-radius: 26px; box-shadow: var(--zt-shadow); z-index: 1030;
@@ -244,6 +249,11 @@ a { text-underline-offset: 3px; }
 .zt-member-marker .face { width: 34px; height: 34px; border-radius: 32%; display: grid; place-items: center; font-family: var(--zt-font-head); font-weight: 700; font-size: 1rem; border: 3px solid #111; box-shadow: 0 3px 0 #111; }
 .zt-member-marker .name { font-size: 0.7rem; font-weight: 800; padding: 1px 6px; border-radius: 99px; background: #111; color: #ffcc00; white-space: nowrap; }
 .zt-member-marker.stale { opacity: 0.5; filter: grayscale(0.6); }
+/* A quest's meeting point, opened from the quest page (memberMarkers.js meetingMarker) */
+.zt-meet-marker { display: flex; flex-direction: column; align-items: center; gap: 2px; animation: zt-meet-drop 0.5s ease-out 1.2s both; }
+.zt-meet-marker .pin { font-size: 2.4rem; line-height: 1; color: var(--zt-pink); -webkit-text-stroke: 2px #111; filter: drop-shadow(0 3px 0 #111); }
+.zt-meet-marker .name { font-size: 0.75rem; font-weight: 800; padding: 3px 10px; border-radius: 99px; background: var(--zt-pink); color: #111; border: 2px solid #111; white-space: nowrap; }
+@keyframes zt-meet-drop { from { transform: translateY(-24px); opacity: 0; } }
 
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation-duration: 0.01ms !important; animation-iteration-count: 1 !important; transition-duration: 0.01ms !important; }

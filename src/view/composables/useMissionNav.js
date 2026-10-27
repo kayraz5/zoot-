@@ -56,6 +56,7 @@ export function useMissionNav() {
         ? { ok: true, message: `You're back at ${target.name}. Check in to finish the quest.` }
         : {
             ok: false,
+            code: 'far',
             message: `${formatDistance(meters)} from ${target.name}. Get within ${HOME_RADIUS_M} m to finish.`
           }
     }

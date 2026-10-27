@@ -48,6 +48,17 @@ export function entryStatus(code, { icaSlugs, indexRule }) {
   return 'free'
 }
 
+/** Settles 'vftf-visa' with the traveller's answer: 'vftf' or 'visa', or 'ask' while they haven't answered. */
+export function withTransitVisa(status, transitVisa) {
+  if (status !== 'vftf-visa') return status
+  if (transitVisa === true) return 'vftf'
+  if (transitVisa === false) return 'visa'
+  return 'ask'
+}
+
+// Statuses that let the traveller out of the airport
+export const CAN_LEAVE = ['home', 'free', 'vftf']
+
 /** Link to ICA's page for this passport: its own visa page if ICA lists it, otherwise the general one. */
 export function icaLink(code, icaSlugs) {
   const slug = icaSlug(code)

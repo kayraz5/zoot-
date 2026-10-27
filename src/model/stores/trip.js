@@ -147,6 +147,7 @@ function defaultDraft() {
 		indoorPref: 'any',
 		maxWalk: 15,
 		partySize: 1,
-		foodNeeds: 'none' // none | halal | vegetarian | vegan
+		foodNeeds: 'none', // none | halal | vegetarian | vegan
+		entryDismissed: false // entry-check banner closed for this plan
 	}
 }

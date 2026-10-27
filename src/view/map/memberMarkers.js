@@ -62,3 +62,18 @@ function memberPin(member) {
   element.title = `${member.display_name || 'Traveller'} (live)`
   return element
 }
+
+/** A "Meet here" pin for a quest's meeting point (opened from the quest page). Returns the Marker. */
+export function meetingMarker(map, { lat, lng, label }) {
+  const element = document.createElement('div')
+  element.className = 'zt-meet-marker'
+  const icon = document.createElement('span')
+  icon.className = 'pin'
+  icon.innerHTML = '<i class="bi bi-geo-alt-fill" aria-hidden="true"></i>'
+  const name = document.createElement('span')
+  name.className = 'name'
+  name.textContent = label ? `Meet here · ${label}` : 'Meet here'
+  element.append(name, icon)
+  element.title = name.textContent
+  return new Marker({ element, anchor: 'bottom' }).setLngLat([lng, lat]).addTo(map)
+}

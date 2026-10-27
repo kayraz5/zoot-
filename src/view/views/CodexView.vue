@@ -4,6 +4,7 @@ import { useRoute } from 'vue-router'
 import { catalog, loadCatalog } from '../../model/services/catalog.js'
 import { usePassportStore } from '../../model/stores/passport.js'
 import { AREAS } from '../../model/data/origins.js'
+import { placeStampUrl } from '../../model/services/stampArt.js'
 
 // City Codex: every place by area, shown as stamped, seen or undiscovered. ?area=X shows one area.
 const passport = usePassportStore()
@@ -16,6 +17,8 @@ onMounted(loadCatalog)
 
 const isStamped = (place) => passport.stampedIds.has(place.id)
 const isSeen = (place) => passport.seen.has(place.id)
+/** The place's pre-generated stamp PNG, or null when it has none. */
+const stampFor = (place) => placeStampUrl(place.name)
 
 function placeState(place) {
   if (isStamped(place)) return 'stamped'
@@ -62,7 +65,14 @@ const seenTotal = computed(() => shownPlaces.value.filter(isSeen).length)
       <div class="codex-grid">
         <RouterLink v-for="place in group.places.filter(isVisible)" :key="place.id" :to="`/place/${place.id}`" class="cell" :class="placeState(place)">
           <span class="icon">
-            <i v-if="placeState(place) === 'stamped'" class="bi bi-patch-check-fill"></i>
+            <img
+              v-if="placeState(place) === 'stamped' && stampFor(place)"
+              :src="stampFor(place)"
+              alt=""
+              class="stamp-thumb"
+              loading="lazy"
+            />
+            <i v-else-if="placeState(place) === 'stamped'" class="bi bi-patch-check-fill"></i>
             <i v-else-if="placeState(place) === 'seen'" class="bi bi-eye"></i>
             <i v-else class="bi bi-geo-alt"></i>
           </span>
@@ -79,6 +89,7 @@ const seenTotal = computed(() => shownPlaces.value.filter(isSeen).length)
 .codex-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(104px, 1fr)); gap: 10px; }
 .cell { display: flex; flex-direction: column; align-items: center; gap: 6px; padding: 12px 6px; border-radius: 16px; border: var(--zt-bw) solid var(--zt-line); background: var(--zt-card); text-decoration: none; color: var(--zt-ink); text-align: center; }
 .cell .icon { width: 42px; height: 42px; border-radius: 50%; display: grid; place-items: center; background: var(--zt-card); border: 2px solid var(--zt-line); font-size: 1.1rem; color: var(--zt-ink); }
+.cell .stamp-thumb { width: 100%; height: 100%; object-fit: contain; border-radius: 50%; background: #fffbea; }
 .cell.stamped { background: var(--zt-yellow); color: #111; box-shadow: var(--zt-shadow-sm); }
 .cell.stamped .icon { background: #111; color: var(--zt-yellow); border-color: #111; }
 .cell.seen .icon { background: var(--zt-yellow-pale); color: #111; }

@@ -26,6 +26,7 @@ function toggle(t) {
 				<i v-if="isOn(t)" class="bi bi-check-circle-fill plan-check"></i>
 			</button>
 		</div>
+		<RouterLink to="/explore" class="tiny fw-800 d-inline-block mt-2">Not sure? Browse all places <i class="bi bi-arrow-right"></i></RouterLink>
 	</section>
 </template>
 

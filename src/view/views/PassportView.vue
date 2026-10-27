@@ -5,13 +5,13 @@ import { StampSlam } from '../gl/stampSlam.js'
 import { drawCover, drawIdentity, drawAreaPage, drawBackPage, PAGE_W, PAGE_H } from '../gl/pageArt.js'
 import { AREAS, ORIGINS, STYLES } from '../../model/data/origins.js'
 import { catalog, placeById, loadCatalog } from '../../model/services/catalog.js'
-import seedPlaces from '../../model/data/places.sg.json'
 import { usePassportStore, CHOP_TARGET } from '../../model/stores/passport.js'
 import { useUserStore } from '../../model/stores/user.js'
 import { useMissionStore } from '../../model/stores/mission.js'
 import { DEFAULT_COVER } from '../../model/services/brand.js'
 import { getDb } from '../../model/services/db/index.js'
 import entrySnapshot from '../../model/data/sgEntrySnapshot.js'
+import { placeStamp, areaStamp } from '../../model/data/stampArt.js'
 
 // Passport page: flipbook-vue turns the pages, and a Three.js stamp slams newly earned area chops
 const passport = usePassportStore()
@@ -69,9 +69,8 @@ const stampsByPlace = computed(() => {
   return result
 })
 
-// Unstamped places: hand-picked seed places first (in file order), then ones with a Wikipedia article
-const seedOrder = new Map(seedPlaces.map((place, i) => [place.id, i]))
-const placeRank = (place) => seedOrder.get(place.id) ?? seedPlaces.length + (place.blurb_source === 'wikipedia' ? 0 : 1000)
+// Unstamped places: hand-picked (seed) places first, then ones with a Wikipedia article, then the rest
+const placeRank = (place) => (place.source === 'seed' ? 0 : place.blurb_source === 'wikipedia' ? 1 : 2)
 
 // An area page's places: stamped ones first (oldest first), then the best-known unstamped ones
 function areaPlaces(areaId) {
@@ -134,6 +133,34 @@ const badges = computed(() => {
   ]
 })
 
+// Real stamp artwork, loaded only for places you've stamped and chops you've earned
+const artImages = new Map() // url -> loaded image, or null if it failed
+
+function loadImage(url) {
+  return new Promise((resolve) => {
+    const img = new Image()
+    img.onload = () => resolve(img)
+    img.onerror = () => resolve(null) // the drawn chop is used instead
+    img.src = url
+  })
+}
+
+async function loadArt() {
+  const urls = [...passport.stampedIds].map(placeStamp)
+    .concat(passport.choppedAreas.map(areaStamp))
+    .filter((url) => url && !artImages.has(url))
+  await Promise.all(urls.map(async (url) => artImages.set(url, await loadImage(url))))
+}
+
+function artFor(areaId) {
+  const places = {}
+  for (const stamp of passport.byArea[areaId] || []) {
+    const img = artImages.get(placeStamp(stamp.place_id))
+    if (img) places[stamp.place_id] = img
+  }
+  return { places, area: artImages.get(areaStamp(areaId)) || null }
+}
+
 // Draws page i onto a canvas
 function paint(i, ctx) {
   const left = i % 2 === 1
@@ -170,7 +197,8 @@ function paint(i, ctx) {
       target: CHOP_TARGET,
       pageNo: i,
       left,
-      revealed: !waitingForSlam || revealedAreas.has(area.id)
+      revealed: !waitingForSlam || revealedAreas.has(area.id),
+      art: artFor(area.id)
     })
   }
 
@@ -235,7 +263,7 @@ async function slamStamp(placeId) {
     navigator.vibrate?.(40)
     await repaintPage(page)
   }
-  if (stampSlam && at) await stampSlam.slam({ x: at.x, y: at.y, size: 104 * at.scale, ink: AREAS[page - FIRST_AREA_PAGE].ink }, reveal)
+  if (stampSlam && at) await stampSlam.slam({ x: at.x, y: at.y, size: 104 * at.scale, ink: AREAS[page - FIRST_AREA_PAGE].ink, image: artImages.get(placeStamp(placeId)) }, reveal)
   else await reveal() // no WebGL: just show it
   await wait(300)
 }
@@ -249,7 +277,7 @@ async function slamChop(areaId) {
     navigator.vibrate?.(40)
     await repaintPage(page)
   }
-  if (stampSlam && at) await stampSlam.slam({ x: at.x, y: at.y, size: 128 * at.scale, ink: AREAS[page - FIRST_AREA_PAGE].ink }, reveal)
+  if (stampSlam && at) await stampSlam.slam({ x: at.x, y: at.y, size: 128 * at.scale, ink: AREAS[page - FIRST_AREA_PAGE].ink, image: artImages.get(areaStamp(areaId)) }, reveal)
   else await reveal()
   passport.consumeSlam(areaId)
   await wait(300)
@@ -293,6 +321,7 @@ watch(
   () => [passport.stamps.length, passport.seen.size, user.profile, catalog.value, badges.value, entry.value, passport.nationality],
   async () => {
     if (!pages.value.length || busy.value) return
+    await loadArt()
     await repaintAll()
     await nextTick()
     slamOpenPages()
@@ -315,6 +344,7 @@ onMounted(async () => {
     ])
   } catch {}
 
+  await loadArt()
   await repaintAll()
   await nextTick()
   try {

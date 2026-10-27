@@ -115,7 +115,8 @@ const rangeOf = (m) => (m.from_seq === m.to_seq ? `stop ${m.from_seq}` : `stops 
           </div>
           <p class="tiny text-muted"><i class="bi bi-arrow-repeat"></i> Edit your plan freely: this updates by itself. If you change a stop someone joined, they go back to their own plan and we'll tell you.</p>
           <div class="d-grid gap-2">
-            <RouterLink :to="`/quests/${hosted.id}`" class="btn btn-primary" @click="emit('close')">View as guests see it</RouterLink>
+            <button v-if="guests.length" type="button" class="btn btn-primary" @click="emit('close'); party.openChat(hosted.id)"><i class="bi bi-chat-dots-fill"></i> Chat with {{ guests.map((g) => g.display_name).join(', ') }}</button>
+            <RouterLink :to="`/quests/${hosted.id}`" class="btn" :class="guests.length ? 'btn-soft' : 'btn-primary'" @click="emit('close')">View as guests see it</RouterLink>
             <button v-if="DEV_PANEL && hosted.status === 'open'" class="btn btn-sm btn-dark" :disabled="busy" @click="demoJoin">
               <i class="bi bi-robot"></i> Demo: a traveller joins
             </button>

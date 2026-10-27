@@ -6,6 +6,7 @@ import { useUserStore } from '../../model/stores/user.js'
 import { usePassportStore, CHOP_TARGET } from '../../model/stores/passport.js'
 import { AREAS } from '../../model/data/origins.js'
 import { chopLabel } from '../gl/pageArt.js'
+import { placeStamp, areaStamp } from '../../model/data/stampArt.js'
 
 // Pop-up after a stamp, or after returning to the airport/hotel.
 const ui = useUiStore()
@@ -18,6 +19,8 @@ const area = computed(() => AREAS.find((a) => a.id === celebration.value?.area))
 const ink = computed(() => area.value?.ink || '#111111')
 const glyph = computed(() => area.value?.glyph || '✦')
 // Different places stamped in this area, toward its chop
+// Real stamp artwork when there is one: the area's once its chop is earned, otherwise the place's
+const artUrl = computed(() => (celebration.value?.chopEarned ? areaStamp(celebration.value.area) : placeStamp(celebration.value?.place?.id)))
 const areaCount = computed(() => passport.byArea[celebration.value?.area]?.length || 0)
 
 function close() {
@@ -46,7 +49,8 @@ function goToPassport() {
           <div class="chop-stage mb-2">
             <div class="splat"></div>
             <!-- The place's own stamp; the area chop only once it's earned -->
-            <div class="chop" :class="{ earned: celebration.chopEarned }" :style="{ '--ink': ink }">
+            <img v-if="artUrl" class="stamp-art" :class="{ earned: celebration.chopEarned }" :src="artUrl" alt="" />
+            <div v-else class="chop" :class="{ earned: celebration.chopEarned }" :style="{ '--ink': ink }">
               <span class="glyph">{{ glyph }}</span>
               <span class="ring-text">{{ celebration.chopEarned ? celebration.area : chopLabel(celebration.place?.name || '', celebration.area) }}</span>
             </div>
@@ -81,6 +85,8 @@ function goToPassport() {
 [data-bs-theme='dark'] .chop { background: var(--zt-yellow-pale); }
 .chop .glyph { font-size: 46px; font-weight: 700; line-height: 1; font-family: var(--zt-font-head); }
 .chop .ring-text { position: absolute; bottom: 14px; max-width: 78%; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; font-size: 10px; font-weight: 800; letter-spacing: 0.12em; text-transform: uppercase; }
+.stamp-art { width: 132px; height: 132px; transform: rotate(-8deg); animation: slam 0.55s cubic-bezier(0.3, 0.1, 0.3, 1.5) both; }
+.stamp-art.earned { width: 146px; height: 146px; }
 .chop.earned { width: 136px; height: 136px; border-width: 8px; }
 .splat { width: 150px; height: 150px; border-radius: 50%; background: var(--zt-yellow); border: var(--zt-bw) solid #111; animation: splat 0.5s 0.25s ease-out both; }
 @keyframes slam { 0% { transform: scale(2.6) rotate(-30deg); opacity: 0; } 60% { transform: scale(0.92) rotate(-10deg); opacity: 1; } 100% { transform: scale(1) rotate(-12deg); } }

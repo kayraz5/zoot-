@@ -1,11 +1,10 @@
-import { readFileSync } from 'node:fs'
 import { syncPlaces } from './_lib/places/index.js'
 import { placesDbFromEnv, savePlaces } from './_lib/places/supabase.js'
 
 /**
- * GET /api/sync-places — daily Vercel Cron (see vercel.json). Refreshes the Supabase
- * `places` table from the seed + OpenStreetMap. Needs CRON_SECRET, SUPABASE_SECRET_KEY
- * and supabase/places_sync.sql run once.
+ * GET /api/sync-places — daily Vercel Cron (see vercel.json). Refreshes the OpenStreetMap places in
+ * the Supabase `places` table; hand-picked places (source = 'seed') are read from the table and never changed.
+ * Needs CRON_SECRET, SUPABASE_SECRET_KEY and supabase/places_sync.sql run once.
  */
 // Overpass can take a minute when busy, plus Wikipedia lookups
 export const config = { maxDuration: 300 }
@@ -19,8 +18,9 @@ export default async function handler(req, res) {
   if (!db) return res.status(503).json({ error: 'SUPABASE_URL / SUPABASE_SECRET_KEY not set' })
 
   try {
-    const seed = JSON.parse(readFileSync(new URL('../src/model/data/places.sg.json', import.meta.url), 'utf8'))
     const previous = await db.select('places', 'select=*')
+    const seed = previous.filter((place) => place.source === 'seed')
+    if (!seed.length) return res.status(500).json({ error: 'No hand-picked places in the table, nothing written' })
     const { ok, report, places } = await syncPlaces({ seed, previous })
     if (!ok) return res.status(502).json({ error: 'OpenStreetMap failed, nothing written', report })
 
