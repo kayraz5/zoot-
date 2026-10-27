@@ -1,5 +1,6 @@
 <script setup>
 import { onMounted, onUnmounted, ref, watch } from 'vue'
+import { useRoute } from 'vue-router'
 import { useMissionStore } from '../../model/stores/mission.js'
 import { usePartyStore } from '../../model/stores/party.js'
 import { useUserStore } from '../../model/stores/user.js'
@@ -7,13 +8,14 @@ import * as social from '../../model/services/social.js'
 import { tick } from '../../model/services/clock.js'
 import { geo, hasFix } from '../../model/services/geo.js'
 import { distanceM } from '../../model/services/travel.js'
-import { syncMemberMarkers, clearMemberMarkers } from '../map/memberMarkers.js'
+import { syncMemberMarkers, clearMemberMarkers, meetingMarker } from '../map/memberMarkers.js'
 import { useActiveQuest } from '../composables/useActiveQuest.js'
 
 /**
  * The social-quest side of the map, with no UI of its own (the chip is QuestCoopChip):
  *  - shares my location with the other members while the quest is live, and draws theirs as pins;
  *  - when my joined stops are over, puts me back on my own plan;
+ *  - shows a "Meet here" pin when opened from a quest's meeting point (/map?lat=&lng=&meet=);
  *  - follows the quest chat (for the unread badge on the chip) and co-op stamps ("Mei arrived
  *    after you: co-op stamp!").
  * Mounted once by the map view and always on, even when the next-stop card is hidden.
@@ -25,6 +27,7 @@ const store = useMissionStore()
 const party = usePartyStore()
 const user = useUserStore()
 const { joined, active, live } = useActiveQuest()
+const route = useRoute()
 
 const SEND_EVERY_MS = 15000
 const STALE_MS = 2 * 60000
@@ -120,6 +123,16 @@ watch([locations, roster, tick, () => props.getMap()], ([list, people, , map]) =
   party.liveOthers = others
   if (map) syncMemberMarkers(map, markers, others)
 })
+
+// ── Meeting point pin (the map view flies there itself) ──
+let meetPin = null
+watch([() => props.getMap(), () => route?.query.meet], ([map]) => {
+  meetPin?.remove()
+  meetPin = null
+  const { lat, lng, meet } = route?.query || {}
+  if (map && lat && lng && meet) meetPin = meetingMarker(map, { lat: Number(lat), lng: Number(lng), label: meet })
+}, { immediate: true })
+onUnmounted(() => meetPin?.remove())
 </script>
 
 <template>

@@ -42,7 +42,7 @@
 // 1. Imports
 // ─────────────────────────────────────────────────────────────────────────────
 import { ref, onMounted, onUnmounted, watch } from 'vue'
-import { useRouter } from 'vue-router'
+import { useRoute, useRouter } from 'vue-router'
 import { Map as MapLibreMap, LngLatBounds, setWorkerUrl } from 'maplibre-gl'
 import 'maplibre-gl/dist/maplibre-gl.css'
 // MapLibre resolves its worker next to its own module, which Vite never copies into
@@ -241,6 +241,7 @@ const plannedSegments = ref([])         // [{ coords, mode, active }]
 // 4. Stores & derived mission state
 // ─────────────────────────────────────────────────────────────────────────────
 const router = useRouter()
+const currentRoute = useRoute()
 const missionStore = useMissionStore()
 const ui = useUiStore()
 const character = useCharacterStore()
@@ -1277,6 +1278,12 @@ function demoWalkLoop(timestamp) {
 
 // Remember the card's open/closed state across visits to other pages.
 watch(showMissionCard, (open) => writeMissionCardFlag(open))
+// Deep link /map?lat=…&lng=… (e.g. a quest's meeting point): fly there once the map is ready.
+// The "Meet here" pin itself is drawn by QuestMapLive.
+watch(mapReady, (ready) => {
+  const { lat, lng } = currentRoute.query
+  if (ready && lat && lng) flyTo({ lat: Number(lat), lng: Number(lng) }, 17.5)
+}, { immediate: true })
 
 // A new GPS fix: move the avatar and keep the camera on it unless the user is looking around.
 watch(() => [here.value?.lat, here.value?.lng], onHereChanged)
