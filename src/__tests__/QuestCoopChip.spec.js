@@ -16,6 +16,8 @@ vi.mock('../model/services/db/index.js', () => ({ getDb: async () => ({ kind: 'l
 
 import QuestCoopChip from '../view/components/QuestCoopChip.vue'
 import QuestMapLive from '../view/components/QuestMapLive.vue'
+import QuestChatButton from '../view/components/QuestChatButton.vue'
+import QuestGoSolo from '../view/components/QuestGoSolo.vue'
 import { useMissionStore } from '../model/stores/mission.js'
 import { usePartyStore } from '../model/stores/party.js'
 
@@ -37,19 +39,26 @@ function setup(legs) {
 describe('QuestCoopChip: the map HUD while I am with someone', () => {
   beforeEach(() => vi.clearAllMocks())
 
-  it('during the joined stops: "With Mei until …" and where my plan resumes', async () => {
+  it('during the joined stops: one line, "With Mei until …"', async () => {
     const { w } = setup([block('maxwell', -10, 30), block('temple', 35, 60), leg('gardens', 90, 150)])
     await flushPromises()
-    expect(w.text()).toMatch(/With Mei until \d\d:\d\d/)
-    expect(w.text()).toContain('Your plan resumes: gardens')
-    expect(w.text()).toContain('Go solo')
+    expect(w.text()).toMatch(/^With Mei until \d\d:\d\d$/)
   })
 
-  it('before the meet-up: where and when to meet; no own stops after → head back', async () => {
+  it('before the meet-up: one line, where and when to meet (no subtext)', async () => {
     const { w } = setup([block('maxwell', 40, 80)])
     await flushPromises()
-    expect(w.text()).toMatch(/Meet Mei at maxwell, \d\d:\d\d/)
-    expect(w.text()).toContain('Then head back to Changi Airport')
+    expect(w.text()).toMatch(/^Meet Mei at maxwell, \d\d:\d\d$/)
+  })
+
+  it('card buttons: "Chat with Mei" opens the chat; Go solo shows for guests', async () => {
+    setup([block('maxwell', 40, 80)])
+    const chat = mount(QuestChatButton)
+    const solo = mount(QuestGoSolo)
+    expect(chat.text()).toContain('Chat with Mei')
+    expect(solo.text()).toBe('Go solo')
+    await chat.find('button').trigger('click')
+    expect(usePartyStore().chatPanel).toBe('q1')
   })
 
   it('not in a quest → nothing shown', async () => {
