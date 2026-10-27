@@ -7,7 +7,6 @@ import { useUiStore } from '../../model/stores/ui.js'
 import { formatTime } from '../../model/services/hours.js'
 import { DEV_PANEL } from '../../model/services/config.js'
 import { useActiveQuest } from '../composables/useActiveQuest.js'
-import QuestChatDrawer from './QuestChatDrawer.vue'
 
 /**
  * Map chip for a social quest: "With Mei until 15:40 · Your plan resumes: Gardens", Go solo.
@@ -22,7 +21,6 @@ const router = useRouter()
 const { joined, active, started, live, guestNames, resume } = useActiveQuest()
 
 const busy = ref(false)
-const chatOpen = ref(false)
 async function goSolo() {
   const ok = await party.ask({
     title: 'Go solo?', icon: 'bi-person-walking', confirmText: 'Go solo', cancelText: 'Stay',
@@ -70,14 +68,13 @@ async function demoLocate() {
       </template>
     </div>
     <div class="d-flex gap-1 flex-none">
-      <button type="button" class="coop-btn chat" :aria-label="party.unread ? `Chat, ${party.unread} unread` : 'Chat'" title="Chat" @click.stop="chatOpen = true">
+      <button type="button" class="coop-btn chat" :aria-label="party.unread ? `Chat, ${party.unread} unread` : 'Chat'" title="Chat" @click.stop="party.openChat(active.id)">
         <i class="bi bi-chat-dots-fill"></i>
         <span v-if="party.unread" class="badge-dot">{{ party.unread > 9 ? '9+' : party.unread }}</span>
       </button>
       <button v-if="DEV_PANEL && live" type="button" class="coop-btn" title="Demo: put the others on the map" aria-label="Demo: put the others on the map" @click.stop="demoLocate"><i class="bi bi-robot"></i></button>
       <button v-if="active.role === 'guest'" type="button" class="coop-btn solo" :disabled="busy" @click.stop="goSolo">Go solo</button>
     </div>
-    <QuestChatDrawer :open="chatOpen" :party-id="active.id" @close="chatOpen = false" />
   </div>
 </template>
 

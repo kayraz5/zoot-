@@ -8,13 +8,13 @@ import { useUiStore } from '../../model/stores/ui.js'
 import { stopsFit, joinableRange, previewJoin, defaultQuestTitle } from '../../model/services/social.js'
 import { formatTime } from '../../model/services/hours.js'
 import { DEV_PANEL } from '../../model/services/config.js'
+import { askNotifyPermission } from '../../model/services/notify.js'
 import { STYLES } from '../../model/data/origins.js'
 import { loadCatalog, placeById } from '../../model/services/catalog.js'
 import MemberAvatarStack from '../components/MemberAvatarStack.vue'
 import ProfilePreviewModal from '../components/ProfilePreviewModal.vue'
 import StopRangePicker from '../components/StopRangePicker.vue'
 import JoinConfirmSheet from '../components/JoinConfirmSheet.vue'
-import QuestChatDrawer from '../components/QuestChatDrawer.vue'
 import StopGallery from '../components/StopGallery.vue'
 
 /**
@@ -99,12 +99,12 @@ const otherQuest = computed(() => {
 const pickMode = computed(() => !!q.value && !isHost.value && !q.value.mine && hasPlan.value && !otherQuest.value
   && q.value.status === 'open' && canPick.value)
 const confirmOpen = ref(false)
-const chatOpen = ref(false)
 async function join() {
   busy.value = true
   try {
     await mission.joinQuest(q.value, pick.value.from, pick.value.to)
     confirmOpen.value = false
+    askNotifyPermission() // so chat messages reach me while the app is in the background
     ui.toast(`You're in! Meet ${host.value?.display_name || 'the host'} at ${q.value.stops[pick.value.from - 1].name}.`, 'success', 5000)
     await party.loadQuest(q.value.id)
   } catch (err) {
@@ -212,7 +212,7 @@ async function leave() {
           <button v-if="DEV_PANEL && q.status === 'open'" class="btn btn-sm btn-dark w-100 mb-2" :disabled="busy" @click="demoJoin">
             <i class="bi bi-robot"></i> Demo: a traveller joins
           </button>
-          <button class="btn btn-primary w-100 mb-2" @click="chatOpen = true"><i class="bi bi-chat-dots-fill"></i> Chat</button>
+          <button class="btn btn-primary w-100 mb-2" @click="party.openChat(q.id)"><i class="bi bi-chat-dots-fill"></i> Chat</button>
           <div class="d-flex gap-2">
             <button class="btn btn-soft flex-grow-1" :disabled="busy" @click="closeQuest"><i class="bi bi-x-circle"></i> Close</button>
             <button class="btn btn-outline-danger" :disabled="busy" @click="deleteQuest" aria-label="Delete quest"><i class="bi bi-trash3"></i></button>
@@ -223,7 +223,7 @@ async function leave() {
             You're joining {{ q.mine.from_seq === q.mine.to_seq ? `stop ${q.mine.from_seq}` : `stops ${q.mine.from_seq}–${q.mine.to_seq}` }}
           </div>
           <p class="small text-muted mb-2">They're in your plan at fixed times. Meet at {{ q.stops[q.mine.from_seq - 1]?.name }}, {{ formatTime(q.stops[q.mine.from_seq - 1]?.arrive_iso) }}.</p>
-          <button class="btn btn-primary w-100 mb-2" @click="chatOpen = true"><i class="bi bi-chat-dots-fill"></i> Chat</button>
+          <button class="btn btn-primary w-100 mb-2" @click="party.openChat(q.id)"><i class="bi bi-chat-dots-fill"></i> Chat</button>
           <div class="d-flex gap-2">
             <RouterLink to="/mission" class="btn btn-soft flex-grow-1"><i class="bi bi-list-ol"></i> My plan</RouterLink>
             <button class="btn btn-outline-danger" :disabled="busy" @click="leave"><i class="bi bi-box-arrow-right"></i> Go solo</button>
@@ -251,7 +251,6 @@ async function leave() {
     </template>
 
     <ProfilePreviewModal :profile="profile" @close="profile = null" />
-    <QuestChatDrawer v-if="q && (isHost || q.mine)" :open="chatOpen" :party-id="q.id" @close="chatOpen = false" />
     <JoinConfirmSheet :open="confirmOpen" :preview="preview" :busy="busy" @close="confirmOpen = false" @confirm="join" />
   </main>
 </template>

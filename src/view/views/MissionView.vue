@@ -3,6 +3,7 @@ import { computed, nextTick, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useMissionStore } from '../../model/stores/mission.js'
 import { useUiStore } from '../../model/stores/ui.js'
+import { usePartyStore } from '../../model/stores/party.js'
 import { loadCatalog, placeById } from '../../model/services/catalog.js'
 import { formatTime } from '../../model/services/hours.js'
 import { rainLookup } from '../../model/services/weather.js'
@@ -19,6 +20,7 @@ const route = useRoute()
 const router = useRouter()
 const store = useMissionStore()
 const ui = useUiStore()
+const party = usePartyStore()
 
 async function load() {
   await loadCatalog()
@@ -218,6 +220,7 @@ const replans = [
               <template v-if="leg.fixed && leg.status === 'pending'">
                 <div class="d-flex gap-2 flex-wrap align-items-center">
                   <RouterLink :to="`/map?focus=${leg.seq}`" class="btn btn-sm btn-soft"><i class="bi bi-geo"></i> On map</RouterLink>
+                  <button type="button" class="btn btn-sm btn-primary" @click="party.openChat(leg.party_id)"><i class="bi bi-chat-dots-fill"></i> Chat</button>
                   <RouterLink :to="`/quests/${leg.party_id}`" class="btn btn-sm btn-soft"><i class="bi bi-people-fill"></i> Quest</RouterLink>
                   <span class="tiny text-muted"><i class="bi bi-lock-fill"></i> Fixed time with {{ leg.with_host }}</span>
                 </div>

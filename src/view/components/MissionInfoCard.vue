@@ -82,7 +82,8 @@ const stampArt = computed(() => placeStampUrl(props.next?.name))
           <span v-else class="ontime">on time</span>
         </div>
         <div v-if="guidance" class="stop-guide"><i class="bi" :class="guidance.icon"></i> {{ guidance.text }}</div>
-        <div class="stop-near">{{ check?.message }}</div>
+        <!-- "868 m away. Get within 80 m" repeats the distance above; GPS / in-range messages still show. -->
+        <div v-if="check?.code !== 'far'" class="stop-near">{{ check?.message }}</div>
       </div>
       <div class="col-5 col-sm-4 d-flex justify-content-end">
         <button class="stamp-btn" :class="{ ready: check?.ok }" :disabled="stamping" @click="$emit('stamp')"

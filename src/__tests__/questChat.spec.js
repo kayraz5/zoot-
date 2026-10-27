@@ -32,6 +32,7 @@ vi.mock('../model/services/social.js', async (orig) => ({
 
 import * as social from '../model/services/social.js'
 import QuestChatDrawer from '../view/components/QuestChatDrawer.vue'
+import QuestChatHost from '../view/components/QuestChatHost.vue'
 import { usePartyStore } from '../model/stores/party.js'
 import { useUserStore } from '../model/stores/user.js'
 import { useUiStore } from '../model/stores/ui.js'
@@ -127,5 +128,32 @@ describe('Centred prompts and co-op stamps', () => {
     party.answer(true)
     await done
     expect(useUserStore().profile.xp).toBe(514)
+  })
+})
+
+describe('App-wide chat: new-message banner', () => {
+  beforeEach(() => vi.clearAllMocks())
+
+  it('someone else writes while my chat is closed → banner; tapping it opens the shared chat', async () => {
+    const party = setup()
+    const w = mount(QuestChatHost, { global: { stubs: { Teleport: true, QuestChatDrawer: true } } })
+    await party.startChat('q1')
+    party.addMessage({ id: 20, party_id: 'q1', user_id: 'me', type: 'text', body: 'my own message', created_at: at(0) })
+    await flushPromises()
+    expect(w.find('.chat-banner').exists()).toBe(false) // not for my own messages
+    party.addMessage({ id: 21, party_id: 'q1', user_id: 'mei', type: 'chip', body: 'Running 5 min late', created_at: at(0) })
+    await flushPromises()
+    expect(w.find('.chat-banner').text()).toContain('Mei · Chinatown')
+    expect(w.find('.chat-banner').text()).toContain('Running 5 min late')
+    await w.find('.chat-banner').trigger('click')
+    expect(party.chatPanel).toBe('q1')
+  })
+
+  it('no banner while that chat is open', async () => {
+    const party = setup()
+    await party.startChat('q1')
+    party.openChat('q1')
+    party.addMessage({ id: 22, party_id: 'q1', user_id: 'mei', type: 'text', body: 'hi', created_at: at(0) })
+    expect(party.incoming).toBe(null)
   })
 })

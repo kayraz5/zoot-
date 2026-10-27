@@ -16,8 +16,8 @@ import { useActiveQuest } from '../composables/useActiveQuest.js'
  *  - shares my location with the other members while the quest is live, and draws theirs as pins;
  *  - when my joined stops are over, puts me back on my own plan;
  *  - shows a "Meet here" pin when opened from a quest's meeting point (/map?lat=&lng=&meet=);
- *  - follows the quest chat (for the unread badge on the chip) and co-op stamps ("Mei arrived
- *    after you: co-op stamp!").
+ *  - shows co-op stamps as they land ("Mei arrived after you: co-op stamp!").
+ * (The quest chat is followed app-wide by QuestChatHost.)
  * Mounted once by the map view and always on, even when the next-stop card is hidden.
  * getMap: () => the MapLibre map, or null before it has loaded.
  */
@@ -42,12 +42,6 @@ onMounted(async () => {
 })
 onUnmounted(() => unwatchCoop?.())
 
-// ── Chat: keep the quest's messages loaded so the chip can show unread ones ──
-watch(() => active.value?.id, (id, old) => {
-  if (old) party.stopChat()
-  if (id) party.startChat(id)
-}, { immediate: true })
-onUnmounted(() => { if (active.value?.id) party.stopChat() })
 
 // ── My joined stops are over → back to my own plan ──
 // immediate: also when the map opens after they already ended.

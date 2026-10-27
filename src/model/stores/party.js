@@ -38,7 +38,9 @@ export const usePartyStore = defineStore('party', {
     // Quest chat (QuestChatDrawer.vue). Started by whoever shows it or its unread badge.
     chat: { partyId: null, quest: null, messages: [], loading: false, error: null },
     chatUsers: 0, // how many screens are using the chat right now
-    chatReadAt: readTimes()
+    chatReadAt: readTimes(),
+    chatPanel: null, // party id whose chat drawer is open (one drawer for the whole app: QuestChatHost.vue)
+    incoming: null // newest message from someone else while the drawer was closed: { partyId, name, body, at } (banner)
   }),
   getters: {
     /** Messages from other people (not system lines) since I last had this chat open. */
@@ -102,6 +104,12 @@ export const usePartyStore = defineStore('party', {
     addMessage(m) {
       if (m.party_id !== this.chat.partyId || this.chat.messages.some((x) => x.id === m.id)) return
       this.chat.messages.push(m)
+      // Someone else wrote and I'm not looking at this chat: the banner / notification picks this up.
+      const away = typeof document !== 'undefined' && document.hidden
+      if (m.user_id && m.user_id !== useUserStore().userId && (this.chatPanel !== m.party_id || away)) {
+        const name = this.chat.quest?.roster?.find((r) => r.user_id === m.user_id)?.display_name || 'Someone'
+        this.incoming = { partyId: m.party_id, name, body: m.body, title: this.chat.quest?.title || 'Quest chat', at: Date.now() }
+      }
       // New people may join mid-quest: refresh names/avatars.
       if (m.user_id && !this.chat.quest?.roster?.some((r) => r.user_id === m.user_id)) {
         social.getQuest(m.party_id).then((q) => { if (q && this.chat.partyId === m.party_id) this.chat.quest = q }).catch(() => {})
@@ -111,6 +119,13 @@ export const usePartyStore = defineStore('party', {
       if (!body.trim()) return
       this.addMessage(await social.sendMessage(this.chat.partyId, body, type))
       this.markChatRead()
+    },
+    openChat(partyId) {
+      this.chatPanel = partyId
+      this.incoming = null
+    },
+    closeChat() {
+      this.chatPanel = null
     },
     markChatRead() {
       if (!this.chat.partyId) return
