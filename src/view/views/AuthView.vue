@@ -1,5 +1,5 @@
 <script setup>
-import {ref, watchEffect} from 'vue';
+import {onBeforeUnmount, ref, watchEffect} from 'vue';
 import {useRoute, useRouter} from 'vue-router';
 import {useUserStore} from '../../model/stores/user.js';
 
@@ -46,12 +46,69 @@ async function submitPassword() {
 
         if (!signedIn) {
             confirmSent.value = true;
+            startCooldown();
         }
     } catch (err) {
-        error.value = err.message;
+        error.value = friendly(err);
     } finally {
         busy.value = false;
     }
+}
+
+// The magic-link form submitted to this, but it was never written, so no link was ever sent.
+async function sendLink() {
+    error.value = '';
+    busy.value = true;
+    try {
+        await user.sendMagicLink(email.value.trim());
+        sent.value = true;
+        startCooldown();
+    } catch (err) {
+        error.value = friendly(err);
+    } finally {
+        busy.value = false;
+    }
+}
+
+// Resend whichever email we just sent. Supabase allows one per address per minute.
+const cooldown = ref(0);
+let cooldownTimer = null;
+function startCooldown() {
+    cooldown.value = 60;
+    clearInterval(cooldownTimer);
+    cooldownTimer = setInterval(() => {
+        cooldown.value -= 1;
+        if (cooldown.value <= 0) clearInterval(cooldownTimer);
+    }, 1000);
+}
+async function resend() {
+    error.value = '';
+    busy.value = true;
+    try {
+        if (sent.value) await user.sendMagicLink(email.value.trim());
+        else await user.resendConfirmation(email.value.trim());
+        startCooldown();
+    } catch (err) {
+        error.value = friendly(err);
+    } finally {
+        busy.value = false;
+    }
+}
+onBeforeUnmount(() => clearInterval(cooldownTimer));
+function useAnotherEmail() {
+    sent.value = false;
+    confirmSent.value = false;
+    error.value = '';
+}
+
+// Supabase error messages, in words a traveller understands.
+function friendly(err) {
+    const msg = err?.message || String(err);
+    if (/rate limit|too many|429|only request this after/i.test(msg)) return 'Too many emails were sent recently. Wait a minute or two, then try again.';
+    if (/email not confirmed/i.test(msg)) return 'Confirm your email first: check your inbox (and spam folder) for the link.';
+    if (/invalid login credentials/i.test(msg)) return 'Wrong email or password. New here? Create an account instead.';
+    if (/invalid.*email|unable to validate email/i.test(msg)) return 'That email address doesn\'t look right. Check it and try again.';
+    return msg;
 }
 
 async function switchMethod(m) {
@@ -78,11 +135,17 @@ async function guest() {
                 <h1 class="title mb-1">Board the quest</h1>
                 <p class="text-muted">Your stamps, XP and passport follow your account.</p>
 
-                <div v-if="sent" class="alert alert-success">
-                    <i class="bi bi-envelope-check"></i> Check <b>{{ email }}</b> and tap the link on this device.
-                </div>
-                <div v-else-if="confirmSent" class="alert alert-success">
-                    <i class="bi bi-envelope-check"></i> Account created. Check <b>{{ email }}</b> to confirm it, then sign in.
+                <div v-if="sent || confirmSent" class="alert alert-success">
+                    <i class="bi bi-envelope-check"></i>
+                    <template v-if="sent">Check <b>{{ email }}</b> and tap the link on this device.</template>
+                    <template v-else>Account created. Check <b>{{ email }}</b> to confirm it, then sign in.</template>
+                    <div class="small mt-2">Nothing after a minute? Check your spam folder, or resend it.</div>
+                    <div class="d-flex flex-wrap gap-2 mt-2">
+                        <button type="button" class="btn btn-sm btn-dark" :disabled="busy || cooldown > 0" @click="resend">
+                            {{ cooldown > 0 ? `Resend in ${cooldown}s` : 'Resend email' }}
+                        </button>
+                        <button type="button" class="btn btn-sm btn-link" @click="useAnotherEmail">Use a different email</button>
+                    </div>
                 </div>
                 <template v-else-if="user.canUseEmail">
                     <!-- login/signup forms -->

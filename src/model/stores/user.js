@@ -92,6 +92,12 @@ export const useUserStore = defineStore('user', {
             await db.signInWithEmail(email);
         },
         
+        // resend the "confirm your email" message after creating an account
+        async resendConfirmation(email) {
+            const db = await getDb();
+            await db.resendSignup(email);
+        },
+
         // email and password login
         async passwordAuth(email, password, isSignUp = false) {
             setGuestMode(false);
