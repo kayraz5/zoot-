@@ -1,9 +1,9 @@
-// Generates supabase/seed.sql from src/model/data (places + sidequests). `node scripts/gen-seed.mjs`
+// Generates supabase/seed.sql (a fresh database's hand-picked places + sidequests) from the app's offline copy. `node scripts/gen-seed.mjs`
 import { readFileSync, writeFileSync } from 'node:fs'
 import { nearestHub } from '../src/model/services/travel.js'
 import { SIDEQUESTS } from '../src/model/data/sidequests.js'
 
-const places = JSON.parse(readFileSync(new URL('../src/model/data/places.sg.json', import.meta.url)))
+const places = JSON.parse(readFileSync(new URL('../src/model/data/places.synced.json', import.meta.url))).filter((p) => p.source === 'seed')
 const q = (v) => (v == null ? 'null' : `'${String(v).replace(/'/g, "''")}'`)
 const arr = (a) => (a?.length ? `array[${a.map(q).join(', ')}]::text[]` : `'{}'::text[]`)
 const ints = (a) => (a?.length ? `array[${a.join(', ')}]::int[]` : `'{}'::int[]`)

@@ -29,7 +29,7 @@ const SAME_NAME_RADIUS_M = 3000
 export function mergePlaces({ seed, osm, previous = [] }) {
   const centres = areaCentres(seed)
   const previousByRef = new Map(previous.filter((p) => p.source_ref).map((p) => [p.source_ref, p]))
-  const places = seed.map((p) => ({ ...p, source: 'seed', active: true }))
+  const places = seed.map((p) => ({ ...p, source: 'seed', active: p.active !== false })) // a seed place switched off in the table stays off
   const seedIds = new Set(places.map((p) => p.id))
   const usedIds = new Set([...places, ...previous].map((p) => p.id))
   const addedRefs = new Set()

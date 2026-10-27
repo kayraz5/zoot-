@@ -1,11 +1,11 @@
 import { shallowRef } from 'vue'
 import syncedPlaces from '../data/places.synced.json'
-import { getDb } from './db/index.js'
+import { SUPABASE_URL, SUPABASE_ANON_KEY, HAS_SUPABASE } from './config.js'
 import { nearestHub } from './travel.js'
 
 /**
- * Place catalog. Supabase `places` is the source of truth when connected.
- * Guests and offline use the bundled places.synced.json (seed + OpenStreetMap, from `pnpm sync:places`).
+ * Place catalog. Supabase `places` is the source of truth for everyone, guests included (the table is public).
+ * The bundled places.synced.json (seed + OpenStreetMap, from `pnpm sync:places`) is the first paint and the offline copy.
  * Inactive places are hidden from the catalog but kept in placeById so old stamps still resolve.
  */
 export const catalog = shallowRef([])
@@ -31,9 +31,14 @@ function setPlaces(list) {
 export async function loadCatalog() {
   if (loaded) return catalog.value
   loaded = true
+  if (!HAS_SUPABASE) return catalog.value
   try {
-    const db = await getDb()
-    const rows = await db.listPlaces()
+    // Plain REST read with the public key, so it works without signing in
+    const res = await fetch(`${SUPABASE_URL}/rest/v1/places?select=*&order=name`, {
+      headers: { apikey: SUPABASE_ANON_KEY }
+    })
+    if (!res.ok) throw new Error(`places ${res.status}`)
+    const rows = await res.json()
     if (rows?.length) setPlaces(rows)
   } catch (err) {
     console.warn('[catalog] using bundled places:', err.message)
