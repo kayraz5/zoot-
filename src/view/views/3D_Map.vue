@@ -52,7 +52,6 @@ import maplibreWorkerUrl from 'maplibre-gl/dist/maplibre-gl-worker.mjs?url'
 
 setWorkerUrl(maplibreWorkerUrl)
 
-import axios from 'axios'
 import destination from '@turf/destination'
 import { point } from '@turf/helpers'
 
@@ -66,11 +65,16 @@ import { TravellerLayer, bearingBetween } from '../gl/travellerLayer.js'
 // clicks come back as events so this view stays the single owner of map state.
 import MissionInfoCard from '../components/MissionInfoCard.vue'
 import AirportHelp from '../components/AirportHelp.vue'
+// Top-left HUD column (Singapore badge, weather chip, GPS/demo button + the Demo-Walk panel) and the menu button.
+import MapStatusStack from '../components/MapStatusStack.vue'
+import MapMenuButton from '../components/MapMenuButton.vue'
 // Social quests: live member pins + back-to-own-plan when joined stops end (no UI of its own).
 import QuestMapLive from '../components/QuestMapLive.vue'
 // Mission-derived values shared with drawing and the HUD (mission, next, here,
 // check-in status, guidance, countdown…).
 import { useMissionNav } from '../composables/useMissionNav.js'
+// Loads forecast + PSI + lightning into the ui store, and refreshes them every 2 minutes.
+import { useWeatherRefresh } from '../composables/useWeatherRefresh.js'
 
 import { useMissionStore } from '../../model/stores/mission.js'
 import { useUiStore } from '../../model/stores/ui.js'
@@ -230,7 +234,6 @@ const otterView = ref(false)            // third-person camera locked behind the
 
 const demoSpeed = ref(20)               // Demo-Walk multiplier (1×, 6×, 20×)
 const wasdEnabled = ref(true)           // keyboard movement during Demo-Walk
-const weatherData = ref(null)           // Open-Meteo snapshot for the top-left pill
 
 // Route geometry: the live leg's resolved street path, and the cached paths for
 // the legs after it. Both are produced by refreshLiveRoute/refreshPlannedRoutes.
@@ -245,6 +248,7 @@ const currentRoute = useRoute()
 const missionStore = useMissionStore()
 const ui = useUiStore()
 const character = useCharacterStore()
+useWeatherRefresh(1.2897, 103.8501) // weather is decorative; a failure never blocks the map
 
 const {
   HOME_RADIUS_M, modeIcon,
@@ -313,17 +317,6 @@ onMounted(async () => {
   window.addEventListener('keydown', onDemoKeyDown)
   window.addEventListener('keyup', onDemoKeyUp)
   raf = requestAnimationFrame(demoWalkLoop)
-
-  // Weather is decorative; a failure must never block the map.
-  ui.loadWeather(1.2897, 103.8501)
-  try {
-    const { data } = await axios.get(
-      'https://api.open-meteo.com/v1/forecast?latitude=1.2897&longitude=103.8501&current=temperature_2m,rain,uv_index'
-    )
-    weatherData.value = data
-  } catch (err) {
-    console.error('[3D_Map] weather fetch failed', err)
-  }
 })
 
 onUnmounted(() => {
@@ -1389,28 +1382,13 @@ function writeMissionCardFlag(open) {
   <!-- MapLibre renders into this element; every overlay below is plain DOM on top. -->
   <div ref="mapContainer" class="quest-map"></div>
 
-  <!-- ── Top-left status pills ─────────────────────────────────────────── -->
-  <div id="top-left" class="badge rounded-pill text-bg-warning">
-    <img id="img-pill" src="/brand/zoot-badge-192.png" alt="" width="25" height="25">
-    Singapore
-  </div>
-
-  <div id="top-left2" class="badge rounded-pill text-bg-warning">
-    <span class="bi bi-sun-fill">{{ weatherData?.current?.temperature_2m }}C</span>
-    <span class="bi bi-cloud-rain-heavy-fill">&nbsp;{{ weatherData?.current?.rain }}</span>
-  </div>
-
-  <button id="top-left3" class="btn btn-warning rounded-pill" @click="toggleDemoWalk">
-    {{ demo ? 'Use real GPS' : 'Enable Demo-Walk' }}
-  </button>
-
   <!-- ── Right stack: countdown + map tools ────────────────────────────── -->
   <div id="right-stack">
     <!-- Two explicit class flags instead of one derived string, so the red/amber
          thresholds stay visible here and in useMissionNav. -->
     <div
       id="top-right"
-      class="badge rounded-4 text-bg-warning"
+      class="badge rounded-4 text-bg-warning zt-hud-chip"
       :class="{ red: isTimeCritical, amber: isTimeWarning }"
       role="timer"
     >
@@ -1422,9 +1400,7 @@ function writeMissionCardFlag(open) {
       </div>
     </div>
 
-    <div id="MoreInfo" class="map-btn" @click="mapToolsOpen = !mapToolsOpen">
-      <i class="bi bi-list"></i>
-    </div>
+    <MapMenuButton :open="mapToolsOpen" @toggle="mapToolsOpen = !mapToolsOpen" />
 
     <div class="map-tools" :class="{ open: mapToolsOpen }">
       <!-- Otter view: locks the camera behind the traveller and looks along his
@@ -1492,26 +1468,29 @@ function writeMissionCardFlag(open) {
     />
   </Transition>
 
-  <!-- ── Demo-Walk controls (fake GPS, dev/demo only) ──────────────────── -->
-  <div v-if="demo" id="demo-controls" class="rounded-4">
-    <div class="demo-row">
-      <span class="demo-label">Speed</span>
-      <button class="btn rounded-pill btn-sm" :class="demoSpeed === 1 ? 'btn-warning' : 'btn-outline-warning'" @click="demoSpeed = 1">1x</button>
-      <button class="btn rounded-pill btn-sm" :class="demoSpeed === 6 ? 'btn-warning' : 'btn-outline-warning'" @click="demoSpeed = 6">6x</button>
-      <button class="btn rounded-pill btn-sm" :class="demoSpeed === 20 ? 'btn-warning' : 'btn-outline-warning'" @click="demoSpeed = 20">20x</button>
+  <!-- ── Top-left HUD column: Singapore badge, weather chip, GPS/demo button ── -->
+  <!-- The Demo-Walk controls (fake GPS, dev/demo only) sit in its slot, so they stack with the same gap. -->
+  <MapStatusStack :demo="demo" @toggle-demo="toggleDemoWalk">
+    <div v-if="demo" id="demo-controls" class="rounded-4">
+      <div class="demo-row">
+        <span class="demo-label">Speed</span>
+        <button class="btn rounded-pill btn-sm" :class="demoSpeed === 1 ? 'btn-warning' : 'btn-outline-warning'" @click="demoSpeed = 1">1x</button>
+        <button class="btn rounded-pill btn-sm" :class="demoSpeed === 6 ? 'btn-warning' : 'btn-outline-warning'" @click="demoSpeed = 6">6x</button>
+        <button class="btn rounded-pill btn-sm" :class="demoSpeed === 20 ? 'btn-warning' : 'btn-outline-warning'" @click="demoSpeed = 20">20x</button>
+      </div>
+      <div class="demo-row">
+        <span class="demo-label">WASD movement</span>
+        <button class="btn rounded-pill btn-sm" :class="wasdEnabled === true ? 'btn-warning' : 'btn-outline-warning'" @click="wasdEnabled = true">Yes</button>
+        <button class="btn rounded-pill btn-sm" :class="wasdEnabled === false ? 'btn-warning' : 'btn-outline-warning'" @click="wasdEnabled = false">No</button>
+      </div>
+      <div class="demo-row">
+        <span class="demo-label">CheckPoint</span>
+        <button class="btn rounded-pill btn-sm btn-outline-warning" :disabled="!next" @click="jumpNearNextStop(200)">Near</button>
+        <button class="btn rounded-pill btn-sm btn-outline-warning" :disabled="!next" @click="jumpNearNextStop(25)">At stop</button>
+      </div>
+      <div class="demo-hint">Tap the map to walk there.</div>
     </div>
-    <div class="demo-row">
-      <span class="demo-label">WASD movement</span>
-      <button class="btn rounded-pill btn-sm" :class="wasdEnabled === true ? 'btn-warning' : 'btn-outline-warning'" @click="wasdEnabled = true">Yes</button>
-      <button class="btn rounded-pill btn-sm" :class="wasdEnabled === false ? 'btn-warning' : 'btn-outline-warning'" @click="wasdEnabled = false">No</button>
-    </div>
-    <div class="demo-row">
-      <span class="demo-label">CheckPoint</span>
-      <button class="btn rounded-pill btn-sm btn-outline-warning" :disabled="!next" @click="jumpNearNextStop(200)">Near</button>
-      <button class="btn rounded-pill btn-sm btn-outline-warning" :disabled="!next" @click="jumpNearNextStop(25)">At stop</button>
-    </div>
-    <div class="demo-hint">Tap the map to walk there.</div>
-  </div>
+  </MapStatusStack>
 
   <!-- ── "Need help?" replan dialog ────────────────────────────────────── -->
   <template v-if="helpOpen">
@@ -1610,42 +1589,7 @@ function writeMissionCardFlag(open) {
 	z-index: 0;
 }
 
-#top-left {
-  position: absolute;
-  top: clamp(8px, 3vw, 12px);
-  left: clamp(8px, 3vw, 12px);
-  z-index: 1;
-  font-size: clamp(12px, 3.6vw, 15px);
-  padding-right: clamp(10px, 3.6vw, 15px);
-  border-color: black;
-  border: clamp(2px, 0.7vw, 3px) solid;
-}
-
-#img-pill {
-  margin-right: 5px;
-  width: clamp(20px, 6vw, 25px);
-  height: clamp(20px, 6vw, 25px);
-}
-
-#top-left2 {
-  position: absolute;
-  top: clamp(44px, 14vw, 60px);
-  left: clamp(8px, 3vw, 12px);
-  z-index: 1;
-  font-size: clamp(12px, 3.6vw, 15px);
-  border-color: black;
-  border: clamp(2px, 0.7vw, 3px) solid;
-}
-
-#top-left3 {
-  position: absolute;
-  top: clamp(72px, 24vw, 100px);
-  left: clamp(8px, 3vw, 12px);
-  z-index: 1;
-  font-size: clamp(8px, 2.4vw, 10px);
-  border: clamp(2px, 0.7vw, 3px) solid;
-  padding: clamp(3px, 1.2vw, 5px);
-}
+/* Top-left chips and the demo panel's position: components/MapStatusStack.vue */
 
 #right-stack {
   position: absolute;
@@ -1662,7 +1606,6 @@ function writeMissionCardFlag(open) {
   padding: clamp(8px, 3.4vw, 14px);
   line-height: 1.6;
   text-align: left;
-  border: clamp(2px, 1vw, 4px) solid;
 }
 
 .time_left_from_trip {
@@ -1723,10 +1666,6 @@ function writeMissionCardFlag(open) {
 /* Card internals (#CenterInfo, .stop-*, .stamp-*) live in MissionInfoCard.vue. */
 
 #demo-controls {
-  position: absolute;
-  top: clamp(100px, 32vw, 140px);
-  left: clamp(8px, 3vw, 12px);
-  z-index: 1;
   background: var(--zt-black);
   border: clamp(2px, 1vw, 4px) solid var(--zt-yellow);
   padding: clamp(8px, 3vw, 12px) clamp(10px, 3.8vw, 16px);

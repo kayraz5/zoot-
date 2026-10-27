@@ -3,17 +3,20 @@ import { computed } from 'vue'
 import { useUiStore } from '../../model/stores/ui.js'
 import { describeCode, describePsi } from '../../model/services/weather.js'
 import { tick } from '../../model/services/clock.js'
+import { CITY } from '../../model/services/config.js'
 
 const ONE_HOUR_MS = 60 * 60 * 1000;
-const WET_THRESHOLD = 60;
 const DEV_RAIN_CHANCE = 90;
+const DEV_RAIN_MM = 5; // fake rainfall shown when rain is forced
+const MASK_ABOVE_PSI = 100; // same threshold where the haze layer starts (SkyEffects)
 
 // Holds the forecast (ui.weather) and dev switch (ui.forceRain)
 const ui = useUiStore()
 
 const haze = computed(() => {
     if (!ui.shownHaze) return null
-    return { psi: ui.shownHaze.psi, ...describePsi(ui.shownHaze.psi) }
+    const psi = ui.shownHaze.psi
+    return { psi, mask: psi > MASK_ABOVE_PSI, ...describePsi(psi) }
 })
 const lightningNearby = computed(() => ui.shownLightning?.nearby === true)
 
@@ -38,63 +41,75 @@ const currentHour = computed(() => {
 // Build the info the chip displays
 // ---------------------------------------------------------------
 
-// Returns one object: { icon, label, prob, temp } / null (if there is nothing to show yet).
+// Returns one object: { icon, label, prob, temp, mm } / null (if there is nothing to show yet).
+const RAINY_ICON = /rain|drizzle/ // icon names that mean rain
+
+// Night in Singapore: before 07:00 or from 19:00 local time. Uses the app clock, so the dev panel's skip-time works.
+const isNight = computed(() => {
+    const hour = new Date(tick.value + CITY.utcOffsetMin * 60000).getUTCHours()
+    return hour >= 19 || hour < 7
+})
+const NIGHT_ICON = { 'bi-sun': 'bi-moon-stars', 'bi-cloud-sun': 'bi-cloud-moon' } // only the sky icons have a night version
+
 const info = computed(() => {
-    // Dev-forced rain
-    if (ui.forceRain) {
-        return {
-            icon: 'bi-cloud-rain-heavy-fill',
-            label: 'Heavy rain (dev)',
-            prob: DEV_RAIN_CHANCE,
-            temp: null          // no temperature in dev mode
-        };
-    };
+    const forced = ui.forceRain
+    if (!ui.weather && !forced) return null // nothing loaded yet
 
-    // Unloaded forecast, show nothing
-    if (!ui.weather) return null;
+    const current = ui.weather?.current
+    // Base condition: fake heavy rain when forced, otherwise from the forecast code
+    const base = forced
+        ? { label: 'Heavy rain (dev)', icon: 'bi-cloud-rain-heavy' }
+        : describeCode(current.code)
+    const mm = forced ? DEV_RAIN_MM : (current.mm ?? 0)
+    const raining = forced || mm > 0 || RAINY_ICON.test(base.icon)
 
-    // Normal case, combine current conditions with this hour's rain chance
-    const { label, icon } = describeCode(ui.weather.current.code);
+    // Pick one icon: lightning wins, then rain, then the plain sky (sun / cloud-sun / cloud)
+    let icon = isNight.value ? (NIGHT_ICON[base.icon] ?? base.icon) : base.icon
+    if (raining && !RAINY_ICON.test(icon)) icon = 'bi-cloud-rain'
+    if (lightningNearby.value) icon = raining ? 'bi-cloud-lightning-rain' : 'bi-cloud-lightning'
 
     return {
-        icon: icon,
-        label: label,
-        prob: currentHour.value?.prob ?? 0, // 0 if no matching hour
-        temp: Math.round(ui.weather.current.temp) // e.g. 30.4 becomes 30
+        icon,
+        label: lightningNearby.value
+            ? `${base.label}, lightning ${ui.shownLightning.nearestKm} km away`
+            : base.label,
+        prob: forced ? DEV_RAIN_CHANCE : (currentHour.value?.prob ?? 0), // 0 if no matching hour
+        temp: current ? Math.round(current.temp) : null, // e.g. 30.4 becomes 30; null only if forced before the forecast loads
+        mm
     };
 });
-
-// ---------------------------------------------------------------
-// Should the chip use the dark "wet" style?
-// ---------------------------------------------------------------
-
-const wet = computed(() => {
-    if (!info.value) return false
-    return info.value.prob > WET_THRESHOLD
-})
 
 </script>
 
 <template>
-    <div v-if="info" class="wx" :class="{ wet }" :title="`${info.label}, ${info.prob}% rain chance this hour`">
-        <!-- Weather icon -->
-        <i class="bi" :class="info.icon"></i>
-
-        <!-- Temperature (hidden when there is none, e.g. in dev mode) -->
-        <span v-if="info.temp != null" class="mono">{{ info.temp }}°C</span>
-
-        <!-- Chance of rain, with a droplet icon -->
-        <span class="prob mono"><i class="bi bi-droplet-fill"></i>{{ info.prob }}%</span>
-
-        <!-- Haze: PSI number, coloured by level -->
-        <span v-if="haze" class="psi mono" :class="`psi-${haze.level}`"
-              :title="`PSI ${haze.psi} (${haze.label})`">
-            <i class="bi bi-wind"></i>{{ haze.psi }}
+    <div v-if="info" class="wx" :title="`${info.label}, ${info.prob}% rain chance this hour`">
+        <!-- Thermometer + temperature (hidden if unknown) -->
+        <span v-if="info.temp != null" class="item mono">
+            <i class="bi bi-thermometer-half"></i>{{ info.temp }}°C
         </span>
 
-        <!-- Lightning warning, only when a strike is within 15 km -->
-        <i v-if="lightningNearby" class="bi bi-lightning-charge-fill bolt"
-           :title="`Lightning ${ui.shownLightning.nearestKm} km away`"></i>
+        <!-- One weather icon (sun / cloud-sun / cloud / rain / lightning / both) + rainfall -->
+        <span class="item mono">
+            <i class="bi" :class="info.icon"></i>{{ info.mm }} mm
+        </span>
+
+        <!-- Masked face when PSI is unhealthy, smiling face when the air is fine (line icons, drawn in the chip's text colour) -->
+        <span v-if="haze" class="item mono" :title="`PSI ${haze.psi} (${haze.label})`">
+            <!-- Both faces share the same circle, line weight and size so they read as a pair -->
+            <svg class="face" viewBox="0 0 16 16" fill="none" stroke="currentColor"
+                 stroke-width="1" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                <circle cx="8" cy="8" r="7.4" />
+                <template v-if="haze.mask">
+                    <path d="M4.6 6.3q1 .8 2 0M9.4 6.3q1 .8 2 0" /> <!-- closed eyes -->
+                    <rect x="3.2" y="8.1" width="9.6" height="4.4" rx="1.6" /> <!-- mask -->
+                    <path d="M5.2 9.6h5.6M5.8 11.1h4.4" /> <!-- pleats -->
+                </template>
+                <template v-else>
+                    <path d="M4.5 7.2q1.1-1.5 2.2 0M9.3 7.2q1.1-1.5 2.2 0" /> <!-- happy, arched eyes -->
+                    <path d="M4.3 9.6q3.7 4 7.4 0" /> <!-- wide smile -->
+                </template>
+            </svg>{{ haze.psi }}
+        </span>
     </div>
 </template>
 
@@ -103,7 +118,7 @@ const wet = computed(() => {
 .wx {
     display: inline-flex;
     align-items: center;
-    gap: 6px;
+    gap: 12px;
     padding: 4px 11px;
     border-radius: 999px;
     background: var(--zt-card);
@@ -114,32 +129,16 @@ const wet = computed(() => {
     box-shadow: var(--zt-shadow-sm);
 }
 
-.wx .bi:first-child {
+.item .bi {
     font-size: 1rem;
 }
 
-.wx.wet {
-    background: #111;
-    color: var(--zt-yellow);
-    border-color: #111;
-    box-shadow: 3px 3px 0 var(--zt-yellow);
-}
-
-[data-bs-theme='dark'] .wx.wet {
-    border-color: var(--zt-yellow);
-}
-
-.prob {
-    font-size: 0.74rem;
+.item {
     display: inline-flex;
     align-items: center;
-    gap: 2px;
+    gap: 4px;
+    font-size: 0.8rem;
 }
 
-.psi { font-size: 0.74rem; display: inline-flex; align-items: center; gap: 2px; }
-.psi-good { color: #2e9e5b; }
-.psi-moderate { color: #c9a400; }
-.psi-unhealthy { color: #e07a1f; }
-.psi-very-unhealthy, .psi-hazardous { color: #d6322e; }
-.bolt { color: var(--zt-yellow); }
+.item .face { width: 1.15rem; height: 1.15rem; font-size: 1.15rem; }
 </style>

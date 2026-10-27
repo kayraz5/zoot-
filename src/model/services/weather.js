@@ -17,7 +17,8 @@ const UNKNOWN_WEATHER = { label: '-', icon: 'bi-cloud' };
 
 // Takes in a code, returns a { label, icon }
 export function describeCode(code) {
-	return WEATHER_CODES[code] || UNKNOWN_WEATHER;
+	const entry = WEATHER_CODES[code]; // [label, icon]
+	return entry ? { label: entry[0], icon: entry[1] } : UNKNOWN_WEATHER;
 }
 
 // ---------------------------------------------------------------
@@ -62,7 +63,7 @@ export async function fetchForecast(lat = CITY.lat, lng = CITY.lng) {
 
 	// Build the request URL with the options we want
 	const url = new URL('https://api.open-meteo.com/v1/forecast');
-	url.search = newURLSearchParams({
+	url.search = new URLSearchParams({
 		latitude: lat,
 		longitude: lng,
 		timezone: 'UTC',

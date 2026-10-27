@@ -258,3 +258,17 @@ a { text-underline-offset: 3px; }
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation-duration: 0.01ms !important; animation-iteration-count: 1 !important; transition-duration: 0.01ms !important; }
 }
+
+/* Shared look for the map HUD chips (Singapore, weather, GPS button, countdown) */
+.zt-hud-chip {
+  background-color: var(--zt-yellow) !important;
+  color: #000;
+  border: clamp(2px, 0.7vw, 3px) solid #000 !important;
+  font-family: inherit;
+  font-weight: 700;
+  /* buttons take their fill and outline from Bootstrap variables; keep a hover state */
+  --bs-btn-bg: var(--zt-yellow);
+  --bs-btn-border-color: #000;
+  --bs-btn-hover-bg: var(--zt-yellow-soft);
+  --bs-btn-hover-border-color: #000;
+}
