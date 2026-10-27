@@ -1,11 +1,8 @@
 /** Zoot brand colours shared by JS-drawn things (passport canvas, 3D scenes, cover swatches). */
 export const BRAND = {
   yellow: '#ffcc00',
-  yellowSoft: '#ffe680',
-  yellowPale: '#fff4c2',
   ink: '#111111',
-  pink: '#f83878',
-  orange: '#ff4d00'
+  pink: '#f83878'
 }
 
 /** Passport cover choices. Yellow is the default, as in the pitch deck. */

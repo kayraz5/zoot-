@@ -1,8 +1,9 @@
 <script setup>
-import { computed, onMounted, ref, watch } from 'vue'
+import { computed, nextTick, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useMissionStore } from '../../model/stores/mission.js'
 import { useUiStore } from '../../model/stores/ui.js'
+import { usePartyStore } from '../../model/stores/party.js'
 import { loadCatalog, placeById } from '../../model/services/catalog.js'
 import { formatTime } from '../../model/services/hours.js'
 import { rainLookup } from '../../model/services/weather.js'
@@ -19,6 +20,7 @@ const route = useRoute()
 const router = useRouter()
 const store = useMissionStore()
 const ui = useUiStore()
+const party = usePartyStore()
 
 async function load() {
   await loadCatalog()
@@ -27,11 +29,30 @@ async function load() {
   if (!ui.weather && store.mission) ui.loadWeather(store.mission.legs[0].lat, store.mission.legs[0].lng)
   // Joined someone's quest? Check the host hasn't closed it or changed my stops.
   if (store.mission?.joined) store.checkJoined()
+  focusCurrent()
 }
 onMounted(load)
 watch(() => route.params.id, load)
 
 const m = computed(() => store.mission)
+
+// Completed stops (stamped or skipped) stay out of the way: one summary row, expandable to compact lines.
+const showDone = ref(false)
+const isDone = (leg) => leg.kind === 'visit' && leg.status !== 'pending'
+const doneCount = computed(() => m.value?.legs.filter(isDone).length || 0)
+
+// Opening the page brings the current stop into view, with a short highlight.
+const flash = ref(null) // seq of the card being highlighted
+async function focusCurrent() {
+  await nextTick()
+  const next = store.nextLeg
+  const el = next && document.getElementById(`leg-${next.seq}`)
+  if (!el) return
+  el.scrollIntoView({ behavior: 'smooth', block: 'center' })
+  el.querySelector('.stop-card')?.focus({ preventScroll: true })
+  flash.value = next.seq
+  setTimeout(() => { if (flash.value === next.seq) flash.value = null }, 1600)
+}
 const companyOpen = ref(false) // "Open to company" sheet (group quests)
 const style = computed(() => STYLES[m.value?.style] || STYLES.budget)
 // Live "leave by" from where the traveller is; refreshed every 30 s of the app clock.
@@ -81,11 +102,6 @@ function onPick(place) {
   const { mode, leg } = picker.value
   run(() => (mode === 'swap' ? store.swapStop(leg, place) : store.addStop(place, leg?.place_id ?? null)))
 }
-// Stay and order tweaks keep the panel open so they can be repeated.
-async function tweak(action) {
-  busy.value = true
-  try { await action() } catch (err) { ui.toast(err.message, 'danger') } finally { busy.value = false }
-}
 watch(() => m.value?.id, () => { editing.value = null; picker.value = null })
 
 const replans = [
@@ -118,12 +134,17 @@ const replans = [
             <span v-else class="zt-pill paper" :title="m.fallback_reason || ''"><i class="bi bi-cpu"></i> Offline</span>
             <span v-if="m.replans" class="zt-pill pale">Replanned ×{{ m.replans }}</span>
           </div>
-          <TimeToGate :must-return-ms="store.mustReturnMs" />
+          <TimeToGate :must-return-ms="store.mustReturnMs" :start-ms="Date.parse(m.start_iso)" />
         </div>
         <h1 class="title">{{ m.title }}</h1>
         <div class="meta">
           <span><i class="bi bi-geo-alt"></i> From {{ m.origin.label }}</span>
           <span><i class="bi bi-patch-check"></i> {{ store.stampedCount }}/{{ store.visitLegs.length }} stamped</span>
+        </div>
+        <div class="mt-2">
+          <RouterLink :to="`/mission/${m.id}/schedule`" class="btn btn-sm btn-soft">
+            <i class="bi bi-calendar3"></i> Edit schedule
+          </RouterLink>
         </div>
       </header>
 
@@ -143,18 +164,35 @@ const replans = [
           <div class="dot start"><i class="bi bi-airplane-fill"></i></div>
           <div class="small"><b class="mono">{{ formatTime(Date.parse(m.start_iso) + m.buffers.exit_min * 60000) }}</b> Leave {{ m.origin.label }}<span v-if="m.buffers.exit_min" class="text-muted"> (after {{ m.buffers.exit_min }} min immigration)</span></div>
         </li>
+        <li v-if="doneCount" class="tl-done-toggle">
+          <div class="dot done"><i class="bi bi-check-lg"></i></div>
+          <button type="button" class="btn btn-link btn-sm p-0 text-reset fw-800" :aria-expanded="showDone" @click="showDone = !showDone">
+            {{ doneCount }} completed stop{{ doneCount === 1 ? '' : 's' }} · <span class="text-decoration-underline">{{ showDone ? 'Hide' : 'Show' }}</span>
+          </button>
+        </li>
         <template v-for="leg in m.legs" :key="leg.seq + leg.place_id">
+          <!-- Done: a compact greyed line, only when expanded -->
+          <template v-if="isDone(leg)">
+            <li v-if="showDone" class="tl-done">
+              <div class="dot done"><i class="bi" :class="leg.status === 'stamped' ? 'bi-patch-check-fill' : 'bi-skip-forward-fill'"></i></div>
+              <div class="done-row small">
+                <RouterLink :to="`/place/${leg.place_id}`" class="text-reset fw-800">{{ leg.name }}</RouterLink>
+                <span class="text-muted"> · {{ leg.status === 'stamped' ? `Stamped ${leg.stamped_at ? formatTime(leg.stamped_at) : ''}` : 'Skipped' }}</span>
+              </div>
+            </li>
+          </template>
+          <template v-else>
           <li class="tl-travel">
             <span class="zt-pill" :class="modePill[leg.travel_mode]"><i class="bi" :class="modeIcon[leg.travel_mode]"></i> {{ leg.travel_min }} min</span>
             <span class="tiny text-muted ms-2">{{ leg.travel_detail }}</span>
           </li>
-          <li :class="['tl-stop', leg.kind, leg.status, { next: store.nextLeg === leg }]">
+          <li :id="`leg-${leg.seq}`" :class="['tl-stop', leg.kind, leg.status, { next: store.nextLeg === leg, flash: flash === leg.seq }]">
             <div class="dot">
               <i v-if="leg.kind === 'return'" class="bi bi-house-door-fill"></i>
               <i v-else-if="leg.status === 'stamped'" class="bi bi-patch-check-fill"></i>
               <span v-else>{{ leg.seq }}</span>
             </div>
-            <div class="zt-card p-3 stop-card" :class="{ joined: leg.fixed }">
+            <div class="zt-card p-3 stop-card" :class="{ joined: leg.fixed }" :tabindex="store.nextLeg === leg ? -1 : undefined">
               <StopGallery v-if="leg.kind === 'visit' && placeById.get(leg.place_id)" :place="placeById.get(leg.place_id)" class="mb-3" />
               <div class="d-flex justify-content-between gap-2">
                 <div class="flex-grow-1">
@@ -175,10 +213,14 @@ const replans = [
                 </div>
               </div>
               <p class="small mb-2 why">{{ leg.why }}</p>
+              <p v-if="leg.kind === 'visit' && placeById.get(leg.place_id)?.hours_verified === false" class="tiny fw-800 mb-2 hours-note">
+                <i class="bi bi-exclamation-circle"></i> Opening hours not confirmed, check before going
+              </p>
               <div v-if="leg.sidequest" class="zt-pill pale mb-2"><i class="bi bi-gem"></i> Sidequest</div>
               <template v-if="leg.fixed && leg.status === 'pending'">
                 <div class="d-flex gap-2 flex-wrap align-items-center">
                   <RouterLink :to="`/map?focus=${leg.seq}`" class="btn btn-sm btn-soft"><i class="bi bi-geo"></i> On map</RouterLink>
+                  <button type="button" class="btn btn-sm btn-primary" @click="party.openChat(leg.party_id)"><i class="bi bi-chat-dots-fill"></i> Chat</button>
                   <RouterLink :to="`/quests/${leg.party_id}`" class="btn btn-sm btn-soft"><i class="bi bi-people-fill"></i> Quest</RouterLink>
                   <span class="tiny text-muted"><i class="bi bi-lock-fill"></i> Fixed time with {{ leg.with_host }}</span>
                 </div>
@@ -187,24 +229,13 @@ const replans = [
                 <div class="d-flex gap-2 flex-wrap">
                   <RouterLink :to="`/map?focus=${leg.seq}`" class="btn btn-sm btn-soft"><i class="bi bi-geo"></i> On map</RouterLink>
                   <button class="btn btn-sm btn-soft" :class="{ active: editing === leg.place_id }" :aria-expanded="editing === leg.place_id" @click="toggleEdit(leg)">
-                    <i class="bi bi-pencil"></i> Edit
+                    <i class="bi bi-pencil"></i> Change stop
                   </button>
                   <button class="btn btn-sm btn-link text-muted" @click="store.skip(leg)">Skip</button>
                 </div>
                 <div v-if="editing === leg.place_id" class="edit-panel mt-3">
-                  <div class="d-flex align-items-center gap-2 flex-wrap">
-                    <span class="tiny fw-800">Stay</span>
-                    <div class="btn-group btn-group-sm" role="group" aria-label="Stay length">
-                      <button class="btn btn-soft" :disabled="busy || leg.stay_min <= 10" @click="tweak(() => store.changeStay(leg, -15))" aria-label="15 minutes shorter">−15</button>
-                      <span class="btn btn-soft disabled mono stay-now">{{ leg.stay_min }} min</span>
-                      <button class="btn btn-soft" :disabled="busy" @click="tweak(() => store.changeStay(leg, 15))" aria-label="15 minutes longer">+15</button>
-                    </div>
-                    <div class="btn-group btn-group-sm ms-auto" role="group" aria-label="Order">
-                      <button class="btn btn-soft" :disabled="busy || pendingVisits[0] === leg" @click="tweak(() => store.moveStop(leg, -1))" aria-label="Move earlier"><i class="bi bi-arrow-up"></i></button>
-                      <button class="btn btn-soft" :disabled="busy || pendingVisits.at(-1) === leg" @click="tweak(() => store.moveStop(leg, 1))" aria-label="Move later"><i class="bi bi-arrow-down"></i></button>
-                    </div>
-                  </div>
-                  <div class="d-flex gap-2 flex-wrap mt-2">
+                  <div class="tiny fw-800 mb-2">Change this stop</div>
+                  <div class="d-flex gap-2 flex-wrap">
                     <button class="btn btn-sm btn-soft" :disabled="busy" @click="openSwap(leg)"><i class="bi bi-arrow-left-right"></i> Swap</button>
                     <button class="btn btn-sm btn-soft" :disabled="busy" @click="openAdd(leg)"><i class="bi bi-plus-lg"></i> Add after</button>
                     <button class="btn btn-sm btn-link text-danger ms-auto" :disabled="busy" @click="run(() => store.removeStop(leg))"><i class="bi bi-trash"></i> Remove</button>
@@ -224,6 +255,7 @@ const replans = [
               </template>
             </div>
           </li>
+          </template>
         </template>
       </ol>
 
@@ -270,11 +302,19 @@ const replans = [
 .tl-stop.skipped { opacity: 0.5; }
 .tl-stop.next .dot { background: var(--zt-pink); animation: zt-pulse 1.4s infinite; }
 .tl-stop.next .stop-card { box-shadow: 5px 5px 0 var(--zt-pink); }
+.tl-stop.next .stop-card:focus { outline: none; }
+.tl-stop.flash .stop-card { animation: leg-flash 1.6s ease-out; }
+@keyframes leg-flash { 0%, 40% { outline: 4px solid var(--zt-pink); outline-offset: 4px; } 100% { outline: 4px solid transparent; outline-offset: 4px; } }
+.tl-done-toggle, .tl-done { display: flex; align-items: center; min-height: 34px; padding-bottom: 6px; }
+.tl-done { opacity: 0.6; }
+.dot.done { width: 28px; height: 28px; left: 5px; top: 3px; font-size: 0.8rem; background: var(--zt-card); color: var(--zt-muted); border-color: var(--zt-muted); }
+.done-row { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .stop-card { box-shadow: var(--zt-shadow-sm); }
 .stop-card.joined { border-color: var(--zt-pink); }
 .why { color: var(--zt-muted); }
+.hours-note { color: #b45309; }
+[data-bs-theme='dark'] .hours-note { color: var(--zt-yellow); }
 .edit-panel { border-top: 2px dashed var(--zt-soft-line); padding-top: 12px; }
-.stay-now { min-width: 5.5em; opacity: 1; }
 .rain-alert { background: #111; color: var(--zt-yellow); border: var(--zt-bw) solid #111; border-radius: 18px; box-shadow: 4px 4px 0 var(--zt-yellow); }
 [data-bs-theme='dark'] .rain-alert { border-color: var(--zt-yellow); }
 .rain-alert .btn { --bs-btn-bg: var(--zt-yellow); --bs-btn-color: #111; --bs-btn-border-color: var(--zt-yellow); }

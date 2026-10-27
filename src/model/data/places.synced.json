@@ -1,36 +1,5 @@
 [
   {
-    "id": "jewel-rain-vortex",
-    "name": "Jewel Rain Vortex",
-    "area": "Changi",
-    "lat": 1.3602,
-    "lng": 103.9894,
-    "tags": [
-      "photo",
-      "gardens",
-      "views",
-      "architecture"
-    ],
-    "duration_min": 40,
-    "cost_band": 0,
-    "indoor": true,
-    "hours": [
-      [
-        "10:00",
-        "22:00"
-      ]
-    ],
-    "blurb": "The world's tallest indoor waterfall pours 40 metres through a glass doughnut roof inside Jewel, a short walk from every terminal.",
-    "safety_notes": "Landside: you must clear immigration to reach it.",
-    "captions": [
-      "The waterfall is louder than you expect, stand at the B2 rail for the spray shot.",
-      "Evening light-and-sound show turns the vortex into a projection screen.",
-      "Walkable from T1 in 5 minutes, T2/T3 via linkbridge in 10."
-    ],
-    "source": "seed",
-    "active": true
-  },
-  {
     "id": "jewel-canopy-park",
     "name": "Canopy Park, Jewel",
     "area": "Changi",
@@ -44,16 +13,27 @@
     "duration_min": 60,
     "cost_band": 2,
     "indoor": true,
+    "mrt": "Changi Airport",
     "hours": [
       [
         "10:00",
         "22:00"
       ]
     ],
+    "closed_days": [],
+    "min_window_h": null,
     "blurb": "Topiary walks, a hedge maze, mist bowls and a glass-floored bridge on Jewel's top level, looking down on the Rain Vortex.",
+    "captions": [],
     "safety_notes": "Ticketed; buy at the L5 counter or online.",
+    "image_url": null,
+    "embed_url": null,
     "source": "seed",
-    "active": true
+    "source_ref": null,
+    "active": true,
+    "hours_verified": true,
+    "coords_approx": false,
+    "website": null,
+    "blurb_source": null
   },
   {
     "id": "jewel-forest-valley",
@@ -69,10 +49,22 @@
     "duration_min": 30,
     "cost_band": 0,
     "indoor": true,
+    "mrt": "Changi Airport",
     "hours": "24h",
+    "closed_days": [],
+    "min_window_h": null,
     "blurb": "A terraced indoor forest of 2,000 trees and shrubs wrapping around the vortex, free, open all night, perfect for a jet-lag stroll.",
+    "captions": [],
+    "safety_notes": null,
+    "image_url": null,
+    "embed_url": null,
     "source": "seed",
-    "active": true
+    "source_ref": null,
+    "active": true,
+    "hours_verified": true,
+    "coords_approx": false,
+    "website": null,
+    "blurb_source": null
   },
   {
     "id": "changi-chapel-museum",
@@ -88,6 +80,7 @@
     "duration_min": 60,
     "cost_band": 0,
     "indoor": true,
+    "mrt": "Changi Airport",
     "hours": [
       [
         "09:30",
@@ -97,10 +90,19 @@
     "closed_days": [
       1
     ],
+    "min_window_h": null,
     "blurb": "Quiet, moving museum on the WWII prisoners of war held at Changi, with a replica of the chapel they built.",
+    "captions": [],
     "safety_notes": "Closed Mondays. Taxi recommended from the airport.",
+    "image_url": null,
+    "embed_url": null,
     "source": "seed",
-    "active": true
+    "source_ref": null,
+    "active": true,
+    "hours_verified": true,
+    "coords_approx": false,
+    "website": null,
+    "blurb_source": null
   },
   {
     "id": "changi-village-hawker",
@@ -115,16 +117,27 @@
     "duration_min": 45,
     "cost_band": 1,
     "indoor": true,
+    "mrt": "Changi Airport",
     "hours": [
       [
         "07:00",
         "23:00"
       ]
     ],
+    "closed_days": [],
+    "min_window_h": null,
     "blurb": "Seaside hawker centre famous for nasi lemak and satay bee hoon; planes glide overhead on approach to Changi.",
+    "captions": [],
     "safety_notes": "No MRT nearby. Budget a taxi both ways.",
+    "image_url": null,
+    "embed_url": null,
     "source": "seed",
-    "active": true
+    "source_ref": null,
+    "active": true,
+    "hours_verified": true,
+    "coords_approx": false,
+    "website": null,
+    "blurb_source": null
   },
   {
     "id": "changi-point-boardwalk",
@@ -141,10 +154,22 @@
     "duration_min": 45,
     "cost_band": 0,
     "indoor": false,
+    "mrt": "Changi Airport",
     "hours": "24h",
+    "closed_days": [],
+    "min_window_h": null,
     "blurb": "Timber boardwalk hugging the cliffs and mangroves of Changi Point, with views across to Pulau Ubin and Malaysia.",
+    "captions": [],
+    "safety_notes": null,
+    "image_url": null,
+    "embed_url": null,
     "source": "seed",
-    "active": true
+    "source_ref": null,
+    "active": true,
+    "hours_verified": true,
+    "coords_approx": false,
+    "website": null,
+    "blurb_source": null
   },
   {
     "id": "changi-beach-park",
@@ -160,10 +185,22 @@
     "duration_min": 40,
     "cost_band": 0,
     "indoor": false,
+    "mrt": "Changi Airport",
     "hours": "24h",
+    "closed_days": [],
+    "min_window_h": null,
     "blurb": "Long, quiet beach at the island's eastern tip. Best at sunset when the jets line up overhead.",
+    "captions": [],
+    "safety_notes": null,
+    "image_url": null,
+    "embed_url": null,
     "source": "seed",
-    "active": true
+    "source_ref": null,
+    "active": true,
+    "hours_verified": true,
+    "coords_approx": false,
+    "website": null,
+    "blurb_source": null
   },
   {
     "id": "east-coast-lagoon",
@@ -179,16 +216,27 @@
     "duration_min": 50,
     "cost_band": 1,
     "indoor": false,
+    "mrt": "Tanah Merah",
     "hours": [
       [
         "10:30",
         "22:30"
       ]
     ],
+    "closed_days": [],
+    "min_window_h": null,
     "blurb": "Open-air hawker centre on the beach: BBQ stingray, satay and sugarcane juice with sea breeze.",
+    "captions": [],
     "safety_notes": "Open-air seating; move to the covered stalls if it rains.",
+    "image_url": null,
+    "embed_url": null,
     "source": "seed",
-    "active": true
+    "source_ref": null,
+    "active": true,
+    "hours_verified": true,
+    "coords_approx": false,
+    "website": null,
+    "blurb_source": null
   },
   {
     "id": "east-coast-park",
@@ -204,10 +252,22 @@
     "duration_min": 45,
     "cost_band": 0,
     "indoor": false,
+    "mrt": "Marine Parade",
     "hours": "24h",
+    "closed_days": [],
+    "min_window_h": null,
     "blurb": "15 km of coastal park; rent a bike or just walk the promenade and watch container ships queue offshore.",
+    "captions": [],
+    "safety_notes": null,
+    "image_url": null,
+    "embed_url": null,
     "source": "seed",
-    "active": true
+    "source_ref": null,
+    "active": true,
+    "hours_verified": true,
+    "coords_approx": false,
+    "website": null,
+    "blurb_source": null
   },
   {
     "id": "koon-seng-shophouses",
@@ -223,11 +283,22 @@
     "duration_min": 20,
     "cost_band": 0,
     "indoor": false,
+    "mrt": "Eunos",
     "hours": "24h",
+    "closed_days": [],
+    "min_window_h": null,
     "blurb": "Row of candy-coloured Peranakan terrace houses with ornate tiles, Singapore's most photographed doorways.",
+    "captions": [],
     "safety_notes": "Residents live here. Keep voices down and stay off the five-foot ways.",
+    "image_url": null,
+    "embed_url": null,
     "source": "seed",
-    "active": true
+    "source_ref": null,
+    "active": true,
+    "hours_verified": true,
+    "coords_approx": false,
+    "website": null,
+    "blurb_source": null
   },
   {
     "id": "katong-laksa",
@@ -242,15 +313,27 @@
     "duration_min": 30,
     "cost_band": 1,
     "indoor": true,
+    "mrt": "Marine Parade",
     "hours": [
       [
         "09:30",
         "21:30"
       ]
     ],
+    "closed_days": [],
+    "min_window_h": null,
     "blurb": "Coconut-rich laksa with cut noodles you eat with just a spoon. A Katong institution.",
+    "captions": [],
+    "safety_notes": null,
+    "image_url": null,
+    "embed_url": null,
     "source": "seed",
-    "active": true
+    "source_ref": null,
+    "active": true,
+    "hours_verified": true,
+    "coords_approx": false,
+    "website": null,
+    "blurb_source": null
   },
   {
     "id": "kim-choo",
@@ -266,15 +349,27 @@
     "duration_min": 25,
     "cost_band": 1,
     "indoor": true,
+    "mrt": "Marine Parade",
     "hours": [
       [
         "09:00",
         "21:00"
       ]
     ],
+    "closed_days": [],
+    "min_window_h": null,
     "blurb": "Family Peranakan shop for nyonya rice dumplings, kueh and beaded slippers.",
+    "captions": [],
+    "safety_notes": null,
+    "image_url": null,
+    "embed_url": null,
     "source": "seed",
-    "active": true
+    "source_ref": null,
+    "active": true,
+    "hours_verified": true,
+    "coords_approx": false,
+    "website": null,
+    "blurb_source": null
   },
   {
     "id": "geylang-serai-market",
@@ -290,15 +385,27 @@
     "duration_min": 45,
     "cost_band": 1,
     "indoor": true,
+    "mrt": "Eunos",
     "hours": [
       [
         "07:00",
         "22:00"
       ]
     ],
+    "closed_days": [],
+    "min_window_h": null,
     "blurb": "Heart of the Malay community: nasi padang, putu piring and a wet market downstairs.",
+    "captions": [],
+    "safety_notes": null,
+    "image_url": null,
+    "embed_url": null,
     "source": "seed",
-    "active": true
+    "source_ref": null,
+    "active": true,
+    "hours_verified": true,
+    "coords_approx": false,
+    "website": null,
+    "blurb_source": null
   },
   {
     "id": "old-airport-road",
@@ -313,15 +420,27 @@
     "duration_min": 45,
     "cost_band": 1,
     "indoor": true,
+    "mrt": "Dakota",
     "hours": [
       [
         "07:00",
         "22:00"
       ]
     ],
+    "closed_days": [],
+    "min_window_h": null,
     "blurb": "Built on Singapore's first airport runway; 150 stalls, many of them local legends for char kway teow and lor mee.",
+    "captions": [],
+    "safety_notes": null,
+    "image_url": null,
+    "embed_url": null,
     "source": "seed",
-    "active": true
+    "source_ref": null,
+    "active": true,
+    "hours_verified": true,
+    "coords_approx": false,
+    "website": null,
+    "blurb_source": null
   },
   {
     "id": "supertree-grove",
@@ -338,21 +457,31 @@
     "duration_min": 45,
     "cost_band": 0,
     "indoor": false,
+    "mrt": "Bayfront",
     "hours": [
       [
         "05:00",
         "23:59"
       ]
     ],
+    "closed_days": [],
+    "min_window_h": null,
     "blurb": "Eighteen vertical gardens up to 50 m tall, the postcard of modern Singapore. Free to walk beneath.",
-    "safety_notes": "Fully exposed: skip in thunderstorms, bring water at midday.",
     "captions": [
       "Lie on the ground at 7:45 pm for Garden Rhapsody, the trees sing.",
       "OCBC Skyway is a narrow 22 m-high walkway; closes in lightning.",
       "Best photo: from the Dragonfly Bridge looking back at MBS."
     ],
+    "safety_notes": "Fully exposed: skip in thunderstorms, bring water at midday.",
+    "image_url": null,
+    "embed_url": null,
     "source": "seed",
-    "active": true
+    "source_ref": null,
+    "active": true,
+    "hours_verified": true,
+    "coords_approx": false,
+    "website": null,
+    "blurb_source": null
   },
   {
     "id": "cloud-forest",
@@ -368,20 +497,31 @@
     "duration_min": 60,
     "cost_band": 3,
     "indoor": true,
+    "mrt": "Gardens by the Bay",
     "hours": [
       [
         "09:00",
         "21:00"
       ]
     ],
+    "closed_days": [],
+    "min_window_h": null,
     "blurb": "A cool, misty dome with a 35 m indoor mountain and a waterfall; walk the aerial path through the cloud.",
     "captions": [
       "Instant relief from the humidity, it's 23°C inside.",
       "Take the lift to the top and walk down the Cloud Walk.",
       "Waterfall mist is strongest right when you walk in."
     ],
+    "safety_notes": null,
+    "image_url": null,
+    "embed_url": null,
     "source": "seed",
-    "active": true
+    "source_ref": null,
+    "active": true,
+    "hours_verified": true,
+    "coords_approx": false,
+    "website": null,
+    "blurb_source": null
   },
   {
     "id": "flower-dome",
@@ -396,15 +536,27 @@
     "duration_min": 45,
     "cost_band": 3,
     "indoor": true,
+    "mrt": "Bayfront",
     "hours": [
       [
         "09:00",
         "21:00"
       ]
     ],
+    "closed_days": [],
+    "min_window_h": null,
     "blurb": "The world's largest glass greenhouse, with Mediterranean gardens and a rotating seasonal flower show.",
+    "captions": [],
+    "safety_notes": null,
+    "image_url": null,
+    "embed_url": null,
     "source": "seed",
-    "active": true
+    "source_ref": null,
+    "active": true,
+    "hours_verified": true,
+    "coords_approx": false,
+    "website": null,
+    "blurb_source": null
   },
   {
     "id": "garden-rhapsody",
@@ -421,16 +573,27 @@
     "duration_min": 20,
     "cost_band": 0,
     "indoor": false,
+    "mrt": "Bayfront",
     "hours": [
       [
         "19:40",
         "21:00"
       ]
     ],
+    "closed_days": [],
+    "min_window_h": null,
     "blurb": "Nightly sound-and-light show in the Supertree Grove at 7:45 and 8:45 pm. Free.",
+    "captions": [],
     "safety_notes": "Cancelled in heavy rain or lightning.",
+    "image_url": null,
+    "embed_url": null,
     "source": "seed",
-    "active": true
+    "source_ref": null,
+    "active": true,
+    "hours_verified": true,
+    "coords_approx": false,
+    "website": null,
+    "blurb_source": null
   },
   {
     "id": "satay-by-the-bay",
@@ -445,15 +608,27 @@
     "duration_min": 45,
     "cost_band": 1,
     "indoor": true,
+    "mrt": "Gardens by the Bay",
     "hours": [
       [
         "11:00",
         "23:00"
       ]
     ],
+    "closed_days": [],
+    "min_window_h": null,
     "blurb": "Covered hawker centre at the edge of Gardens by the Bay; smoky satay sticks with the Supertrees in view.",
+    "captions": [],
+    "safety_notes": null,
+    "image_url": null,
+    "embed_url": null,
     "source": "seed",
-    "active": true
+    "source_ref": null,
+    "active": true,
+    "hours_verified": true,
+    "coords_approx": false,
+    "website": null,
+    "blurb_source": null
   },
   {
     "id": "mbs-skypark",
@@ -468,16 +643,27 @@
     "duration_min": 45,
     "cost_band": 3,
     "indoor": false,
+    "mrt": "Bayfront",
     "hours": [
       [
         "10:00",
         "22:00"
       ]
     ],
+    "closed_days": [],
+    "min_window_h": null,
     "blurb": "Observation deck 57 floors up on the ship-shaped roof; 360° views of the bay, the Gardens and the straits.",
+    "captions": [],
     "safety_notes": "Outdoor deck. Closes in lightning.",
+    "image_url": null,
+    "embed_url": null,
     "source": "seed",
-    "active": true
+    "source_ref": null,
+    "active": true,
+    "hours_verified": true,
+    "coords_approx": false,
+    "website": null,
+    "blurb_source": null
   },
   {
     "id": "spectra-show",
@@ -493,15 +679,27 @@
     "duration_min": 20,
     "cost_band": 0,
     "indoor": false,
+    "mrt": "Bayfront",
     "hours": [
       [
         "19:50",
         "21:15"
       ]
     ],
+    "closed_days": [],
+    "min_window_h": null,
     "blurb": "Free fountain, laser and projection show on the MBS Event Plaza at 8 and 9 pm.",
+    "captions": [],
+    "safety_notes": null,
+    "image_url": null,
+    "embed_url": null,
     "source": "seed",
-    "active": true
+    "source_ref": null,
+    "active": true,
+    "hours_verified": true,
+    "coords_approx": false,
+    "website": null,
+    "blurb_source": null
   },
   {
     "id": "shoppes-mbs",
@@ -516,15 +714,27 @@
     "duration_min": 40,
     "cost_band": 2,
     "indoor": true,
+    "mrt": "Bayfront",
     "hours": [
       [
         "10:00",
         "23:00"
       ]
     ],
+    "closed_days": [],
+    "min_window_h": null,
     "blurb": "Air-conditioned mall with an indoor canal and the Rain Oculus, a vortex of water falling into a sampan pool.",
+    "captions": [],
+    "safety_notes": null,
+    "image_url": null,
+    "embed_url": null,
     "source": "seed",
-    "active": true
+    "source_ref": null,
+    "active": true,
+    "hours_verified": true,
+    "coords_approx": false,
+    "website": null,
+    "blurb_source": null
   },
   {
     "id": "artscience-museum",
@@ -539,20 +749,31 @@
     "duration_min": 75,
     "cost_band": 2,
     "indoor": true,
+    "mrt": "Bayfront",
     "hours": [
       [
         "10:00",
         "19:00"
       ]
     ],
+    "closed_days": [],
+    "min_window_h": null,
     "blurb": "Lotus-shaped museum with immersive digital art (Future World) and big touring exhibitions.",
     "captions": [
       "Future World is a hit with anyone who likes glowing rooms.",
       "The lotus roof collects rainwater into a centre waterfall.",
       "Book a timed slot on weekends."
     ],
+    "safety_notes": null,
+    "image_url": null,
+    "embed_url": null,
     "source": "seed",
-    "active": true
+    "source_ref": null,
+    "active": true,
+    "hours_verified": true,
+    "coords_approx": false,
+    "website": null,
+    "blurb_source": null
   },
   {
     "id": "helix-bridge",
@@ -568,10 +789,22 @@
     "duration_min": 15,
     "cost_band": 0,
     "indoor": false,
+    "mrt": "Promenade",
     "hours": "24h",
+    "closed_days": [],
+    "min_window_h": null,
     "blurb": "DNA-inspired steel footbridge that frames the MBS towers; lit up after dark.",
+    "captions": [],
+    "safety_notes": null,
+    "image_url": null,
+    "embed_url": null,
     "source": "seed",
-    "active": true
+    "source_ref": null,
+    "active": true,
+    "hours_verified": true,
+    "coords_approx": false,
+    "website": null,
+    "blurb_source": null
   },
   {
     "id": "merlion-park",
@@ -586,15 +819,26 @@
     "duration_min": 25,
     "cost_band": 0,
     "indoor": false,
+    "mrt": "Raffles Place",
     "hours": "24h",
+    "closed_days": [],
+    "min_window_h": null,
     "blurb": "The half-lion, half-fish mascot spouting into the bay, with MBS as the backdrop. Required selfie.",
     "captions": [
       "Everyone does the 'drinking the fountain' photo. Everyone.",
       "Come before 9 am to beat the tour buses.",
       "The mini Merlion cub is behind the big one."
     ],
+    "safety_notes": null,
+    "image_url": null,
+    "embed_url": null,
     "source": "seed",
-    "active": true
+    "source_ref": null,
+    "active": true,
+    "hours_verified": true,
+    "coords_approx": false,
+    "website": null,
+    "blurb_source": null
   },
   {
     "id": "esplanade",
@@ -610,15 +854,27 @@
     "duration_min": 30,
     "cost_band": 0,
     "indoor": true,
+    "mrt": "Esplanade",
     "hours": [
       [
         "09:00",
         "23:00"
       ]
     ],
+    "closed_days": [],
+    "min_window_h": null,
     "blurb": "The 'durian' domes; free outdoor gigs on the waterfront and a quiet rooftop terrace with bay views.",
+    "captions": [],
+    "safety_notes": null,
+    "image_url": null,
+    "embed_url": null,
     "source": "seed",
-    "active": true
+    "source_ref": null,
+    "active": true,
+    "hours_verified": true,
+    "coords_approx": false,
+    "website": null,
+    "blurb_source": null
   },
   {
     "id": "gluttons-bay",
@@ -634,15 +890,27 @@
     "duration_min": 45,
     "cost_band": 1,
     "indoor": false,
+    "mrt": "Esplanade",
     "hours": [
       [
         "17:00",
         "23:59"
       ]
     ],
+    "closed_days": [],
+    "min_window_h": null,
     "blurb": "Evening-only hawker row on the water: carrot cake, BBQ seafood and satay under the city lights.",
+    "captions": [],
+    "safety_notes": null,
+    "image_url": null,
+    "embed_url": null,
     "source": "seed",
-    "active": true
+    "source_ref": null,
+    "active": true,
+    "hours_verified": true,
+    "coords_approx": false,
+    "website": null,
+    "blurb_source": null
   },
   {
     "id": "lau-pa-sat",
@@ -659,15 +927,26 @@
     "duration_min": 45,
     "cost_band": 1,
     "indoor": true,
+    "mrt": "Raffles Place",
     "hours": "24h",
+    "closed_days": [],
+    "min_window_h": null,
     "blurb": "Victorian cast-iron market hall in the CBD; after 7 pm Boon Tat Street closes for satay grills.",
     "captions": [
       "Satay Street starts around 7 pm, follow the smoke.",
       "The octagonal iron roof was shipped from Glasgow in 1894.",
       "Open 24 hours, useful for a very early or very late layover."
     ],
+    "safety_notes": null,
+    "image_url": null,
+    "embed_url": null,
     "source": "seed",
-    "active": true
+    "source_ref": null,
+    "active": true,
+    "hours_verified": true,
+    "coords_approx": false,
+    "website": null,
+    "blurb_source": null
   },
   {
     "id": "marina-barrage",
@@ -683,10 +962,22 @@
     "duration_min": 40,
     "cost_band": 0,
     "indoor": false,
+    "mrt": "Gardens by the Bay",
     "hours": "24h",
+    "closed_days": [],
+    "min_window_h": null,
     "blurb": "Dam with a grassy green roof where locals fly kites; skyline views across the reservoir.",
+    "captions": [],
+    "safety_notes": null,
+    "image_url": null,
+    "embed_url": null,
     "source": "seed",
-    "active": true
+    "source_ref": null,
+    "active": true,
+    "hours_verified": true,
+    "coords_approx": false,
+    "website": null,
+    "blurb_source": null
   },
   {
     "id": "singapore-flyer",
@@ -701,15 +992,27 @@
     "duration_min": 45,
     "cost_band": 3,
     "indoor": true,
+    "mrt": "Promenade",
     "hours": [
       [
         "10:00",
         "22:00"
       ]
     ],
+    "closed_days": [],
+    "min_window_h": null,
     "blurb": "Air-conditioned 30-minute ride in a 165 m observation wheel; clear-day views into Malaysia and Indonesia.",
+    "captions": [],
+    "safety_notes": null,
+    "image_url": null,
+    "embed_url": null,
     "source": "seed",
-    "active": true
+    "source_ref": null,
+    "active": true,
+    "hours_verified": true,
+    "coords_approx": false,
+    "website": null,
+    "blurb_source": null
   },
   {
     "id": "national-gallery",
@@ -725,20 +1028,31 @@
     "duration_min": 90,
     "cost_band": 2,
     "indoor": true,
+    "mrt": "City Hall",
     "hours": [
       [
         "10:00",
         "19:00"
       ]
     ],
+    "closed_days": [],
+    "min_window_h": null,
     "blurb": "Southeast Asian art in the former Supreme Court and City Hall; rooftop garden overlooks the Padang.",
     "captions": [
       "The rooftop is free and has one of the best Padang views.",
       "Old courtroom holding cells are open to walk through.",
       "Rain plan: you can spend two hours here easily."
     ],
+    "safety_notes": null,
+    "image_url": null,
+    "embed_url": null,
     "source": "seed",
-    "active": true
+    "source_ref": null,
+    "active": true,
+    "hours_verified": true,
+    "coords_approx": false,
+    "website": null,
+    "blurb_source": null
   },
   {
     "id": "asian-civilisations-museum",
@@ -754,15 +1068,27 @@
     "duration_min": 75,
     "cost_band": 2,
     "indoor": true,
+    "mrt": "Raffles Place",
     "hours": [
       [
         "10:00",
         "19:00"
       ]
     ],
+    "closed_days": [],
+    "min_window_h": null,
     "blurb": "Riverside museum of pan-Asian trade and faith; the 9th-century Tang shipwreck gallery is the highlight.",
+    "captions": [],
+    "safety_notes": null,
+    "image_url": null,
+    "embed_url": null,
     "source": "seed",
-    "active": true
+    "source_ref": null,
+    "active": true,
+    "hours_verified": true,
+    "coords_approx": false,
+    "website": null,
+    "blurb_source": null
   },
   {
     "id": "cavenagh-bridge",
@@ -778,10 +1104,22 @@
     "duration_min": 15,
     "cost_band": 0,
     "indoor": false,
+    "mrt": "Raffles Place",
     "hours": "24h",
+    "closed_days": [],
+    "min_window_h": null,
     "blurb": "1869 suspension bridge, with a sign still banning cattle and horses, in front of the grand Fullerton building.",
+    "captions": [],
+    "safety_notes": null,
+    "image_url": null,
+    "embed_url": null,
     "source": "seed",
-    "active": true
+    "source_ref": null,
+    "active": true,
+    "hours_verified": true,
+    "coords_approx": false,
+    "website": null,
+    "blurb_source": null
   },
   {
     "id": "boat-quay",
@@ -797,15 +1135,27 @@
     "duration_min": 40,
     "cost_band": 2,
     "indoor": false,
+    "mrt": "Raffles Place",
     "hours": [
       [
         "11:00",
         "23:59"
       ]
     ],
+    "closed_days": [],
+    "min_window_h": null,
     "blurb": "Old godowns turned riverside restaurants and bars, with the CBD towers lighting up behind.",
+    "captions": [],
+    "safety_notes": null,
+    "image_url": null,
+    "embed_url": null,
     "source": "seed",
-    "active": true
+    "source_ref": null,
+    "active": true,
+    "hours_verified": true,
+    "coords_approx": false,
+    "website": null,
+    "blurb_source": null
   },
   {
     "id": "clarke-quay",
@@ -820,15 +1170,27 @@
     "duration_min": 60,
     "cost_band": 2,
     "indoor": false,
+    "mrt": "Clarke Quay",
     "hours": [
       [
         "12:00",
         "23:59"
       ]
     ],
+    "closed_days": [],
+    "min_window_h": null,
     "blurb": "Colourful riverside warehouses under big canopies; bars, river cruises and late-night energy.",
+    "captions": [],
+    "safety_notes": null,
+    "image_url": null,
+    "embed_url": null,
     "source": "seed",
-    "active": true
+    "source_ref": null,
+    "active": true,
+    "hours_verified": true,
+    "coords_approx": false,
+    "website": null,
+    "blurb_source": null
   },
   {
     "id": "raffles-hotel",
@@ -844,15 +1206,27 @@
     "duration_min": 30,
     "cost_band": 0,
     "indoor": true,
+    "mrt": "Esplanade",
     "hours": [
       [
         "10:00",
         "22:00"
       ]
     ],
+    "closed_days": [],
+    "min_window_h": null,
     "blurb": "Colonial landmark (1887) and birthplace of the Singapore Sling; walk the arcade and courtyards.",
+    "captions": [],
+    "safety_notes": null,
+    "image_url": null,
+    "embed_url": null,
     "source": "seed",
-    "active": true
+    "source_ref": null,
+    "active": true,
+    "hours_verified": true,
+    "coords_approx": false,
+    "website": null,
+    "blurb_source": null
   },
   {
     "id": "chijmes",
@@ -869,15 +1243,27 @@
     "duration_min": 45,
     "cost_band": 2,
     "indoor": false,
+    "mrt": "City Hall",
     "hours": [
       [
         "11:00",
         "23:59"
       ]
     ],
+    "closed_days": [],
+    "min_window_h": null,
     "blurb": "Gothic former convent with a sunken courtyard of restaurants and bars.",
+    "captions": [],
+    "safety_notes": null,
+    "image_url": null,
+    "embed_url": null,
     "source": "seed",
-    "active": true
+    "source_ref": null,
+    "active": true,
+    "hours_verified": true,
+    "coords_approx": false,
+    "website": null,
+    "blurb_source": null
   },
   {
     "id": "national-museum",
@@ -893,15 +1279,27 @@
     "duration_min": 90,
     "cost_band": 2,
     "indoor": true,
+    "mrt": "Bras Basah",
     "hours": [
       [
         "10:00",
         "19:00"
       ]
     ],
+    "closed_days": [],
+    "min_window_h": null,
     "blurb": "Singapore's oldest museum; the History Gallery tells 700 years of the island in one walk-through.",
+    "captions": [],
+    "safety_notes": null,
+    "image_url": null,
+    "embed_url": null,
     "source": "seed",
-    "active": true
+    "source_ref": null,
+    "active": true,
+    "hours_verified": true,
+    "coords_approx": false,
+    "website": null,
+    "blurb_source": null
   },
   {
     "id": "peranakan-museum",
@@ -917,15 +1315,27 @@
     "duration_min": 60,
     "cost_band": 2,
     "indoor": true,
+    "mrt": "Bras Basah",
     "hours": [
       [
         "10:00",
         "19:00"
       ]
     ],
+    "closed_days": [],
+    "min_window_h": null,
     "blurb": "Beadwork, porcelain and wedding traditions of Straits Chinese culture in an old school building.",
+    "captions": [],
+    "safety_notes": null,
+    "image_url": null,
+    "embed_url": null,
     "source": "seed",
-    "active": true
+    "source_ref": null,
+    "active": true,
+    "hours_verified": true,
+    "coords_approx": false,
+    "website": null,
+    "blurb_source": null
   },
   {
     "id": "fort-canning",
@@ -941,10 +1351,22 @@
     "duration_min": 40,
     "cost_band": 0,
     "indoor": false,
+    "mrt": "Dhoby Ghaut",
     "hours": "24h",
+    "closed_days": [],
+    "min_window_h": null,
     "blurb": "Hilltop park of 14th-century palace grounds, spice gardens and the photogenic Tree Tunnel spiral stair.",
+    "captions": [],
+    "safety_notes": null,
+    "image_url": null,
+    "embed_url": null,
     "source": "seed",
-    "active": true
+    "source_ref": null,
+    "active": true,
+    "hours_verified": true,
+    "coords_approx": false,
+    "website": null,
+    "blurb_source": null
   },
   {
     "id": "old-hill-street-police",
@@ -960,10 +1382,22 @@
     "duration_min": 10,
     "cost_band": 0,
     "indoor": false,
+    "mrt": "Clarke Quay",
     "hours": "24h",
+    "closed_days": [],
+    "min_window_h": null,
     "blurb": "Colonial police station with 927 rainbow-painted window shutters. Quick, very photogenic.",
+    "captions": [],
+    "safety_notes": null,
+    "image_url": null,
+    "embed_url": null,
     "source": "seed",
-    "active": true
+    "source_ref": null,
+    "active": true,
+    "hours_verified": true,
+    "coords_approx": false,
+    "website": null,
+    "blurb_source": null
   },
   {
     "id": "armenian-church",
@@ -978,15 +1412,27 @@
     "duration_min": 20,
     "cost_band": 0,
     "indoor": true,
+    "mrt": "City Hall",
     "hours": [
       [
         "09:00",
         "18:00"
       ]
     ],
+    "closed_days": [],
+    "min_window_h": null,
     "blurb": "Singapore's oldest church (1835), a small white neoclassical gem with a garden of old tombstones.",
+    "captions": [],
+    "safety_notes": null,
+    "image_url": null,
+    "embed_url": null,
     "source": "seed",
-    "active": true
+    "source_ref": null,
+    "active": true,
+    "hours_verified": true,
+    "coords_approx": false,
+    "website": null,
+    "blurb_source": null
   },
   {
     "id": "maxwell-food-centre",
@@ -1001,20 +1447,31 @@
     "duration_min": 45,
     "cost_band": 1,
     "indoor": true,
+    "mrt": "Maxwell",
     "hours": [
       [
         "08:00",
         "22:00"
       ]
     ],
+    "closed_days": [],
+    "min_window_h": null,
     "blurb": "Chinatown's most famous hawker centre, Tian Tian chicken rice, fish soup and fresh sugarcane.",
     "captions": [
       "The chicken rice queue moves fast, don't be scared of it.",
       "Grab a table first and 'chope' it with a tissue packet.",
       "Go before 11:30 am or after 2 pm to beat the office crowd."
     ],
+    "safety_notes": null,
+    "image_url": null,
+    "embed_url": null,
     "source": "seed",
-    "active": true
+    "source_ref": null,
+    "active": true,
+    "hours_verified": true,
+    "coords_approx": false,
+    "website": null,
+    "blurb_source": null
   },
   {
     "id": "buddha-tooth-relic-temple",
@@ -1031,21 +1488,31 @@
     "duration_min": 45,
     "cost_band": 0,
     "indoor": true,
+    "mrt": "Maxwell",
     "hours": [
       [
         "07:00",
         "17:00"
       ]
     ],
+    "closed_days": [],
+    "min_window_h": null,
     "blurb": "Five-storey Tang-style temple with a gold stupa and a peaceful rooftop prayer-wheel garden.",
-    "safety_notes": "Modest dress: shoulders and knees covered (shawls available).",
     "captions": [
       "The rooftop orchid garden is the calmest spot in Chinatown.",
       "Relic viewing on level 4 at set times.",
       "Free entry; donations welcome."
     ],
+    "safety_notes": "Modest dress: shoulders and knees covered (shawls available).",
+    "image_url": null,
+    "embed_url": null,
     "source": "seed",
-    "active": true
+    "source_ref": null,
+    "active": true,
+    "hours_verified": true,
+    "coords_approx": false,
+    "website": null,
+    "blurb_source": null
   },
   {
     "id": "sri-mariamman-temple",
@@ -1061,6 +1528,7 @@
     "duration_min": 25,
     "cost_band": 0,
     "indoor": true,
+    "mrt": "Chinatown",
     "hours": [
       [
         "07:00",
@@ -1071,10 +1539,20 @@
         "21:00"
       ]
     ],
+    "closed_days": [],
+    "min_window_h": null,
     "blurb": "Singapore's oldest Hindu temple (1827), with a riotous gopuram tower of painted deities.",
+    "captions": [],
     "safety_notes": "Remove shoes. Closed midday.",
+    "image_url": null,
+    "embed_url": null,
     "source": "seed",
-    "active": true
+    "source_ref": null,
+    "active": true,
+    "hours_verified": true,
+    "coords_approx": false,
+    "website": null,
+    "blurb_source": null
   },
   {
     "id": "chinatown-complex",
@@ -1089,15 +1567,27 @@
     "duration_min": 45,
     "cost_band": 1,
     "indoor": true,
+    "mrt": "Chinatown",
     "hours": [
       [
         "07:00",
         "21:00"
       ]
     ],
+    "closed_days": [],
+    "min_window_h": null,
     "blurb": "Singapore's largest hawker centre with 200+ stalls; claypot rice and craft beer upstairs.",
+    "captions": [],
+    "safety_notes": null,
+    "image_url": null,
+    "embed_url": null,
     "source": "seed",
-    "active": true
+    "source_ref": null,
+    "active": true,
+    "hours_verified": true,
+    "coords_approx": false,
+    "website": null,
+    "blurb_source": null
   },
   {
     "id": "ann-siang-hill",
@@ -1114,10 +1604,22 @@
     "duration_min": 40,
     "cost_band": 2,
     "indoor": false,
+    "mrt": "Maxwell",
     "hours": "24h",
+    "closed_days": [],
+    "min_window_h": null,
     "blurb": "Sloping lanes of restored shophouses with cocktail bars and a hidden hilltop park.",
+    "captions": [],
+    "safety_notes": null,
+    "image_url": null,
+    "embed_url": null,
     "source": "seed",
-    "active": true
+    "source_ref": null,
+    "active": true,
+    "hours_verified": true,
+    "coords_approx": false,
+    "website": null,
+    "blurb_source": null
   },
   {
     "id": "pagoda-street",
@@ -1133,15 +1635,27 @@
     "duration_min": 40,
     "cost_band": 1,
     "indoor": false,
+    "mrt": "Chinatown",
     "hours": [
       [
         "09:00",
         "22:00"
       ]
     ],
+    "closed_days": [],
+    "min_window_h": null,
     "blurb": "Lantern-strung street market for souvenirs, snacks and a first taste of Chinatown bustle.",
+    "captions": [],
+    "safety_notes": null,
+    "image_url": null,
+    "embed_url": null,
     "source": "seed",
-    "active": true
+    "source_ref": null,
+    "active": true,
+    "hours_verified": true,
+    "coords_approx": false,
+    "website": null,
+    "blurb_source": null
   },
   {
     "id": "chinatown-heritage-centre",
@@ -1156,15 +1670,27 @@
     "duration_min": 60,
     "cost_band": 2,
     "indoor": true,
+    "mrt": "Chinatown",
     "hours": [
       [
         "09:30",
         "18:30"
       ]
     ],
+    "closed_days": [],
+    "min_window_h": null,
     "blurb": "Recreated cubicle homes show how 1950s immigrant families squeezed into a single shophouse.",
+    "captions": [],
+    "safety_notes": null,
+    "image_url": null,
+    "embed_url": null,
     "source": "seed",
-    "active": true
+    "source_ref": null,
+    "active": true,
+    "hours_verified": true,
+    "coords_approx": false,
+    "website": null,
+    "blurb_source": null
   },
   {
     "id": "thian-hock-keng",
@@ -1180,15 +1706,27 @@
     "duration_min": 25,
     "cost_band": 0,
     "indoor": true,
+    "mrt": "Maxwell",
     "hours": [
       [
         "07:30",
         "17:00"
       ]
     ],
+    "closed_days": [],
+    "min_window_h": null,
     "blurb": "Hokkien temple built without a single nail (1842), once on the shoreline where sailors gave thanks.",
+    "captions": [],
+    "safety_notes": null,
+    "image_url": null,
+    "embed_url": null,
     "source": "seed",
-    "active": true
+    "source_ref": null,
+    "active": true,
+    "hours_verified": true,
+    "coords_approx": false,
+    "website": null,
+    "blurb_source": null
   },
   {
     "id": "amoy-street-food-centre",
@@ -1203,16 +1741,27 @@
     "duration_min": 40,
     "cost_band": 1,
     "indoor": true,
+    "mrt": "Maxwell",
     "hours": [
       [
         "07:00",
         "15:00"
       ]
     ],
+    "closed_days": [],
+    "min_window_h": null,
     "blurb": "The office crowd's lunch hall; young hawkers doing inventive takes alongside old-school favourites.",
+    "captions": [],
     "safety_notes": "Many stalls close by mid-afternoon.",
+    "image_url": null,
+    "embed_url": null,
     "source": "seed",
-    "active": true
+    "source_ref": null,
+    "active": true,
+    "hours_verified": true,
+    "coords_approx": false,
+    "website": null,
+    "blurb_source": null
   },
   {
     "id": "hong-lim-food-centre",
@@ -1227,15 +1776,27 @@
     "duration_min": 40,
     "cost_band": 1,
     "indoor": true,
+    "mrt": "Chinatown",
     "hours": [
       [
         "07:00",
         "20:00"
       ]
     ],
+    "closed_days": [],
+    "min_window_h": null,
     "blurb": "Two storeys of heritage hawkers in a 1978 block: curry chicken noodles and char kway teow.",
+    "captions": [],
+    "safety_notes": null,
+    "image_url": null,
+    "embed_url": null,
     "source": "seed",
-    "active": true
+    "source_ref": null,
+    "active": true,
+    "hours_verified": true,
+    "coords_approx": false,
+    "website": null,
+    "blurb_source": null
   },
   {
     "id": "ya-kun-far-east",
@@ -1251,15 +1812,27 @@
     "duration_min": 25,
     "cost_band": 1,
     "indoor": true,
+    "mrt": "Raffles Place",
     "hours": [
       [
         "07:30",
         "17:00"
       ]
     ],
+    "closed_days": [],
+    "min_window_h": null,
     "blurb": "Original home of the kaya toast set: charcoal toast, coconut jam, soft-boiled eggs and kopi.",
+    "captions": [],
+    "safety_notes": null,
+    "image_url": null,
+    "embed_url": null,
     "source": "seed",
-    "active": true
+    "source_ref": null,
+    "active": true,
+    "hours_verified": true,
+    "coords_approx": false,
+    "website": null,
+    "blurb_source": null
   },
   {
     "id": "keong-saik-road",
@@ -1276,10 +1849,22 @@
     "duration_min": 40,
     "cost_band": 2,
     "indoor": false,
+    "mrt": "Maxwell",
     "hours": "24h",
+    "closed_days": [],
+    "min_window_h": null,
     "blurb": "Curving street of pastel shophouses packed with restaurants and bakeries; ex-red-light district.",
+    "captions": [],
+    "safety_notes": null,
+    "image_url": null,
+    "embed_url": null,
     "source": "seed",
-    "active": true
+    "source_ref": null,
+    "active": true,
+    "hours_verified": true,
+    "coords_approx": false,
+    "website": null,
+    "blurb_source": null
   },
   {
     "id": "pinnacle-duxton",
@@ -1295,16 +1880,27 @@
     "duration_min": 30,
     "cost_band": 1,
     "indoor": false,
+    "mrt": "Tanjong Pagar",
     "hours": [
       [
         "09:00",
         "21:00"
       ]
     ],
+    "closed_days": [],
+    "min_window_h": null,
     "blurb": "Public housing with a 50th-storey skybridge, skyline views for a few dollars (pay by EZ-Link card).",
+    "captions": [],
     "safety_notes": "Visitor quota per day; card payment at the lobby.",
+    "image_url": null,
+    "embed_url": null,
     "source": "seed",
-    "active": true
+    "source_ref": null,
+    "active": true,
+    "hours_verified": true,
+    "coords_approx": false,
+    "website": null,
+    "blurb_source": null
   },
   {
     "id": "city-gallery",
@@ -1319,6 +1915,7 @@
     "duration_min": 45,
     "cost_band": 0,
     "indoor": true,
+    "mrt": "Maxwell",
     "hours": [
       [
         "09:00",
@@ -1328,9 +1925,19 @@
     "closed_days": [
       0
     ],
+    "min_window_h": null,
     "blurb": "Free urban-planning gallery with a giant scale model of the whole city centre.",
+    "captions": [],
+    "safety_notes": null,
+    "image_url": null,
+    "embed_url": null,
     "source": "seed",
-    "active": true
+    "source_ref": null,
+    "active": true,
+    "hours_verified": true,
+    "coords_approx": false,
+    "website": null,
+    "blurb_source": null
   },
   {
     "id": "peoples-park-complex",
@@ -1346,15 +1953,27 @@
     "duration_min": 25,
     "cost_band": 1,
     "indoor": true,
+    "mrt": "Chinatown",
     "hours": [
       [
         "10:00",
         "22:00"
       ]
     ],
+    "closed_days": [],
+    "min_window_h": null,
     "blurb": "Brutalist 1970s mega-block in bold colour blocks; money changers and foot reflexology inside.",
+    "captions": [],
+    "safety_notes": null,
+    "image_url": null,
+    "embed_url": null,
     "source": "seed",
-    "active": true
+    "source_ref": null,
+    "active": true,
+    "hours_verified": true,
+    "coords_approx": false,
+    "website": null,
+    "blurb_source": null
   },
   {
     "id": "tiong-bahru-market",
@@ -1369,15 +1988,27 @@
     "duration_min": 45,
     "cost_band": 1,
     "indoor": true,
+    "mrt": "Tiong Bahru",
     "hours": [
       [
         "07:00",
         "20:00"
       ]
     ],
+    "closed_days": [],
+    "min_window_h": null,
     "blurb": "Neighbourhood hawker centre over a wet market; chwee kueh and lor mee for breakfast.",
+    "captions": [],
+    "safety_notes": null,
+    "image_url": null,
+    "embed_url": null,
     "source": "seed",
-    "active": true
+    "source_ref": null,
+    "active": true,
+    "hours_verified": true,
+    "coords_approx": false,
+    "website": null,
+    "blurb_source": null
   },
   {
     "id": "tiong-bahru-estate",
@@ -1394,10 +2025,22 @@
     "duration_min": 45,
     "cost_band": 0,
     "indoor": false,
+    "mrt": "Tiong Bahru",
     "hours": "24h",
+    "closed_days": [],
+    "min_window_h": null,
     "blurb": "1930s streamlined flats with spiral back stairs, now home to indie bookshops and bakeries.",
+    "captions": [],
+    "safety_notes": null,
+    "image_url": null,
+    "embed_url": null,
     "source": "seed",
-    "active": true
+    "source_ref": null,
+    "active": true,
+    "hours_verified": true,
+    "coords_approx": false,
+    "website": null,
+    "blurb_source": null
   },
   {
     "id": "sultan-mosque",
@@ -1414,6 +2057,7 @@
     "duration_min": 25,
     "cost_band": 0,
     "indoor": false,
+    "mrt": "Bugis",
     "hours": [
       [
         "10:00",
@@ -1424,10 +2068,20 @@
         "16:00"
       ]
     ],
+    "closed_days": [],
+    "min_window_h": null,
     "blurb": "Golden-domed mosque at the heart of the old Malay royal quarter.",
+    "captions": [],
     "safety_notes": "Visitor hours only; robes provided. Closed to visitors during Friday prayers.",
+    "image_url": null,
+    "embed_url": null,
     "source": "seed",
-    "active": true
+    "source_ref": null,
+    "active": true,
+    "hours_verified": true,
+    "coords_approx": false,
+    "website": null,
+    "blurb_source": null
   },
   {
     "id": "haji-lane",
@@ -1444,15 +2098,26 @@
     "duration_min": 30,
     "cost_band": 1,
     "indoor": false,
+    "mrt": "Bugis",
     "hours": "24h",
+    "closed_days": [],
+    "min_window_h": null,
     "blurb": "Narrow lane of murals, indie boutiques and cocktail bars. Short, loud, colourful.",
     "captions": [
       "Every wall is a mural; walk it twice, once each way.",
       "Shops open late morning, bars wake up after 6 pm.",
       "Pair with teh tarik on Arab Street."
     ],
+    "safety_notes": null,
+    "image_url": null,
+    "embed_url": null,
     "source": "seed",
-    "active": true
+    "source_ref": null,
+    "active": true,
+    "hours_verified": true,
+    "coords_approx": false,
+    "website": null,
+    "blurb_source": null
   },
   {
     "id": "arab-street",
@@ -1467,15 +2132,27 @@
     "duration_min": 25,
     "cost_band": 1,
     "indoor": false,
+    "mrt": "Bugis",
     "hours": [
       [
         "10:00",
         "20:00"
       ]
     ],
+    "closed_days": [],
+    "min_window_h": null,
     "blurb": "Textile and carpet shops, perfume sellers and rattan stores along the old trading street.",
+    "captions": [],
+    "safety_notes": null,
+    "image_url": null,
+    "embed_url": null,
     "source": "seed",
-    "active": true
+    "source_ref": null,
+    "active": true,
+    "hours_verified": true,
+    "coords_approx": false,
+    "website": null,
+    "blurb_source": null
   },
   {
     "id": "zam-zam",
@@ -1490,15 +2167,27 @@
     "duration_min": 30,
     "cost_band": 1,
     "indoor": true,
+    "mrt": "Bugis",
     "hours": [
       [
         "07:00",
         "23:00"
       ]
     ],
+    "closed_days": [],
+    "min_window_h": null,
     "blurb": "Murtabak institution since 1908 opposite Sultan Mosque; watch the dough being flipped.",
+    "captions": [],
+    "safety_notes": null,
+    "image_url": null,
+    "embed_url": null,
     "source": "seed",
-    "active": true
+    "source_ref": null,
+    "active": true,
+    "hours_verified": true,
+    "coords_approx": false,
+    "website": null,
+    "blurb_source": null
   },
   {
     "id": "bugis-street",
@@ -1513,15 +2202,27 @@
     "duration_min": 40,
     "cost_band": 1,
     "indoor": true,
+    "mrt": "Bugis",
     "hours": [
       [
         "11:00",
         "22:00"
       ]
     ],
+    "closed_days": [],
+    "min_window_h": null,
     "blurb": "Covered bargain market: fresh fruit juice, souvenirs and three floors of cheap fashion.",
+    "captions": [],
+    "safety_notes": null,
+    "image_url": null,
+    "embed_url": null,
     "source": "seed",
-    "active": true
+    "source_ref": null,
+    "active": true,
+    "hours_verified": true,
+    "coords_approx": false,
+    "website": null,
+    "blurb_source": null
   },
   {
     "id": "kwan-im-temple",
@@ -1536,15 +2237,27 @@
     "duration_min": 20,
     "cost_band": 0,
     "indoor": true,
+    "mrt": "Bugis",
     "hours": [
       [
         "07:00",
         "18:30"
       ]
     ],
+    "closed_days": [],
+    "min_window_h": null,
     "blurb": "Busy Guan Yin temple where worshippers shake fortune sticks; flower sellers line the street.",
+    "captions": [],
+    "safety_notes": null,
+    "image_url": null,
+    "embed_url": null,
     "source": "seed",
-    "active": true
+    "source_ref": null,
+    "active": true,
+    "hours_verified": true,
+    "coords_approx": false,
+    "website": null,
+    "blurb_source": null
   },
   {
     "id": "hill-street-tai-hwa",
@@ -1559,6 +2272,7 @@
     "duration_min": 50,
     "cost_band": 1,
     "indoor": true,
+    "mrt": "Lavender",
     "hours": [
       [
         "09:30",
@@ -1568,10 +2282,19 @@
     "closed_days": [
       1
     ],
+    "min_window_h": null,
     "blurb": "Michelin-starred bak chor mee at a hawker stall in Crawford Lane. The queue is part of the experience.",
+    "captions": [],
     "safety_notes": "Queue can hit 45 min, only if you have slack.",
+    "image_url": null,
+    "embed_url": null,
     "source": "seed",
-    "active": true
+    "source_ref": null,
+    "active": true,
+    "hours_verified": true,
+    "coords_approx": false,
+    "website": null,
+    "blurb_source": null
   },
   {
     "id": "tekka-centre",
@@ -1588,15 +2311,27 @@
     "duration_min": 45,
     "cost_band": 1,
     "indoor": true,
+    "mrt": "Little India",
     "hours": [
       [
         "07:00",
         "21:00"
       ]
     ],
+    "closed_days": [],
+    "min_window_h": null,
     "blurb": "Biryani, dosa and teh tarik downstairs; saris and brass upstairs; a spice-scented wet market.",
+    "captions": [],
+    "safety_notes": null,
+    "image_url": null,
+    "embed_url": null,
     "source": "seed",
-    "active": true
+    "source_ref": null,
+    "active": true,
+    "hours_verified": true,
+    "coords_approx": false,
+    "website": null,
+    "blurb_source": null
   },
   {
     "id": "sri-veeramakaliamman",
@@ -1612,6 +2347,7 @@
     "duration_min": 20,
     "cost_band": 0,
     "indoor": true,
+    "mrt": "Little India",
     "hours": [
       [
         "05:30",
@@ -1622,10 +2358,20 @@
         "21:00"
       ]
     ],
+    "closed_days": [],
+    "min_window_h": null,
     "blurb": "Vivid temple to the goddess Kali on Serangoon Road, busiest at evening puja.",
+    "captions": [],
     "safety_notes": "Remove shoes; modest dress.",
+    "image_url": null,
+    "embed_url": null,
     "source": "seed",
-    "active": true
+    "source_ref": null,
+    "active": true,
+    "hours_verified": true,
+    "coords_approx": false,
+    "website": null,
+    "blurb_source": null
   },
   {
     "id": "tan-teng-niah",
@@ -1641,10 +2387,22 @@
     "duration_min": 10,
     "cost_band": 0,
     "indoor": false,
+    "mrt": "Farrer Park",
     "hours": "24h",
+    "closed_days": [],
+    "min_window_h": null,
     "blurb": "Rainbow-painted 1900 villa of a Chinese sweets maker, Little India's quickest photo stop.",
+    "captions": [],
+    "safety_notes": null,
+    "image_url": null,
+    "embed_url": null,
     "source": "seed",
-    "active": true
+    "source_ref": null,
+    "active": true,
+    "hours_verified": true,
+    "coords_approx": false,
+    "website": null,
+    "blurb_source": null
   },
   {
     "id": "mustafa-centre",
@@ -1658,6 +2416,7 @@
     "duration_min": 45,
     "cost_band": 1,
     "indoor": true,
+    "mrt": "Farrer Park",
     "hours": [
       [
         "09:30",
@@ -1668,9 +2427,20 @@
         "02:00"
       ]
     ],
+    "closed_days": [],
+    "min_window_h": null,
     "blurb": "Labyrinth department store selling literally everything; open until 2 am.",
+    "captions": [],
+    "safety_notes": null,
+    "image_url": null,
+    "embed_url": null,
     "source": "seed",
-    "active": true
+    "source_ref": null,
+    "active": true,
+    "hours_verified": true,
+    "coords_approx": false,
+    "website": null,
+    "blurb_source": null
   },
   {
     "id": "indian-heritage-centre",
@@ -1686,6 +2456,7 @@
     "duration_min": 60,
     "cost_band": 2,
     "indoor": true,
+    "mrt": "Little India",
     "hours": [
       [
         "10:00",
@@ -1695,9 +2466,19 @@
     "closed_days": [
       1
     ],
+    "min_window_h": null,
     "blurb": "Stepwell-inspired museum on the Indian diaspora in Southeast Asia; glows like a lantern at night.",
+    "captions": [],
+    "safety_notes": null,
+    "image_url": null,
+    "embed_url": null,
     "source": "seed",
-    "active": true
+    "source_ref": null,
+    "active": true,
+    "hours_verified": true,
+    "coords_approx": false,
+    "website": null,
+    "blurb_source": null
   },
   {
     "id": "ion-orchard",
@@ -1712,15 +2493,27 @@
     "duration_min": 60,
     "cost_band": 2,
     "indoor": true,
+    "mrt": "Orchard",
     "hours": [
       [
         "10:00",
         "22:00"
       ]
     ],
+    "closed_days": [],
+    "min_window_h": null,
     "blurb": "Flagship mall above Orchard MRT; food hall on B4 and a free sky observatory (check hours).",
+    "captions": [],
+    "safety_notes": null,
+    "image_url": null,
+    "embed_url": null,
     "source": "seed",
-    "active": true
+    "source_ref": null,
+    "active": true,
+    "hours_verified": true,
+    "coords_approx": false,
+    "website": null,
+    "blurb_source": null
   },
   {
     "id": "ngee-ann-city",
@@ -1734,15 +2527,27 @@
     "duration_min": 45,
     "cost_band": 2,
     "indoor": true,
+    "mrt": "Orchard",
     "hours": [
       [
         "10:00",
         "21:30"
       ]
     ],
+    "closed_days": [],
+    "min_window_h": null,
     "blurb": "Marble twin towers with Takashimaya and one of Asia's largest bookshops.",
+    "captions": [],
+    "safety_notes": null,
+    "image_url": null,
+    "embed_url": null,
     "source": "seed",
-    "active": true
+    "source_ref": null,
+    "active": true,
+    "hours_verified": true,
+    "coords_approx": false,
+    "website": null,
+    "blurb_source": null
   },
   {
     "id": "emerald-hill",
@@ -1758,10 +2563,22 @@
     "duration_min": 20,
     "cost_band": 0,
     "indoor": false,
+    "mrt": "Orchard",
     "hours": "24h",
+    "closed_days": [],
+    "min_window_h": null,
     "blurb": "Quiet hill of Peranakan terraces right off Orchard Road, a two-minute escape from the malls.",
+    "captions": [],
+    "safety_notes": null,
+    "image_url": null,
+    "embed_url": null,
     "source": "seed",
-    "active": true
+    "source_ref": null,
+    "active": true,
+    "hours_verified": true,
+    "coords_approx": false,
+    "website": null,
+    "blurb_source": null
   },
   {
     "id": "newton-food-centre",
@@ -1777,16 +2594,27 @@
     "duration_min": 45,
     "cost_band": 1,
     "indoor": true,
+    "mrt": "Newton",
     "hours": [
       [
         "12:00",
         "23:59"
       ]
     ],
+    "closed_days": [],
+    "min_window_h": null,
     "blurb": "Late-night hawker centre for chilli crab, BBQ stingray and oyster omelette.",
+    "captions": [],
     "safety_notes": "Agree seafood prices before ordering.",
+    "image_url": null,
+    "embed_url": null,
     "source": "seed",
-    "active": true
+    "source_ref": null,
+    "active": true,
+    "hours_verified": true,
+    "coords_approx": false,
+    "website": null,
+    "blurb_source": null
   },
   {
     "id": "botanic-gardens",
@@ -1803,20 +2631,31 @@
     "duration_min": 75,
     "cost_band": 0,
     "indoor": false,
+    "mrt": "Napier",
     "hours": [
       [
         "05:00",
         "23:59"
       ]
     ],
+    "closed_days": [],
+    "min_window_h": null,
     "blurb": "UNESCO-listed tropical garden: Swan Lake, a rainforest patch and the bandstand, all free.",
     "captions": [
       "Enter at Tanglin Gate, 5 min from Napier MRT.",
       "The 160-year-old rainforest patch is 10 minutes in.",
       "Shelters every few hundred metres if a shower hits."
     ],
+    "safety_notes": null,
+    "image_url": null,
+    "embed_url": null,
     "source": "seed",
-    "active": true
+    "source_ref": null,
+    "active": true,
+    "hours_verified": true,
+    "coords_approx": false,
+    "website": null,
+    "blurb_source": null
   },
   {
     "id": "national-orchid-garden",
@@ -1831,15 +2670,27 @@
     "duration_min": 45,
     "cost_band": 1,
     "indoor": false,
+    "mrt": "Napier",
     "hours": [
       [
         "08:30",
         "19:00"
       ]
     ],
+    "closed_days": [],
+    "min_window_h": null,
     "blurb": "1,000 orchid species and 2,000 hybrids, including ones named after visiting heads of state.",
+    "captions": [],
+    "safety_notes": null,
+    "image_url": null,
+    "embed_url": null,
     "source": "seed",
-    "active": true
+    "source_ref": null,
+    "active": true,
+    "hours_verified": true,
+    "coords_approx": false,
+    "website": null,
+    "blurb_source": null
   },
   {
     "id": "dempsey-hill",
@@ -1855,15 +2706,27 @@
     "duration_min": 60,
     "cost_band": 3,
     "indoor": false,
+    "mrt": "Napier",
     "hours": [
       [
         "11:00",
         "23:00"
       ]
     ],
+    "closed_days": [],
+    "min_window_h": null,
     "blurb": "Former British army barracks in the greenery, now restaurants, wine bars and antique shops.",
+    "captions": [],
+    "safety_notes": null,
+    "image_url": null,
+    "embed_url": null,
     "source": "seed",
-    "active": true
+    "source_ref": null,
+    "active": true,
+    "hours_verified": true,
+    "coords_approx": false,
+    "website": null,
+    "blurb_source": null
   },
   {
     "id": "adam-road-food-centre",
@@ -1878,15 +2741,27 @@
     "duration_min": 40,
     "cost_band": 1,
     "indoor": true,
+    "mrt": "Botanic Gardens",
     "hours": [
       [
         "07:00",
         "21:00"
       ]
     ],
+    "closed_days": [],
+    "min_window_h": null,
     "blurb": "Small hawker centre known for nasi lemak queues, near the Botanic Gardens' north gate.",
+    "captions": [],
+    "safety_notes": null,
+    "image_url": null,
+    "embed_url": null,
     "source": "seed",
-    "active": true
+    "source_ref": null,
+    "active": true,
+    "hours_verified": true,
+    "coords_approx": false,
+    "website": null,
+    "blurb_source": null
   },
   {
     "id": "vivocity",
@@ -1901,15 +2776,27 @@
     "duration_min": 45,
     "cost_band": 2,
     "indoor": true,
+    "mrt": "HarbourFront",
     "hours": [
       [
         "10:00",
         "22:00"
       ]
     ],
+    "closed_days": [],
+    "min_window_h": null,
     "blurb": "Waterfront mega-mall and gateway to Sentosa; free rooftop sky park with a paddling pool.",
+    "captions": [],
+    "safety_notes": null,
+    "image_url": null,
+    "embed_url": null,
     "source": "seed",
-    "active": true
+    "source_ref": null,
+    "active": true,
+    "hours_verified": true,
+    "coords_approx": false,
+    "website": null,
+    "blurb_source": null
   },
   {
     "id": "mount-faber",
@@ -1925,11 +2812,22 @@
     "duration_min": 40,
     "cost_band": 0,
     "indoor": false,
+    "mrt": "HarbourFront",
     "hours": "24h",
-    "blurb": "Hilltop lookout over the harbour and Sentosa; cable car station and a bell court at the top.",
+    "closed_days": [],
     "min_window_h": 9,
+    "blurb": "Hilltop lookout over the harbour and Sentosa; cable car station and a bell court at the top.",
+    "captions": [],
+    "safety_notes": null,
+    "image_url": null,
+    "embed_url": null,
     "source": "seed",
-    "active": true
+    "source_ref": null,
+    "active": true,
+    "hours_verified": true,
+    "coords_approx": false,
+    "website": null,
+    "blurb_source": null
   },
   {
     "id": "henderson-waves",
@@ -1946,11 +2844,22 @@
     "duration_min": 30,
     "cost_band": 0,
     "indoor": false,
+    "mrt": "HarbourFront",
     "hours": "24h",
-    "blurb": "Undulating timber-and-steel footbridge 36 m above the forest on the Southern Ridges.",
+    "closed_days": [],
     "min_window_h": 9,
+    "blurb": "Undulating timber-and-steel footbridge 36 m above the forest on the Southern Ridges.",
+    "captions": [],
+    "safety_notes": null,
+    "image_url": null,
+    "embed_url": null,
     "source": "seed",
-    "active": true
+    "source_ref": null,
+    "active": true,
+    "hours_verified": true,
+    "coords_approx": false,
+    "website": null,
+    "blurb_source": null
   },
   {
     "id": "siloso-beach",
@@ -1966,12 +2875,22 @@
     "duration_min": 60,
     "cost_band": 0,
     "indoor": false,
+    "mrt": "Beach (Sentosa Express)",
     "hours": "24h",
-    "blurb": "Sentosa's liveliest beach with beach clubs, volleyball and sunset over the Southern Islands.",
+    "closed_days": [],
     "min_window_h": 10,
+    "blurb": "Sentosa's liveliest beach with beach clubs, volleyball and sunset over the Southern Islands.",
+    "captions": [],
     "safety_notes": "Sentosa adds ~40 min each way from the city. Only worth it on long layovers.",
+    "image_url": null,
+    "embed_url": null,
     "source": "seed",
-    "active": true
+    "source_ref": null,
+    "active": true,
+    "hours_verified": true,
+    "coords_approx": false,
+    "website": null,
+    "blurb_source": null
   },
   {
     "id": "palawan-beach",
@@ -1986,11 +2905,22 @@
     "duration_min": 45,
     "cost_band": 0,
     "indoor": false,
+    "mrt": "Beach (Sentosa Express)",
     "hours": "24h",
-    "blurb": "Rope bridge to an islet billed as the southernmost point of continental Asia.",
+    "closed_days": [],
     "min_window_h": 10,
+    "blurb": "Rope bridge to an islet billed as the southernmost point of continental Asia.",
+    "captions": [],
+    "safety_notes": null,
+    "image_url": null,
+    "embed_url": null,
     "source": "seed",
-    "active": true
+    "source_ref": null,
+    "active": true,
+    "hours_verified": true,
+    "coords_approx": false,
+    "website": null,
+    "blurb_source": null
   },
   {
     "id": "universal-studios",
@@ -2005,16 +2935,27 @@
     "duration_min": 360,
     "cost_band": 3,
     "indoor": false,
+    "mrt": "Resorts World (Sentosa Express)",
     "hours": [
       [
         "10:00",
         "19:00"
       ]
     ],
-    "blurb": "Full-day theme park. On a layover it eats the whole window, the planner will usually refuse it.",
+    "closed_days": [],
     "min_window_h": 14,
+    "blurb": "Full-day theme park. On a layover it eats the whole window, the planner will usually refuse it.",
+    "captions": [],
+    "safety_notes": null,
+    "image_url": null,
+    "embed_url": null,
     "source": "seed",
-    "active": true
+    "source_ref": null,
+    "active": true,
+    "hours_verified": true,
+    "coords_approx": false,
+    "website": null,
+    "blurb_source": null
   },
   {
     "id": "haw-par-villa",
@@ -2031,16 +2972,27 @@
     "duration_min": 60,
     "cost_band": 0,
     "indoor": false,
+    "mrt": "Haw Par Villa",
     "hours": [
       [
         "09:00",
         "20:00"
       ]
     ],
-    "blurb": "Surreal 1937 park of 1,000 statues from Chinese folklore, including the famously gruesome Ten Courts of Hell.",
+    "closed_days": [],
     "min_window_h": 9,
+    "blurb": "Surreal 1937 park of 1,000 statues from Chinese folklore, including the famously gruesome Ten Courts of Hell.",
+    "captions": [],
+    "safety_notes": null,
+    "image_url": null,
+    "embed_url": null,
     "source": "seed",
-    "active": true
+    "source_ref": null,
+    "active": true,
+    "hours_verified": true,
+    "coords_approx": false,
+    "website": null,
+    "blurb_source": null
   },
   {
     "id": "holland-village",
@@ -2056,11 +3008,63 @@
     "duration_min": 60,
     "cost_band": 2,
     "indoor": false,
+    "mrt": "Holland Village",
     "hours": "24h",
-    "blurb": "Expat-favourite enclave of cafés, bars and Lorong Mambong's al-fresco strip.",
+    "closed_days": [],
     "min_window_h": 9,
+    "blurb": "Expat-favourite enclave of cafés, bars and Lorong Mambong's al-fresco strip.",
+    "captions": [],
+    "safety_notes": null,
+    "image_url": null,
+    "embed_url": null,
     "source": "seed",
-    "active": true
+    "source_ref": null,
+    "active": true,
+    "hours_verified": true,
+    "coords_approx": false,
+    "website": null,
+    "blurb_source": null
+  },
+  {
+    "id": "jewel-rain-vortex",
+    "name": "Jewel Rain Vortex",
+    "area": "Changi",
+    "lat": 1.3602,
+    "lng": 103.9894,
+    "tags": [
+      "photo",
+      "gardens",
+      "views",
+      "architecture"
+    ],
+    "duration_min": 40,
+    "cost_band": 0,
+    "indoor": true,
+    "mrt": "Changi Airport",
+    "hours": [
+      [
+        "10:00",
+        "22:00"
+      ]
+    ],
+    "closed_days": [],
+    "min_window_h": null,
+    "blurb": "The world's tallest indoor waterfall pours 40 metres through a glass doughnut roof inside Jewel, a short walk from every terminal.",
+    "captions": [
+      "The waterfall is louder than you expect, stand at the B2 rail for the spray shot.",
+      "Evening light-and-sound show turns the vortex into a projection screen.",
+      "Walkable from T1 in 5 minutes, T2/T3 via linkbridge in 10."
+    ],
+    "safety_notes": "Landside: you must clear immigration to reach it.",
+    "image_url": null,
+    "embed_url": null,
+    "source": "seed",
+    "source_ref": null,
+    "active": true,
+    "hours_verified": true,
+    "coords_approx": false,
+    "website": null,
+    "blurb_source": null
   },
   {
     "id": "macritchie-treetop",
@@ -2075,6 +3079,7 @@
     "duration_min": 180,
     "cost_band": 0,
     "indoor": false,
+    "mrt": "Botanic Gardens",
     "hours": [
       [
         "09:00",
@@ -2084,11 +3089,19 @@
     "closed_days": [
       1
     ],
-    "blurb": "Rainforest hike to a 250 m suspension bridge through the canopy. Monkeys guaranteed.",
     "min_window_h": 12,
+    "blurb": "Rainforest hike to a 250 m suspension bridge through the canopy. Monkeys guaranteed.",
+    "captions": [],
     "safety_notes": "Long trail (about 7 km loop). Not for a tight layover.",
+    "image_url": null,
+    "embed_url": null,
     "source": "seed",
-    "active": true
+    "source_ref": null,
+    "active": true,
+    "hours_verified": true,
+    "coords_approx": false,
+    "website": null,
+    "blurb_source": null
   },
   {
     "id": "singapore-zoo",
@@ -2103,17 +3116,27 @@
     "duration_min": 180,
     "cost_band": 3,
     "indoor": false,
+    "mrt": "Botanic Gardens",
     "hours": [
       [
         "08:30",
         "18:00"
       ]
     ],
-    "blurb": "Open-concept rainforest zoo; orangutans and a river-wonders section next door.",
+    "closed_days": [],
     "min_window_h": 12,
+    "blurb": "Open-concept rainforest zoo; orangutans and a river-wonders section next door.",
+    "captions": [],
     "safety_notes": "No direct MRT. 35–45 min taxi each way.",
+    "image_url": null,
+    "embed_url": null,
     "source": "seed",
-    "active": true
+    "source_ref": null,
+    "active": true,
+    "hours_verified": true,
+    "coords_approx": false,
+    "website": null,
+    "blurb_source": null
   },
   {
     "id": "st-andrews-cathedral",
@@ -2129,6 +3152,7 @@
     "duration_min": 30,
     "cost_band": 0,
     "indoor": true,
+    "mrt": "City Hall",
     "hours": [
       [
         "09:00",
@@ -2138,9 +3162,19 @@
     "closed_days": [
       0
     ],
+    "min_window_h": null,
     "blurb": "Singapore's largest cathedral is a stellar example of colonial-era architecture and heritage.",
+    "captions": [],
+    "safety_notes": null,
+    "image_url": null,
+    "embed_url": null,
     "source": "seed",
-    "active": true
+    "source_ref": null,
+    "active": true,
+    "hours_verified": true,
+    "coords_approx": false,
+    "website": null,
+    "blurb_source": null
   },
   {
     "id": "capitol-building",
@@ -2156,15 +3190,27 @@
     "duration_min": 30,
     "cost_band": 0,
     "indoor": false,
+    "mrt": "City Hall",
     "hours": [
       [
         "08:00",
         "21:00"
       ]
     ],
+    "closed_days": [],
+    "min_window_h": null,
     "blurb": "The restored 1930s Capitol Theatre and its art deco neighbours, once the grandest cinema in Singapore.",
+    "captions": [],
+    "safety_notes": null,
+    "image_url": null,
+    "embed_url": null,
     "source": "seed",
-    "active": true
+    "source_ref": null,
+    "active": true,
+    "hours_verified": true,
+    "coords_approx": false,
+    "website": null,
+    "blurb_source": null
   },
   {
     "id": "the-cenotaph",
@@ -2179,15 +3225,27 @@
     "duration_min": 20,
     "cost_band": 0,
     "indoor": false,
+    "mrt": "City Hall",
     "hours": [
       [
         "08:00",
         "19:00"
       ]
     ],
+    "closed_days": [],
+    "min_window_h": null,
     "blurb": "This war memorial in Esplanade Park honours the heroes who fought and died during World War I and World War II.",
+    "captions": [],
+    "safety_notes": null,
+    "image_url": null,
+    "embed_url": null,
     "source": "seed",
-    "active": true
+    "source_ref": null,
+    "active": true,
+    "hours_verified": true,
+    "coords_approx": false,
+    "website": null,
+    "blurb_source": null
   },
   {
     "id": "civilian-war-memorial",
@@ -2202,15 +3260,27 @@
     "duration_min": 20,
     "cost_band": 0,
     "indoor": false,
+    "mrt": "Esplanade",
     "hours": [
       [
         "08:00",
         "19:00"
       ]
     ],
+    "closed_days": [],
+    "min_window_h": null,
     "blurb": "Situated at the War Memorial Park in Beach Road, this memorial commemorates civilian victims of the Japanese Occupation in Singapore.",
+    "captions": [],
+    "safety_notes": null,
+    "image_url": null,
+    "embed_url": null,
     "source": "seed",
-    "active": true
+    "source_ref": null,
+    "active": true,
+    "hours_verified": true,
+    "coords_approx": false,
+    "website": null,
+    "blurb_source": null
   },
   {
     "id": "maghain-aboth-synagogue",
@@ -2226,15 +3296,27 @@
     "duration_min": 30,
     "cost_band": 0,
     "indoor": true,
+    "mrt": "Bras Basah",
     "hours": [
       [
         "09:00",
         "17:00"
       ]
     ],
+    "closed_days": [],
+    "min_window_h": null,
     "blurb": "The Maghain Aboth Synagogue is a gem in more ways than one, providing both a snapshot of history and a glimpse into a rich culture.",
+    "captions": [],
+    "safety_notes": null,
+    "image_url": null,
+    "embed_url": null,
     "source": "seed",
-    "active": true
+    "source_ref": null,
+    "active": true,
+    "hours_verified": true,
+    "coords_approx": false,
+    "website": null,
+    "blurb_source": null
   },
   {
     "id": "hong-san-see-temple",
@@ -2250,15 +3332,27 @@
     "duration_min": 30,
     "cost_band": 0,
     "indoor": true,
+    "mrt": "Dhoby Ghaut",
     "hours": [
       [
         "09:00",
         "17:00"
       ]
     ],
+    "closed_days": [],
+    "min_window_h": null,
     "blurb": "Restored by expert craftsmen from China, the Hong San See temple has been brought back to its full glory.",
+    "captions": [],
+    "safety_notes": null,
+    "image_url": null,
+    "embed_url": null,
     "source": "seed",
-    "active": true
+    "source_ref": null,
+    "active": true,
+    "hours_verified": true,
+    "coords_approx": false,
+    "website": null,
+    "blurb_source": null
   },
   {
     "id": "victoria-theatre",
@@ -2273,15 +3367,27 @@
     "duration_min": 45,
     "cost_band": 1,
     "indoor": true,
+    "mrt": "Raffles Place",
     "hours": [
       [
         "10:00",
         "21:00"
       ]
     ],
+    "closed_days": [],
+    "min_window_h": null,
     "blurb": "Singapore's oldest performing arts venue, a Victorian theatre and concert hall pair with a clock tower over Empress Place.",
+    "captions": [],
+    "safety_notes": null,
+    "image_url": null,
+    "embed_url": null,
     "source": "seed",
-    "active": true
+    "source_ref": null,
+    "active": true,
+    "hours_verified": true,
+    "coords_approx": false,
+    "website": null,
+    "blurb_source": null
   },
   {
     "id": "dalhousie-obelisk",
@@ -2296,15 +3402,27 @@
     "duration_min": 20,
     "cost_band": 0,
     "indoor": false,
+    "mrt": "Raffles Place",
     "hours": [
       [
         "08:00",
         "19:00"
       ]
     ],
+    "closed_days": [],
+    "min_window_h": null,
     "blurb": "Dalhousie Obelisk at Empress Place is a famous architectural landmark in Singapore.",
+    "captions": [],
+    "safety_notes": null,
+    "image_url": null,
+    "embed_url": null,
     "source": "seed",
-    "active": true
+    "source_ref": null,
+    "active": true,
+    "hours_verified": true,
+    "coords_approx": false,
+    "website": null,
+    "blurb_source": null
   },
   {
     "id": "raffles-statue",
@@ -2319,15 +3437,27 @@
     "duration_min": 20,
     "cost_band": 0,
     "indoor": false,
+    "mrt": "Raffles Place",
     "hours": [
       [
         "08:00",
         "19:00"
       ]
     ],
+    "closed_days": [],
+    "min_window_h": null,
     "blurb": "The sculpture depicts Sir Stamford Raffles, founder of modern Singapore. Two statues exist, at the Raffles Landing Site and Empress Place.",
+    "captions": [],
+    "safety_notes": null,
+    "image_url": null,
+    "embed_url": null,
     "source": "seed",
-    "active": true
+    "source_ref": null,
+    "active": true,
+    "hours_verified": true,
+    "coords_approx": false,
+    "website": null,
+    "blurb_source": null
   },
   {
     "id": "childrens-museum-singapore",
@@ -2343,6 +3473,7 @@
     "duration_min": 60,
     "cost_band": 1,
     "indoor": true,
+    "mrt": "City Hall",
     "hours": [
       [
         "09:00",
@@ -2352,9 +3483,19 @@
     "closed_days": [
       1
     ],
+    "min_window_h": null,
     "blurb": "The old Philatelic Museum building on Coleman Street, reopened in 2022 as a hands-on museum about growing up in Singapore.",
+    "captions": [],
+    "safety_notes": null,
+    "image_url": null,
+    "embed_url": null,
     "source": "seed",
-    "active": true
+    "source_ref": null,
+    "active": true,
+    "hours_verified": true,
+    "coords_approx": false,
+    "website": null,
+    "blurb_source": null
   },
   {
     "id": "mint-museum-of-toys",
@@ -2369,6 +3510,7 @@
     "duration_min": 60,
     "cost_band": 1,
     "indoor": true,
+    "mrt": "Esplanade",
     "hours": [
       [
         "09:30",
@@ -2378,9 +3520,19 @@
     "closed_days": [
       1
     ],
+    "min_window_h": null,
     "blurb": "This toy museum will delight both adults and kids with the vast collection of vintage toys and memorabilia from around the world.",
+    "captions": [],
+    "safety_notes": null,
+    "image_url": null,
+    "embed_url": null,
     "source": "seed",
-    "active": true
+    "source_ref": null,
+    "active": true,
+    "hours_verified": true,
+    "coords_approx": false,
+    "website": null,
+    "blurb_source": null
   },
   {
     "id": "lim-bo-seng-memorial",
@@ -2395,15 +3547,27 @@
     "duration_min": 20,
     "cost_band": 0,
     "indoor": false,
+    "mrt": "City Hall",
     "hours": [
       [
         "08:00",
         "19:00"
       ]
     ],
+    "closed_days": [],
+    "min_window_h": null,
     "blurb": "This gazetted national monument at Esplanade Park commemorates one of Singapore’s heroes from World War II.",
+    "captions": [],
+    "safety_notes": null,
+    "image_url": null,
+    "embed_url": null,
     "source": "seed",
-    "active": true
+    "source_ref": null,
+    "active": true,
+    "hours_verified": true,
+    "coords_approx": false,
+    "website": null,
+    "blurb_source": null
   },
   {
     "id": "singapore-river",
@@ -2419,10 +3583,22 @@
     "duration_min": 60,
     "cost_band": 1,
     "indoor": false,
+    "mrt": "Clarke Quay",
     "hours": "24h",
+    "closed_days": [],
+    "min_window_h": null,
     "blurb": "Get to know historic Singapore River and its famous quays: Boat Quay, Clarke Quay and Robertson Quay. After all, this is where it all began.",
+    "captions": [],
+    "safety_notes": null,
+    "image_url": null,
+    "embed_url": null,
     "source": "seed",
-    "active": true
+    "source_ref": null,
+    "active": true,
+    "hours_verified": true,
+    "coords_approx": false,
+    "website": null,
+    "blurb_source": null
   },
   {
     "id": "eurasian-heritage-gallery",
@@ -2437,6 +3613,7 @@
     "duration_min": 60,
     "cost_band": 1,
     "indoor": true,
+    "mrt": "Marine Parade",
     "hours": [
       [
         "09:00",
@@ -2446,9 +3623,19 @@
     "closed_days": [
       1
     ],
+    "min_window_h": null,
     "blurb": "This engaging heritage attraction takes you through the history and culture of the Eurasian community in Singapore.",
+    "captions": [],
+    "safety_notes": null,
+    "image_url": null,
+    "embed_url": null,
     "source": "seed",
-    "active": true
+    "source_ref": null,
+    "active": true,
+    "hours_verified": true,
+    "coords_approx": false,
+    "website": null,
+    "blurb_source": null
   },
   {
     "id": "katong-antique-house",
@@ -2463,15 +3650,27 @@
     "duration_min": 60,
     "cost_band": 1,
     "indoor": true,
+    "mrt": "Marine Parade",
     "hours": [
       [
         "11:00",
         "16:30"
       ]
     ],
+    "closed_days": [],
+    "min_window_h": null,
     "blurb": "Step into this fully restored bona fide Peranakan family home, and admire the many antiques and heirlooms worthy of any museum collection.",
+    "captions": [],
+    "safety_notes": null,
+    "image_url": null,
+    "embed_url": null,
     "source": "seed",
-    "active": true
+    "source_ref": null,
+    "active": true,
+    "hours_verified": true,
+    "coords_approx": false,
+    "website": null,
+    "blurb_source": null
   },
   {
     "id": "joo-chiat-katong",
@@ -2487,10 +3686,22 @@
     "duration_min": 60,
     "cost_band": 1,
     "indoor": false,
+    "mrt": "Marine Parade",
     "hours": "24h",
+    "closed_days": [],
+    "min_window_h": null,
     "blurb": "Discover Peranakan culture as you stroll past heritage shophouses, quaint stores and eateries in this charming corner of eastern Singapore.",
+    "captions": [],
+    "safety_notes": null,
+    "image_url": null,
+    "embed_url": null,
     "source": "seed",
-    "active": true
+    "source_ref": null,
+    "active": true,
+    "hours_verified": true,
+    "coords_approx": false,
+    "website": null,
+    "blurb_source": null
   },
   {
     "id": "kranji-war-memorial",
@@ -2505,15 +3716,27 @@
     "duration_min": 20,
     "cost_band": 0,
     "indoor": false,
+    "mrt": "Botanic Gardens",
     "hours": [
       [
         "08:00",
         "18:30"
       ]
     ],
+    "closed_days": [],
+    "min_window_h": null,
     "blurb": "The Kranji War Memorial in Singapore honours the men and women from the Commonwealth who died in the line of duty during World War II.",
+    "captions": [],
+    "safety_notes": null,
+    "image_url": null,
+    "embed_url": null,
     "source": "seed",
-    "active": true
+    "source_ref": null,
+    "active": true,
+    "hours_verified": true,
+    "coords_approx": false,
+    "website": null,
+    "blurb_source": null
   },
   {
     "id": "former-ford-factory",
@@ -2528,15 +3751,27 @@
     "duration_min": 60,
     "cost_band": 1,
     "indoor": true,
+    "mrt": "Holland Village",
     "hours": [
       [
         "12:00",
         "17:30"
       ]
     ],
+    "closed_days": [],
+    "min_window_h": null,
     "blurb": "Where the British surrendered Singapore to Japan in 1942. The restored factory now tells the story of the occupation.",
+    "captions": [],
+    "safety_notes": null,
+    "image_url": null,
+    "embed_url": null,
     "source": "seed",
-    "active": true
+    "source_ref": null,
+    "active": true,
+    "hours_verified": true,
+    "coords_approx": false,
+    "website": null,
+    "blurb_source": null
   },
   {
     "id": "sungei-buloh",
@@ -2551,16 +3786,27 @@
     "duration_min": 90,
     "cost_band": 0,
     "indoor": false,
+    "mrt": "Holland Village",
     "hours": [
       [
         "07:00",
         "18:30"
       ]
     ],
+    "closed_days": [],
     "min_window_h": 8,
     "blurb": "This ecological wonder will transport you into a world rich in animal and plant life.",
+    "captions": [],
+    "safety_notes": null,
+    "image_url": null,
+    "embed_url": null,
     "source": "seed",
-    "active": true
+    "source_ref": null,
+    "active": true,
+    "hours_verified": true,
+    "coords_approx": false,
+    "website": null,
+    "blurb_source": null
   },
   {
     "id": "river-wonders",
@@ -2575,16 +3821,27 @@
     "duration_min": 150,
     "cost_band": 3,
     "indoor": false,
+    "mrt": "Botanic Gardens",
     "hours": [
       [
         "10:00",
         "19:00"
       ]
     ],
+    "closed_days": [],
     "min_window_h": 10,
     "blurb": "Manatees, giant pandas and giant river fish from the Amazon to the Yangtze, in a river-themed wildlife park beside Singapore Zoo.",
+    "captions": [],
+    "safety_notes": null,
+    "image_url": null,
+    "embed_url": null,
     "source": "seed",
-    "active": true
+    "source_ref": null,
+    "active": true,
+    "hours_verified": true,
+    "coords_approx": false,
+    "website": null,
+    "blurb_source": null
   },
   {
     "id": "macritchie",
@@ -2599,16 +3856,27 @@
     "duration_min": 90,
     "cost_band": 0,
     "indoor": false,
+    "mrt": "Botanic Gardens",
     "hours": [
       [
         "07:00",
         "18:30"
       ]
     ],
+    "closed_days": [],
     "min_window_h": 8,
     "blurb": "The attractions around MacRitchie Reservoir is a playground of nature for those who love the outdoors.",
+    "captions": [],
+    "safety_notes": null,
+    "image_url": null,
+    "embed_url": null,
     "source": "seed",
-    "active": true
+    "source_ref": null,
+    "active": true,
+    "hours_verified": true,
+    "coords_approx": false,
+    "website": null,
+    "blurb_source": null
   },
   {
     "id": "reflections-at-bukit-chandu",
@@ -2623,15 +3891,27 @@
     "duration_min": 20,
     "cost_band": 0,
     "indoor": false,
+    "mrt": "Haw Par Villa",
     "hours": [
       [
         "09:30",
         "17:00"
       ]
     ],
+    "closed_days": [],
+    "min_window_h": null,
     "blurb": "This heritage centre relives the Battle of Pasir Panjang, one of the fiercest battles fought against the Japanese in Singapore during World War II.",
+    "captions": [],
+    "safety_notes": null,
+    "image_url": null,
+    "embed_url": null,
     "source": "seed",
-    "active": true
+    "source_ref": null,
+    "active": true,
+    "hours_verified": true,
+    "coords_approx": false,
+    "website": null,
+    "blurb_source": null
   },
   {
     "id": "chinese-heritage-centre",
@@ -2646,15 +3926,27 @@
     "duration_min": 60,
     "cost_band": 1,
     "indoor": true,
+    "mrt": "Haw Par Villa",
     "hours": [
       [
         "10:00",
         "17:00"
       ]
     ],
+    "closed_days": [],
+    "min_window_h": null,
     "blurb": "The Chinese Heritage Centre in Singapore is where you can find out more about overseas Chinese communities and their culture.",
+    "captions": [],
+    "safety_notes": null,
+    "image_url": null,
+    "embed_url": null,
     "source": "seed",
-    "active": true
+    "source_ref": null,
+    "active": true,
+    "hours_verified": true,
+    "coords_approx": false,
+    "website": null,
+    "blurb_source": null
   },
   {
     "id": "nus-university-museum",
@@ -2669,6 +3961,7 @@
     "duration_min": 60,
     "cost_band": 1,
     "indoor": true,
+    "mrt": "Haw Par Villa",
     "hours": [
       [
         "10:00",
@@ -2679,9 +3972,19 @@
       0,
       1
     ],
+    "min_window_h": null,
     "blurb": "Get a deeper insight into Asian art and artefacts at this museum on the campus of the National University of Singapore.",
+    "captions": [],
+    "safety_notes": null,
+    "image_url": null,
+    "embed_url": null,
     "source": "seed",
-    "active": true
+    "source_ref": null,
+    "active": true,
+    "hours_verified": true,
+    "coords_approx": false,
+    "website": null,
+    "blurb_source": null
   },
   {
     "id": "singapore-science-centre",
@@ -2697,15 +4000,27 @@
     "duration_min": 30,
     "cost_band": 0,
     "indoor": false,
+    "mrt": "Holland Village",
     "hours": [
       [
         "10:00",
         "18:00"
       ]
     ],
+    "closed_days": [],
+    "min_window_h": null,
     "blurb": "This enlightening attraction holds the largest collection of educational materials devoted to science in Singapore.",
+    "captions": [],
+    "safety_notes": null,
+    "image_url": null,
+    "embed_url": null,
     "source": "seed",
-    "active": true
+    "source_ref": null,
+    "active": true,
+    "hours_verified": true,
+    "coords_approx": false,
+    "website": null,
+    "blurb_source": null
   },
   {
     "id": "chinese-garden",
@@ -2721,15 +4036,27 @@
     "duration_min": 45,
     "cost_band": 0,
     "indoor": false,
+    "mrt": "Holland Village",
     "hours": [
       [
         "05:30",
         "23:59"
       ]
     ],
+    "closed_days": [],
+    "min_window_h": null,
     "blurb": "Pagodas, bridges and a stone boat in imperial Chinese style, reopened in 2024 as part of Jurong Lake Gardens.",
+    "captions": [],
+    "safety_notes": null,
+    "image_url": null,
+    "embed_url": null,
     "source": "seed",
-    "active": true
+    "source_ref": null,
+    "active": true,
+    "hours_verified": true,
+    "coords_approx": false,
+    "website": null,
+    "blurb_source": null
   },
   {
     "id": "sit-flats",
@@ -2745,15 +4072,27 @@
     "duration_min": 30,
     "cost_band": 0,
     "indoor": false,
+    "mrt": "Tiong Bahru",
     "hours": [
       [
         "08:00",
         "21:00"
       ]
     ],
+    "closed_days": [],
+    "min_window_h": null,
     "blurb": "Take a walk back in time through the Art Deco architecture in the heritage neighbourhood of Tiong Bahru.",
+    "captions": [],
+    "safety_notes": null,
+    "image_url": null,
+    "embed_url": null,
     "source": "seed",
-    "active": true
+    "source_ref": null,
+    "active": true,
+    "hours_verified": true,
+    "coords_approx": false,
+    "website": null,
+    "blurb_source": null
   },
   {
     "id": "malay-heritage-centre",
@@ -2768,6 +4107,7 @@
     "duration_min": 60,
     "cost_band": 1,
     "indoor": true,
+    "mrt": "Bugis",
     "hours": [
       [
         "10:00",
@@ -2777,9 +4117,19 @@
     "closed_days": [
       1
     ],
+    "min_window_h": null,
     "blurb": "The Malay Heritage Centre is a must-visit if you’re keen on learning about the rich heritage and culture of Singapore’s Malay community.",
+    "captions": [],
+    "safety_notes": null,
+    "image_url": null,
+    "embed_url": null,
     "source": "seed",
-    "active": true
+    "source_ref": null,
+    "active": true,
+    "hours_verified": true,
+    "coords_approx": false,
+    "website": null,
+    "blurb_source": null
   },
   {
     "id": "gillman-barracks",
@@ -2794,6 +4144,7 @@
     "duration_min": 45,
     "cost_band": 1,
     "indoor": true,
+    "mrt": "HarbourFront",
     "hours": [
       [
         "11:00",
@@ -2803,9 +4154,19 @@
     "closed_days": [
       1
     ],
+    "min_window_h": null,
     "blurb": "A former British military camp turned contemporary art cluster, with galleries spread across the old barrack blocks.",
+    "captions": [],
+    "safety_notes": null,
+    "image_url": null,
+    "embed_url": null,
     "source": "seed",
-    "active": true
+    "source_ref": null,
+    "active": true,
+    "hours_verified": true,
+    "coords_approx": false,
+    "website": null,
+    "blurb_source": null
   },
   {
     "id": "sam-tanjong-pagar-distripark",
@@ -2820,15 +4181,27 @@
     "duration_min": 60,
     "cost_band": 1,
     "indoor": true,
+    "mrt": "Outram Park",
     "hours": [
       [
         "10:00",
         "19:00"
       ]
     ],
+    "closed_days": [],
+    "min_window_h": null,
     "blurb": "Singapore Art Museum's contemporary art space, in a converted port warehouse while its Bras Basah home is redeveloped.",
+    "captions": [],
+    "safety_notes": null,
+    "image_url": null,
+    "embed_url": null,
     "source": "seed",
-    "active": true
+    "source_ref": null,
+    "active": true,
+    "hours_verified": true,
+    "coords_approx": false,
+    "website": null,
+    "blurb_source": null
   },
   {
     "id": "hortpark",
@@ -2844,15 +4217,27 @@
     "duration_min": 45,
     "cost_band": 0,
     "indoor": false,
+    "mrt": "Haw Par Villa",
     "hours": [
       [
         "06:00",
         "22:00"
       ]
     ],
+    "closed_days": [],
+    "min_window_h": null,
     "blurb": "Lose yourself in this dreamscape of stunning gardens that will make you forget the bustle of city.",
+    "captions": [],
+    "safety_notes": null,
+    "image_url": null,
+    "embed_url": null,
     "source": "seed",
-    "active": true
+    "source_ref": null,
+    "active": true,
+    "hours_verified": true,
+    "coords_approx": false,
+    "website": null,
+    "blurb_source": null
   },
   {
     "id": "labrador-nature-reserve",
@@ -2867,16 +4252,27 @@
     "duration_min": 90,
     "cost_band": 0,
     "indoor": false,
+    "mrt": "HarbourFront",
     "hours": [
       [
         "07:00",
         "18:30"
       ]
     ],
+    "closed_days": [],
     "min_window_h": 8,
     "blurb": "With its rich biodiversity and war relics, nature lovers and history enthusiasts will find plenty to do at Labrador Nature Reserve.",
+    "captions": [],
+    "safety_notes": null,
+    "image_url": null,
+    "embed_url": null,
     "source": "seed",
-    "active": true
+    "source_ref": null,
+    "active": true,
+    "hours_verified": true,
+    "coords_approx": false,
+    "website": null,
+    "blurb_source": null
   },
   {
     "id": "jamae-mosque-masjid-chulia",
@@ -2892,15 +4288,27 @@
     "duration_min": 30,
     "cost_band": 0,
     "indoor": true,
+    "mrt": "Chinatown",
     "hours": [
       [
         "09:00",
         "17:00"
       ]
     ],
+    "closed_days": [],
+    "min_window_h": null,
     "blurb": "Also known as Masjid Chulia, Jamae Mosque is one of Singapore’s oldest mosques and a prominent landmark in Chinatown since the 1820s.",
+    "captions": [],
+    "safety_notes": null,
+    "image_url": null,
+    "embed_url": null,
     "source": "seed",
-    "active": true
+    "source_ref": null,
+    "active": true,
+    "hours_verified": true,
+    "coords_approx": false,
+    "website": null,
+    "blurb_source": null
   },
   {
     "id": "nus-baba-house",
@@ -2915,15 +4323,27 @@
     "duration_min": 60,
     "cost_band": 1,
     "indoor": true,
+    "mrt": "Outram Park",
     "hours": [
       [
         "10:00",
         "20:00"
       ]
     ],
+    "closed_days": [],
+    "min_window_h": null,
     "blurb": "This heritage house lends rich insight into Singapore's Peranakan community, thanks to beautifully preserved architecture and artefacts.",
+    "captions": [],
+    "safety_notes": null,
+    "image_url": null,
+    "embed_url": null,
     "source": "seed",
-    "active": true
+    "source_ref": null,
+    "active": true,
+    "hours_verified": true,
+    "coords_approx": false,
+    "website": null,
+    "blurb_source": null
   },
   {
     "id": "red-dot-design-museum",
@@ -2938,15 +4358,27 @@
     "duration_min": 60,
     "cost_band": 1,
     "indoor": true,
+    "mrt": "Bayfront",
     "hours": [
       [
         "11:00",
         "19:00"
       ]
     ],
+    "closed_days": [],
+    "min_window_h": null,
     "blurb": "This museum holds more than 1,000 award-winning products, communications and concepts that will delight design fans.",
+    "captions": [],
+    "safety_notes": null,
+    "image_url": null,
+    "embed_url": null,
     "source": "seed",
-    "active": true
+    "source_ref": null,
+    "active": true,
+    "hours_verified": true,
+    "coords_approx": false,
+    "website": null,
+    "blurb_source": null
   },
   {
     "id": "sun-yat-sen-nanyang-memorial-hall",
@@ -2961,6 +4393,7 @@
     "duration_min": 20,
     "cost_band": 0,
     "indoor": false,
+    "mrt": "Farrer Park",
     "hours": [
       [
         "10:00",
@@ -2970,9 +4403,19 @@
     "closed_days": [
       1
     ],
+    "min_window_h": null,
     "blurb": "A colonial villa in Balestier where Sun Yat Sen planned China's 1911 revolution, now a museum about his life.",
+    "captions": [],
+    "safety_notes": null,
+    "image_url": null,
+    "embed_url": null,
     "source": "seed",
-    "active": true
+    "source_ref": null,
+    "active": true,
+    "hours_verified": true,
+    "coords_approx": false,
+    "website": null,
+    "blurb_source": null
   },
   {
     "id": "the-japanese-cemetery-park",
@@ -2987,15 +4430,27 @@
     "duration_min": 20,
     "cost_band": 0,
     "indoor": false,
+    "mrt": "Paya Lebar",
     "hours": [
       [
         "08:00",
         "19:00"
       ]
     ],
+    "closed_days": [],
+    "min_window_h": null,
     "blurb": "Located in Hougang, this is the largest Japanese cemetery in Southeast Asia and the burial ground of Singapore’s early Japanese community.",
+    "captions": [],
+    "safety_notes": null,
+    "image_url": null,
+    "embed_url": null,
     "source": "seed",
-    "active": true
+    "source_ref": null,
+    "active": true,
+    "hours_verified": true,
+    "coords_approx": false,
+    "website": null,
+    "blurb_source": null
   },
   {
     "id": "kusu-island",
@@ -3010,16 +4465,27 @@
     "duration_min": 90,
     "cost_band": 0,
     "indoor": false,
+    "mrt": "Resorts World (Sentosa Express)",
     "hours": [
       [
         "07:00",
         "18:30"
       ]
     ],
+    "closed_days": [],
     "min_window_h": 8,
     "blurb": "If you’re looking for local heritage off the beaten track with a good dash of nature, Kusu Island hits the spot.",
+    "captions": [],
+    "safety_notes": null,
+    "image_url": null,
+    "embed_url": null,
     "source": "seed",
-    "active": true
+    "source_ref": null,
+    "active": true,
+    "hours_verified": true,
+    "coords_approx": false,
+    "website": null,
+    "blurb_source": null
   },
   {
     "id": "adventure-cove-waterpark",
@@ -3034,16 +4500,27 @@
     "duration_min": 180,
     "cost_band": 3,
     "indoor": false,
+    "mrt": "Beach (Sentosa Express)",
     "hours": [
       [
         "10:00",
         "18:00"
       ]
     ],
+    "closed_days": [],
     "min_window_h": 12,
     "blurb": "Make a big splash at this aquatic adventure park at Resorts World™ Sentosa.",
+    "captions": [],
+    "safety_notes": null,
+    "image_url": null,
+    "embed_url": null,
     "source": "seed",
-    "active": true
+    "source_ref": null,
+    "active": true,
+    "hours_verified": true,
+    "coords_approx": false,
+    "website": null,
+    "blurb_source": null
   },
   {
     "id": "resorts-world-sentosa",
@@ -3058,16 +4535,27 @@
     "duration_min": 180,
     "cost_band": 3,
     "indoor": false,
+    "mrt": "Resorts World (Sentosa Express)",
     "hours": [
       [
         "10:00",
         "21:30"
       ]
     ],
+    "closed_days": [],
     "min_window_h": 12,
     "blurb": "Experience endless excitement at Resorts World Sentosa with a variety of attractions and entertainment hot spots.",
+    "captions": [],
+    "safety_notes": null,
+    "image_url": null,
+    "embed_url": null,
     "source": "seed",
-    "active": true
+    "source_ref": null,
+    "active": true,
+    "hours_verified": true,
+    "coords_approx": false,
+    "website": null,
+    "blurb_source": null
   },
   {
     "id": "chek-jawa",
@@ -3082,16 +4570,27 @@
     "duration_min": 90,
     "cost_band": 0,
     "indoor": false,
+    "mrt": "Changi Airport",
     "hours": [
       [
         "07:00",
         "18:30"
       ]
     ],
+    "closed_days": [],
     "min_window_h": 8,
     "blurb": "A world away from shopping malls and glitzy hotels, this natural wonder is one of Singapore’s richest eco-systems.",
+    "captions": [],
+    "safety_notes": null,
+    "image_url": null,
+    "embed_url": null,
     "source": "seed",
-    "active": true
+    "source_ref": null,
+    "active": true,
+    "hours_verified": true,
+    "coords_approx": false,
+    "website": null,
+    "blurb_source": null
   },
   {
     "id": "pulau-ubin",
@@ -3106,16 +4605,27 @@
     "duration_min": 90,
     "cost_band": 0,
     "indoor": false,
+    "mrt": "Changi Airport",
     "hours": [
       [
         "07:00",
         "18:30"
       ]
     ],
+    "closed_days": [],
     "min_window_h": 8,
     "blurb": "Gravel roads, lush forests and abundant wildlife – Pulau Ubin is a living showcase of what Singapore was like in the 1960s.",
+    "captions": [],
+    "safety_notes": null,
+    "image_url": null,
+    "embed_url": null,
     "source": "seed",
-    "active": true
+    "source_ref": null,
+    "active": true,
+    "hours_verified": true,
+    "coords_approx": false,
+    "website": null,
+    "blurb_source": null
   },
   {
     "id": "kranji-reservoir-park",
@@ -3138,12 +4648,7 @@
     "source": "osm",
     "blurb": "Kranji Reservoir Park is a 9-hectare park located next to Kranji Reservoir along Kranji Way in Singapore. It overlooks Johor Straits and is a favourite hotspot among fishing enthusiasts and weekend picnickers. Facilities include seventeen fishing grounds, pavilions and benches.",
     "blurb_source": "wikipedia",
-    "hours": [
-      [
-        "07:00",
-        "19:00"
-      ]
-    ],
+    "hours": "24h",
     "closed_days": [],
     "hours_verified": false
   },
@@ -3198,12 +4703,7 @@
     "source": "osm",
     "blurb": "Pasir Ris Park is a beach park located in the eastern part of Singapore. It covers an area of 70 hectares (170 acres), and was partially built on reclaimed land.",
     "blurb_source": "wikipedia",
-    "hours": [
-      [
-        "07:00",
-        "19:00"
-      ]
-    ],
+    "hours": "24h",
     "closed_days": [],
     "hours_verified": false
   },
@@ -3228,12 +4728,7 @@
     "source": "osm",
     "blurb": "Thomson Nature Park is a nature park in Singapore. It is located adjacent to Central Catchment Nature Reserve near where the former Thomson Road Grand Prix circuit was held.",
     "blurb_source": "wikipedia",
-    "hours": [
-      [
-        "07:00",
-        "19:00"
-      ]
-    ],
+    "hours": "24h",
     "closed_days": [],
     "hours_verified": false
   },
@@ -3318,12 +4813,7 @@
     "source": "osm",
     "blurb": "Upper Seletar Reservoir is Singapore's third impounding reservoir, after MacRitchie Reservoir and Peirce Reservoir (now the Upper Peirce Reservoir and the Lower Peirce Reservoir). It is located within the Central Water Catchment area of Singapore island.",
     "blurb_source": "wikipedia",
-    "hours": [
-      [
-        "07:00",
-        "19:00"
-      ]
-    ],
+    "hours": "24h",
     "closed_days": [],
     "hours_verified": false
   },
@@ -3348,12 +4838,7 @@
     "source": "osm",
     "blurb": "Windsor Nature Park is a nature park in Singapore.  It was opened on 22 April 2017.  The park forms a green buffer zone between Central Catchment Nature Reserve and the urbanized areas of Singapore.  The park contains three hiking trails and a canopy walkway.",
     "blurb_source": "wikipedia",
-    "hours": [
-      [
-        "07:00",
-        "19:00"
-      ]
-    ],
+    "hours": "24h",
     "closed_days": [],
     "hours_verified": false
   },
@@ -3378,12 +4863,7 @@
     "source": "osm",
     "blurb": "Sengkang Riverside Park is a riverine park located at Anchorvale Street and Fernvale Street abutting Sungei Punggol, Singapore. The park consist of three open-space land parcels and is also home to a constructed wetland.",
     "blurb_source": "wikipedia",
-    "hours": [
-      [
-        "07:00",
-        "19:00"
-      ]
-    ],
+    "hours": "24h",
     "closed_days": [],
     "hours_verified": false
   },
@@ -3408,12 +4888,7 @@
     "source": "osm",
     "blurb": "Sengkang is a planning area and residential town located in the North-East Region of Singapore. The town is the most populous in the region, being home to 265,830 residents as of 2026.",
     "blurb_source": "wikipedia",
-    "hours": [
-      [
-        "07:00",
-        "19:00"
-      ]
-    ],
+    "hours": "24h",
     "closed_days": [],
     "hours_verified": false
   },
@@ -3438,12 +4913,7 @@
     "source": "osm",
     "blurb": "West Coast Park is a large regional park located at the far west of Queenstown, Singapore.",
     "blurb_source": "wikipedia",
-    "hours": [
-      [
-        "07:00",
-        "19:00"
-      ]
-    ],
+    "hours": "24h",
     "closed_days": [],
     "hours_verified": false
   },
@@ -3468,12 +4938,7 @@
     "source": "osm",
     "blurb": "East Coast Park (ECP) is a beach and a park on the southeastern coast of Singapore. It stretches along the south of Marine Parade, Bedok, and Tampines.",
     "blurb_source": "wikipedia",
-    "hours": [
-      [
-        "07:00",
-        "19:00"
-      ]
-    ],
+    "hours": "24h",
     "closed_days": [],
     "hours_verified": false
   },
@@ -3498,12 +4963,7 @@
     "source": "osm",
     "blurb": "Jurong Lake Gardens is the name used to refer to the three interconnected gardens located in and around Jurong Lake in western Singapore, these being the Chinese, Japanese, and Lakeside gardens.",
     "blurb_source": "wikipedia",
-    "hours": [
-      [
-        "07:00",
-        "19:00"
-      ]
-    ],
+    "hours": "24h",
     "closed_days": [],
     "hours_verified": false
   },
@@ -3528,12 +4988,7 @@
     "source": "osm",
     "blurb": "Punggol Park is a park located in Hougang, in the north-eastern part of Singapore. The park is 16 hectares (40 acres) in size, with a 5-hectare (12-acre) lake. Kite flying is not allowed here due to the proximity of Paya Lebar Air Base.",
     "blurb_source": "wikipedia",
-    "hours": [
-      [
-        "07:00",
-        "19:00"
-      ]
-    ],
+    "hours": "24h",
     "closed_days": [],
     "hours_verified": false
   },
@@ -3618,12 +5073,7 @@
     "source": "osm",
     "blurb": "Yishun Park is a 14-hectare park located in Yishun, Singapore. It is within the vicinity of Northland Primary School, SAFRA Yishun Country Club and Yishun Park Hawker Centre. The park is connected to Yishun Pond Park by an 84-meter elevated bridge.",
     "blurb_source": "wikipedia",
-    "hours": [
-      [
-        "07:00",
-        "19:00"
-      ]
-    ],
+    "hours": "24h",
     "closed_days": [],
     "hours_verified": false
   },
@@ -3648,12 +5098,7 @@
     "source": "osm",
     "blurb": "Pasir Ris Town Park is a 14-hectare park located in the residential area of Pasir Ris, Singapore. It features wide open spaces and a large marine pond for fishing.",
     "blurb_source": "wikipedia",
-    "hours": [
-      [
-        "07:00",
-        "19:00"
-      ]
-    ],
+    "hours": "24h",
     "closed_days": [],
     "hours_verified": false
   },
@@ -3738,12 +5183,7 @@
     "source": "osm",
     "blurb": "Ang Mo Kio Town Garden East is a community park in Ang Mo Kio, Singapore. It is situated at the junction of Ang Mo Kio Avenues 3 and 8, behind Ang Mo Kio MRT station.",
     "blurb_source": "wikipedia",
-    "hours": [
-      [
-        "07:00",
-        "19:00"
-      ]
-    ],
+    "hours": "24h",
     "closed_days": [],
     "hours_verified": false
   },
@@ -3768,12 +5208,7 @@
     "source": "osm",
     "blurb": "Ang Mo Kio Town Garden West is a community park that is situated opposite Ang Mo Kio Library, along Ang Mo Kio Avenue 6.",
     "blurb_source": "wikipedia",
-    "hours": [
-      [
-        "07:00",
-        "19:00"
-      ]
-    ],
+    "hours": "24h",
     "closed_days": [],
     "hours_verified": false
   },
@@ -3798,12 +5233,7 @@
     "source": "osm",
     "blurb": "Pearl's Hill City Park is a 9 hectares city park in Singapore built around a reservoir on top of Pearl's Hill. It is located behind Outram Park MRT station.",
     "blurb_source": "wikipedia",
-    "hours": [
-      [
-        "07:00",
-        "19:00"
-      ]
-    ],
+    "hours": "24h",
     "closed_days": [],
     "hours_verified": false
   },
@@ -3828,12 +5258,7 @@
     "source": "osm",
     "blurb": "Jurong Hill is a scenic hill situated in western Singapore off Jalan Ahmad Ibrahim. It is enveloped in 15 hectares of lush greenery and stands at 60 meters. As of 5 October 2023, Jurong Hill has been closed for construction works.",
     "blurb_source": "wikipedia",
-    "hours": [
-      [
-        "07:00",
-        "19:00"
-      ]
-    ],
+    "hours": "24h",
     "closed_days": [],
     "hours_verified": false
   },
@@ -3858,12 +5283,7 @@
     "source": "osm",
     "blurb": "The Istana Park is a park in the Civic District of Singapore. Bounded by Buyong Road, Penang Road, Orchard Road, and Penang Lane, Istana Park is opposite the Istana, which is the namesake of the park.",
     "blurb_source": "wikipedia",
-    "hours": [
-      [
-        "07:00",
-        "19:00"
-      ]
-    ],
+    "hours": "24h",
     "closed_days": [],
     "hours_verified": false
   },
@@ -3978,12 +5398,7 @@
     "source": "osm",
     "blurb": "Sembawang Park is a 15-hectare park situated in Sembawang, in the north of Singapore facing the Straits of Johor overlooking Malaysia. It is located at the end of Sembawang Road, where the former Sembawang Road End Bus Terminal was.",
     "blurb_source": "wikipedia",
-    "hours": [
-      [
-        "07:00",
-        "19:00"
-      ]
-    ],
+    "hours": "24h",
     "closed_days": [],
     "hours_verified": false
   },
@@ -4008,12 +5423,7 @@
     "source": "osm",
     "blurb": "Dhoby Ghaut Green is an urban park in Singapore located adjacent to Dhoby Ghaut MRT station, opposite the Park Mall.",
     "blurb_source": "wikipedia",
-    "hours": [
-      [
-        "07:00",
-        "19:00"
-      ]
-    ],
+    "hours": "24h",
     "closed_days": [],
     "hours_verified": false
   },
@@ -4038,12 +5448,7 @@
     "source": "osm",
     "blurb": "Kent Ridge Park is a 47-hectare public park located in Kent Ridge, Singapore, between the National University of Singapore and the Singapore Science Park. Due to its undisturbed habitat and abundant plant life, it is a popular venue for bird-watchers and eco-tourists.",
     "blurb_source": "wikipedia",
-    "hours": [
-      [
-        "07:00",
-        "19:00"
-      ]
-    ],
+    "hours": "24h",
     "closed_days": [],
     "hours_verified": false
   },
@@ -4158,12 +5563,7 @@
     "source": "osm",
     "blurb": "Tanjong Pagar Park, formerly known as Tanjong Pagar RICOH Park, is an urban park situated around the Guoco Tower (formerly Tanjong Pagar Centre) in Singapore. The entire complex is located above Tanjong Pagar MRT station.",
     "blurb_source": "wikipedia",
-    "hours": [
-      [
-        "07:00",
-        "19:00"
-      ]
-    ],
+    "hours": "24h",
     "closed_days": [],
     "hours_verified": false
   },
@@ -4213,12 +5613,7 @@
     "source": "osm",
     "blurb": "Admiralty Park is a national park in Singapore that is 27 hectares in size. It is made unique by its river valley shaped hilly terrain.",
     "blurb_source": "wikipedia",
-    "hours": [
-      [
-        "07:00",
-        "19:00"
-      ]
-    ],
+    "hours": "24h",
     "closed_days": [],
     "hours_verified": false
   },
@@ -4226,8 +5621,8 @@
     "id": "jurong-central-park",
     "name": "Jurong Central Park",
     "area": "West",
-    "lat": 1.33788,
-    "lng": 103.7078,
+    "lat": 1.33787,
+    "lng": 103.70781,
     "tags": [
       "nature",
       "gardens",
@@ -4243,12 +5638,7 @@
     "source": "osm",
     "blurb": "Jurong Central Park is a regional park located in Jurong West, Singapore.",
     "blurb_source": "wikipedia",
-    "hours": [
-      [
-        "07:00",
-        "19:00"
-      ]
-    ],
+    "hours": "24h",
     "closed_days": [],
     "hours_verified": false
   },
@@ -4752,12 +6142,7 @@
     "source": "osm",
     "blurb": "38 Oxley Road is an eight-bedroom two-storey bungalow located near Orchard Road, Singapore. The house was built in the late 19th century and was the residence of the first prime minister of Singapore, Lee Kuan Yew, from the 1940s until his death in 2015.",
     "blurb_source": "wikipedia",
-    "hours": [
-      [
-        "08:00",
-        "21:00"
-      ]
-    ],
+    "hours": "24h",
     "closed_days": [],
     "hours_verified": false
   },
@@ -4842,12 +6227,7 @@
     "source": "osm",
     "blurb": "Marsiling Park, formerly Woodlands Town Garden, is a community park in Woodlands, Singapore, located at Woodlands Centre Road, adjacent to Bukit Timah Expressway.",
     "blurb_source": "wikipedia",
-    "hours": [
-      [
-        "07:00",
-        "19:00"
-      ]
-    ],
+    "hours": "24h",
     "closed_days": [],
     "hours_verified": false
   },
@@ -4872,12 +6252,7 @@
     "source": "osm",
     "blurb": "Woodlands Waterfront Park is a park located at Admiralty Road West in Woodlands, Singapore and overlooks the sea from the north. 93 mi) waterfront promenade. Central Spine and Green Lawn provides a spacious spots to hold events and picnics.",
     "blurb_source": "wikipedia",
-    "hours": [
-      [
-        "07:00",
-        "19:00"
-      ]
-    ],
+    "hours": "24h",
     "closed_days": [],
     "hours_verified": false
   },
@@ -4902,12 +6277,7 @@
     "source": "osm",
     "blurb": "Clementi Woods Park is a community park in Singapore that is situated at Clementi Road next to Kent Vale, and along West Coast Road next to West Coast Plaza. It includes a playground, Nature Playgarden, an amphitheatre, and a dog run.",
     "blurb_source": "wikipedia",
-    "hours": [
-      [
-        "07:00",
-        "19:00"
-      ]
-    ],
+    "hours": "24h",
     "closed_days": [],
     "hours_verified": false
   },
@@ -5052,12 +6422,7 @@
     "source": "osm",
     "blurb": "Tampines Eco Green is a park in Tampines, Singapore. It is bordered by Tampines Expressway, Tampines Avenue 12 and the Sungei Tampines canal. The park was opened to the public in April 2011.",
     "blurb_source": "wikipedia",
-    "hours": [
-      [
-        "07:00",
-        "19:00"
-      ]
-    ],
+    "hours": "24h",
     "closed_days": [],
     "hours_verified": false
   },
@@ -5471,12 +6836,7 @@
     "source": "osm",
     "blurb": "Tiong Bahru Park is a public park between Henderson, Bukit Merah and Lower Delta Road in Singapore. First developed around 1967, it combined with a nursery site in 1977 and in 2000, it was redeveloped.",
     "blurb_source": "wikipedia",
-    "hours": [
-      [
-        "07:00",
-        "19:00"
-      ]
-    ],
+    "hours": "24h",
     "closed_days": [],
     "hours_verified": false
   },
@@ -5561,12 +6921,7 @@
     "source": "osm",
     "blurb": "Matilda House, located at Punggol Walk in Punggol, Singapore, is one of the oldest houses in Singapore. It is currently part of a new residential condominium complex, \"A Treasure Trove\", which was completed in 2015.",
     "blurb_source": "wikipedia",
-    "hours": [
-      [
-        "08:00",
-        "21:00"
-      ]
-    ],
+    "hours": "24h",
     "closed_days": [],
     "hours_verified": false
   },
@@ -5831,12 +7186,7 @@
     "source": "osm",
     "blurb": "Choa Chu Kang Park is a community park in Choa Chu Kang, Singapore, located beside Kranji Expressway and along Choa Chu Kang Drive.",
     "blurb_source": "wikipedia",
-    "hours": [
-      [
-        "07:00",
-        "19:00"
-      ]
-    ],
+    "hours": "24h",
     "closed_days": [],
     "hours_verified": false
   },
@@ -5861,12 +7211,7 @@
     "source": "osm",
     "blurb": "Bukit Canberra is an integrated sports and community hub next to Sembawang MRT station. The hub houses facilities including an indoor sports hall, the largest ActiveSG gym in Singapore, a six-lane sheltered swimming pool, and an eight-lane lap pool.",
     "blurb_source": "wikipedia",
-    "hours": [
-      [
-        "07:00",
-        "19:00"
-      ]
-    ],
+    "hours": "24h",
     "closed_days": [],
     "hours_verified": false
   },
@@ -5890,6 +7235,36 @@
     "active": true,
     "source": "osm",
     "blurb": "Masjid Sallim Mattar is a mosque located along Mattar Road in MacPherson, Singapore. Built in 1935, it is named after its founder, Sheikh Sallim bin Taha Mattar, who endowed land and assets for the construction of the mosque.",
+    "blurb_source": "wikipedia",
+    "hours": [
+      [
+        "09:00",
+        "17:00"
+      ]
+    ],
+    "closed_days": [],
+    "hours_verified": false
+  },
+  {
+    "id": "darma-muneeswaran-temple",
+    "name": "Darma Muneeswaran Temple",
+    "area": "Little India",
+    "lat": 1.36847,
+    "lng": 103.86987,
+    "tags": [
+      "heritage",
+      "culture",
+      "temple"
+    ],
+    "duration_min": 30,
+    "cost_band": 0,
+    "indoor": true,
+    "captions": [],
+    "website": null,
+    "source_ref": "osm:way/478168391",
+    "active": true,
+    "source": "osm",
+    "blurb": "Darma Muneeswaran Temple is a Hindu temple located at 17 Serangoon North Avenue 1, Singapore. Established around 1900, the temple is dedicated to Lord Darma Muneeswaran, a form of the Hindu deity Shiva.",
     "blurb_source": "wikipedia",
     "hours": [
       [
@@ -5951,12 +7326,7 @@
     "source": "osm",
     "blurb": "Upper Peirce Reservoir Park is a 5 hectares park besides Upper Peirce Reservoir.  It was opened by the then Prime Minister Lee Kuan Yew on 27 February 1977.",
     "blurb_source": "wikipedia",
-    "hours": [
-      [
-        "07:00",
-        "19:00"
-      ]
-    ],
+    "hours": "24h",
     "closed_days": [],
     "hours_verified": false
   },
@@ -6011,12 +7381,7 @@
     "source": "osm",
     "blurb": "Pasir Panjang Pillbox is a strengthened-concrete defensive structure from World War II, located in Pasir Panjang in the southwestern area of Singapore.",
     "blurb_source": "wikipedia",
-    "hours": [
-      [
-        "08:00",
-        "21:00"
-      ]
-    ],
+    "hours": "24h",
     "closed_days": [],
     "hours_verified": false
   },
@@ -6131,12 +7496,7 @@
     "source": "osm",
     "blurb": "Bukit Batok Town Park is a nature park located in the precinct of Guilin in the town of Bukit Batok, Singapore. The park was created from a disused granite quarry. As such, it has a resemblance to the granite rock formations in Guilin, China.",
     "blurb_source": "wikipedia",
-    "hours": [
-      [
-        "07:00",
-        "19:00"
-      ]
-    ],
+    "hours": "24h",
     "closed_days": [],
     "hours_verified": false
   },
@@ -6400,12 +7760,7 @@
     "source": "osm",
     "blurb": "The Bukit Batok Memorial is located on top of the tranquil Bukit Batok Hill upon which once stood two war memorials built by Australian POWs to commemorate the war dead of the Japanese and the Allies who fought during the decisive Battle of Bukit Timah in Singapore during the Second World War.",
     "blurb_source": "wikipedia",
-    "hours": [
-      [
-        "08:00",
-        "19:00"
-      ]
-    ],
+    "hours": "24h",
     "closed_days": [],
     "hours_verified": false
   },
@@ -6460,12 +7815,7 @@
     "source": "osm",
     "blurb": "Long Ya Men or Longyamen or Dragon's Teeth Gate, is the name that Chinese explorer Wang Dayuan recorded for Batu Belayar, a craggy granite outcrop that formerly stood at the gateway to Keppel Harbour in Singapore.",
     "blurb_source": "wikipedia",
-    "hours": [
-      [
-        "08:00",
-        "21:00"
-      ]
-    ],
+    "hours": "24h",
     "closed_days": [],
     "hours_verified": false
   },
@@ -6549,12 +7899,7 @@
     "source": "osm",
     "blurb": "Tanjong Chek Jawa (or Tanjung Chek Jawa or simply Chek Jawa) is a cape and the name of its 100-hectare wetlands located on the south-eastern tip of Pulau Ubin, an island off the north-eastern coast of the main island of Singapore.",
     "blurb_source": "wikipedia",
-    "hours": [
-      [
-        "08:00",
-        "21:00"
-      ]
-    ],
+    "hours": "24h",
     "closed_days": [],
     "hours_verified": false
   },
@@ -6725,12 +8070,7 @@
     "source": "osm",
     "blurb": "Ah Meng (circa 18 June 1960 – 8 February 2008) was a female Sumatran orangutan and a tourism icon of Singapore. Ah Meng was originally from Indonesia and was kept illegally in Singapore as a domestic pet before being recovered by a veterinarian in 1971.",
     "blurb_source": "wikipedia",
-    "hours": [
-      [
-        "08:00",
-        "19:00"
-      ]
-    ],
+    "hours": "24h",
     "closed_days": [],
     "hours_verified": false
   },
@@ -6755,12 +8095,7 @@
     "source": "osm",
     "blurb": ", also known as the Shaw Studio, is a former film studio located on Jalan Ampas in Balestier, Singapore. The studio operated from 1947 to 1969 with more than 150 movies produced, and was a major contributor to Singapore's \"golden age\" of Malay cinema.",
     "blurb_source": "wikipedia",
-    "hours": [
-      [
-        "08:00",
-        "21:00"
-      ]
-    ],
+    "hours": "24h",
     "closed_days": [],
     "hours_verified": false
   },
@@ -6785,12 +8120,7 @@
     "source": "osm",
     "blurb": "The Balestier Art Deco shophouses are two shophouses located on 230 & 246 Balestier Road in Balestier, Singapore.",
     "blurb_source": "wikipedia",
-    "hours": [
-      [
-        "08:00",
-        "21:00"
-      ]
-    ],
+    "hours": "24h",
     "closed_days": [],
     "hours_verified": false
   },
@@ -6815,12 +8145,7 @@
     "source": "osm",
     "blurb": "The Sim Kwong Ho shophouses are a row of shophouses located on the corner of Balestier Road and Kim Keat Road.",
     "blurb_source": "wikipedia",
-    "hours": [
-      [
-        "08:00",
-        "21:00"
-      ]
-    ],
+    "hours": "24h",
     "closed_days": [],
     "hours_verified": false
   },
@@ -6874,12 +8199,7 @@
     "source": "osm",
     "blurb": "A park in Little India.",
     "blurb_source": null,
-    "hours": [
-      [
-        "07:00",
-        "19:00"
-      ]
-    ],
+    "hours": "24h",
     "closed_days": [],
     "hours_verified": false
   },
@@ -7402,12 +8722,7 @@
     "source": "osm",
     "blurb": "A park in Changi.",
     "blurb_source": null,
-    "hours": [
-      [
-        "07:00",
-        "19:00"
-      ]
-    ],
+    "hours": "24h",
     "closed_days": [],
     "hours_verified": false
   },
@@ -7489,12 +8804,7 @@
     "source": "osm",
     "blurb": "A memorial in Civic District.",
     "blurb_source": null,
-    "hours": [
-      [
-        "08:00",
-        "19:00"
-      ]
-    ],
+    "hours": "24h",
     "closed_days": [],
     "hours_verified": false
   },
@@ -7723,12 +9033,7 @@
     "source": "osm",
     "blurb": "A landmark in North.",
     "blurb_source": null,
-    "hours": [
-      [
-        "08:00",
-        "21:00"
-      ]
-    ],
+    "hours": "24h",
     "closed_days": [],
     "hours_verified": false
   },
@@ -7782,12 +9087,7 @@
     "source": "osm",
     "blurb": "A park in Marina Bay.",
     "blurb_source": null,
-    "hours": [
-      [
-        "07:00",
-        "19:00"
-      ]
-    ],
+    "hours": "24h",
     "closed_days": [],
     "hours_verified": false
   },
@@ -7841,12 +9141,7 @@
     "source": "osm",
     "blurb": "A park in Kampong Glam.",
     "blurb_source": null,
-    "hours": [
-      [
-        "07:00",
-        "19:00"
-      ]
-    ],
+    "hours": "24h",
     "closed_days": [],
     "hours_verified": false
   },
@@ -8105,42 +9400,7 @@
     "source": "osm",
     "blurb": "A park in North.",
     "blurb_source": null,
-    "hours": [
-      [
-        "07:00",
-        "19:00"
-      ]
-    ],
-    "closed_days": [],
-    "hours_verified": false
-  },
-  {
-    "id": "darma-muneeswaran-temple",
-    "name": "Darma Muneeswaran Temple",
-    "area": "Little India",
-    "lat": 1.36847,
-    "lng": 103.86987,
-    "tags": [
-      "heritage",
-      "culture",
-      "temple"
-    ],
-    "duration_min": 30,
-    "cost_band": 0,
-    "indoor": true,
-    "captions": [],
-    "website": null,
-    "source_ref": "osm:way/478168391",
-    "active": true,
-    "source": "osm",
-    "blurb": "A place of worship in Little India.",
-    "blurb_source": null,
-    "hours": [
-      [
-        "09:00",
-        "17:00"
-      ]
-    ],
+    "hours": "24h",
     "closed_days": [],
     "hours_verified": false
   },
@@ -8372,12 +9632,7 @@
     "source": "osm",
     "blurb": "A landmark in North.",
     "blurb_source": null,
-    "hours": [
-      [
-        "08:00",
-        "21:00"
-      ]
-    ],
+    "hours": "24h",
     "closed_days": [],
     "hours_verified": false
   },
@@ -9131,12 +10386,7 @@
     "source": "osm",
     "blurb": "A memorial in West.",
     "blurb_source": null,
-    "hours": [
-      [
-        "08:00",
-        "19:00"
-      ]
-    ],
+    "hours": "24h",
     "closed_days": [],
     "hours_verified": false
   },
@@ -9331,12 +10581,7 @@
     "source": "osm",
     "blurb": "A landmark in North.",
     "blurb_source": null,
-    "hours": [
-      [
-        "08:00",
-        "21:00"
-      ]
-    ],
+    "hours": "24h",
     "closed_days": [],
     "hours_verified": false
   },
@@ -9506,12 +10751,7 @@
     "source": "osm",
     "blurb": "A memorial in Civic District.",
     "blurb_source": null,
-    "hours": [
-      [
-        "08:00",
-        "19:00"
-      ]
-    ],
+    "hours": "24h",
     "closed_days": [],
     "hours_verified": false
   },
@@ -9862,12 +11102,7 @@
     "source": "osm",
     "blurb": "A memorial in HarbourFront.",
     "blurb_source": null,
-    "hours": [
-      [
-        "08:00",
-        "19:00"
-      ]
-    ],
+    "hours": "24h",
     "closed_days": [],
     "hours_verified": false
   },
@@ -9921,12 +11156,7 @@
     "source": "osm",
     "blurb": "A landmark in HarbourFront.",
     "blurb_source": null,
-    "hours": [
-      [
-        "08:00",
-        "21:00"
-      ]
-    ],
+    "hours": "24h",
     "closed_days": [],
     "hours_verified": false
   },
@@ -10924,6 +12154,31 @@
     "hours_verified": false
   },
   {
+    "id": "ite-college-central",
+    "name": "ITE College Central",
+    "area": "Little India",
+    "lat": 1.37928,
+    "lng": 103.85639,
+    "tags": [
+      "nature",
+      "gardens",
+      "photo"
+    ],
+    "duration_min": 45,
+    "cost_band": 0,
+    "indoor": false,
+    "captions": [],
+    "website": null,
+    "source_ref": "osm:way/221945079",
+    "active": true,
+    "source": "osm",
+    "blurb": "ITE College Central (ITECC) is a post-secondary education institution and statutory board under the purview of the Ministry of Education in Singapore.",
+    "blurb_source": "wikipedia",
+    "hours": "24h",
+    "closed_days": [],
+    "hours_verified": false
+  },
+  {
     "id": "sam-at-tanjong-pagar-distripark",
     "name": "SAM at Tanjong Pagar Distripark",
     "area": "Chinatown",
@@ -10936,13 +12191,7 @@
     "duration_min": 60,
     "cost_band": 1,
     "indoor": true,
-    "captions": [],
-    "website": "https://www.singaporeartmuseum.sg/",
-    "source_ref": "osm:node/9451765608",
-    "active": false,
-    "source": "osm",
-    "blurb": "A museum in Chinatown.",
-    "blurb_source": null,
+    "mrt": "Outram Park",
     "hours": [
       [
         "10:00",
@@ -10950,6 +12199,18 @@
       ]
     ],
     "closed_days": [],
-    "hours_verified": true
+    "min_window_h": null,
+    "blurb": "A museum in Chinatown.",
+    "captions": [],
+    "safety_notes": null,
+    "image_url": null,
+    "embed_url": null,
+    "source": "osm",
+    "source_ref": "osm:node/9451765608",
+    "active": false,
+    "hours_verified": true,
+    "coords_approx": false,
+    "website": "https://www.singaporeartmuseum.sg/",
+    "blurb_source": null
   }
 ]

@@ -15,6 +15,9 @@ vi.mock('../model/services/social.js', async (orig) => ({
 vi.mock('../model/services/db/index.js', () => ({ getDb: async () => ({ kind: 'local', saveMission: async () => {} }) }))
 
 import QuestCoopChip from '../view/components/QuestCoopChip.vue'
+import QuestMapLive from '../view/components/QuestMapLive.vue'
+import QuestChatButton from '../view/components/QuestChatButton.vue'
+import QuestGoSolo from '../view/components/QuestGoSolo.vue'
 import { useMissionStore } from '../model/stores/mission.js'
 import { usePartyStore } from '../model/stores/party.js'
 
@@ -29,26 +32,33 @@ function setup(legs) {
     id: 'm1', origin: { label: 'Changi Airport', lat: 1.3644, lng: 103.9915 }, start_iso: min(-120), must_return_iso: min(700), buffers: { exit_min: 30 }, prefs: {}, legs: [...legs, { kind: 'return', status: 'pending', arrive_by: min(600) }],
     joined: { q1: { title: 'Chinatown', host_name: 'Mei', from: 1, to: 2, removed: [] } }
   }
-  const w = mount(QuestCoopChip, { props: { getMap: () => null }, global: { stubs: { RouterLink: true } } })
+  const w = mount(QuestCoopChip, { global: { stubs: { RouterLink: true } } })
   return { w, store }
 }
 
 describe('QuestCoopChip: the map HUD while I am with someone', () => {
   beforeEach(() => vi.clearAllMocks())
 
-  it('during the joined stops: "With Mei until …" and where my plan resumes', async () => {
+  it('during the joined stops: one line, "With Mei until …"', async () => {
     const { w } = setup([block('maxwell', -10, 30), block('temple', 35, 60), leg('gardens', 90, 150)])
     await flushPromises()
-    expect(w.text()).toMatch(/With Mei until \d\d:\d\d/)
-    expect(w.text()).toContain('Your plan resumes: gardens')
-    expect(w.text()).toContain('Go solo')
+    expect(w.text()).toMatch(/^With Mei until \d\d:\d\d$/)
   })
 
-  it('before the meet-up: where and when to meet; no own stops after → head back', async () => {
+  it('before the meet-up: one line, where and when to meet (no subtext)', async () => {
     const { w } = setup([block('maxwell', 40, 80)])
     await flushPromises()
-    expect(w.text()).toMatch(/Meet Mei at maxwell, \d\d:\d\d/)
-    expect(w.text()).toContain('Then head back to Changi Airport')
+    expect(w.text()).toMatch(/^Meet Mei at maxwell, \d\d:\d\d$/)
+  })
+
+  it('card buttons: "Chat with Mei" opens the chat; Go solo shows for guests', async () => {
+    setup([block('maxwell', 40, 80)])
+    const chat = mount(QuestChatButton)
+    const solo = mount(QuestGoSolo)
+    expect(chat.text()).toContain('Chat with Mei')
+    expect(solo.text()).toBe('Go solo')
+    await chat.find('button').trigger('click')
+    expect(usePartyStore().chatPanel).toBe('q1')
   })
 
   it('not in a quest → nothing shown', async () => {
@@ -70,5 +80,16 @@ describe('QuestCoopChip: the map HUD while I am with someone', () => {
     await done
     expect(store.mission.joined).toEqual({})
     expect(store.legs.filter((l) => l.kind === 'visit').map((l) => l.place_id)).toEqual(['museum', 'gardens'])
+  })
+
+  it('the always-on map layer returns me to my own plan by itself when my stops end', async () => {
+    const { store } = setup([block('maxwell', -60, -5), leg('gardens', 90, 150)])
+    mount(QuestMapLive, { props: { getMap: () => null } })
+    await flushPromises()
+    const party = usePartyStore()
+    expect(party.dialog?.title).toBe('Your stops with Mei are done')
+    party.answer(true)
+    await flushPromises()
+    expect(store.mission.joined).toEqual({})
   })
 })

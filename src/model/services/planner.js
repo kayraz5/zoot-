@@ -95,6 +95,8 @@ export function scorePlace(p, ctx, budget) {
 	if (ctx.energy === 'high' && !p.indoor) s += 0.3
 	// Airport-adjacent sights are saved for short windows: Sonion passes Jewel on the way back anyway.
 	if (budget?.airport && p.area === 'Changi' && budget.usable_min >= 240) s *= 0.5
+	// Guessed opening hours (OSM had none): prefer places whose hours we know.
+	if (p.hours_verified === false) s *= 0.7
 	return Math.max(0.2, s)
 }
 
@@ -127,8 +129,11 @@ export function buildCandidates(ctx, budget) {
 	const usableH = budget.usable_min / 60
 	const exclude = ctx.excludeIds || new Set()
 	const indoorOnly = ctx.forceIndoor || ctx.indoorPref === 'only' || (ctx.cityRisk?.severity ?? 0) >= 3
+	// Short trips have no slack for a place that turns out to be closed: skip guessed hours.
+	const verifiedOnly = budget.usable_min < 240
 	return ctx.catalog
 		.filter((p) => !exclude.has(p.id))
+		.filter((p) => !verifiedOnly || p.hours_verified !== false)
 		.filter((p) => !p.min_window_h || usableH >= p.min_window_h)
 		.filter((p) => !indoorOnly || p.indoor)
 		.map((p) => ({ ...p, _score: scorePlace(p, ctx, budget) }))

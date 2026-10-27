@@ -12,6 +12,7 @@ import { useMissionStore } from '../../model/stores/mission.js'
 import { usePassportStore } from '../../model/stores/passport.js'
 import { useUserStore } from '../../model/stores/user.js'
 import { useUiStore } from '../../model/stores/ui.js'
+import { placeStampUrl } from '../../model/services/stampArt.js'
 
 /** Place story, AI summary and stamp button (Hulbert: content + Groq summary). */
 const route = useRoute()
@@ -26,6 +27,8 @@ const bookmarks = ref(readBookmarks())
 const place = computed(() => placeById.value.get(route.params.id))
 const leg = computed(() => mission.mission?.legs.find((l) => l.place_id === route.params.id && l.status === 'pending'))
 const stamped = computed(() => passport.stampedIds.has(route.params.id))
+// Pre-generated stamp art for this place, matched by filename; null → check icon.
+const stampArt = computed(() => placeStampUrl(place.value?.name))
 const check = computed(() => {
   tick.value
   return place.value ? checkInStatus({ place: place.value, position: hasFix() ? { lat: geo.lat, lng: geo.lng, accuracy: geo.accuracy } : null, fake: geo.fake }) : null
@@ -87,7 +90,10 @@ function readBookmarks() {
             <span v-for="t in place.tags" :key="t" class="zt-pill">{{ t }}</span>
           </div>
         </div>
-        <span v-if="stamped" class="stamped-badge" title="In your passport"><i class="bi bi-patch-check-fill"></i></span>
+        <span v-if="stamped" class="stamped-badge" :class="{ art: stampArt }" title="In your passport">
+          <img v-if="stampArt" :src="stampArt" alt="" class="stamp-art" />
+          <i v-else class="bi bi-patch-check-fill"></i>
+        </span>
       </div>
 
       <div class="facts zt-card p-3 mt-3">
@@ -141,6 +147,8 @@ function readBookmarks() {
 .facts { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 10px 16px; font-size: 0.86rem; font-weight: 500; }
 .facts div { display: flex; gap: 10px; align-items: center; }
 .facts i { width: 30px; height: 30px; flex: none; border-radius: 50%; display: grid; place-items: center; background: var(--zt-yellow); color: #111; border: 2px solid var(--zt-line); font-size: 0.9rem; }
-.stamped-badge { width: 52px; height: 52px; flex: none; border-radius: 50%; display: grid; place-items: center; font-size: 1.5rem; background: #111; color: var(--zt-yellow); border: var(--zt-bw) solid var(--zt-line); transform: rotate(-10deg); box-shadow: var(--zt-shadow-sm); }
+.stamped-badge { width: 52px; height: 52px; flex: none; border-radius: 50%; display: grid; place-items: center; font-size: 1.5rem; background: #111; color: var(--zt-yellow); border: var(--zt-bw) solid var(--zt-line); transform: rotate(-10deg); box-shadow: var(--zt-shadow-sm); overflow: hidden; }
+.stamped-badge.art { background: #fffbea; padding: 2px; }
+.stamped-badge .stamp-art { width: 100%; height: 100%; object-fit: contain; }
 blockquote { font-weight: 500; box-shadow: var(--zt-shadow-sm); }
 </style>

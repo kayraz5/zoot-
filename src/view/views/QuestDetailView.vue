@@ -8,16 +8,19 @@ import { useUiStore } from '../../model/stores/ui.js'
 import { stopsFit, joinableRange, previewJoin, defaultQuestTitle } from '../../model/services/social.js'
 import { formatTime } from '../../model/services/hours.js'
 import { DEV_PANEL } from '../../model/services/config.js'
+import { askNotifyPermission } from '../../model/services/notify.js'
 import { STYLES } from '../../model/data/origins.js'
+import { loadCatalog, placeById } from '../../model/services/catalog.js'
 import MemberAvatarStack from '../components/MemberAvatarStack.vue'
 import ProfilePreviewModal from '../components/ProfilePreviewModal.vue'
 import StopRangePicker from '../components/StopRangePicker.vue'
 import JoinConfirmSheet from '../components/JoinConfirmSheet.vue'
+import StopGallery from '../components/StopGallery.vue'
 
 /**
  * One open window: ONLY its stops (the host's other stops, airport and flight time are never sent),
- * who's going and which stops they joined. A guest picks a run of stops, sees exactly what changes
- * in their own plan (confirm sheet), and joins.
+ * who's going and which stops they joined. A guest taps the stops they'll join right in that list,
+ * sees exactly what changes in their own plan (confirm sheet), and joins.
  */
 const route = useRoute()
 const router = useRouter()
@@ -30,6 +33,7 @@ const profile = ref(null) // profile preview modal
 const busy = ref(false)
 
 async function load() {
+  loadCatalog() // meeting-point photos
   await mission.loadActive()
   await party.loadQuest(route.params.id)
   // The host may have closed the quest or changed my stops since I joined.
@@ -46,6 +50,13 @@ const fit = computed(() => (q.value && !isHost.value ? stopsFit(q.value.stops, m
 const spots = computed(() => (q.value ? q.value.capacity - q.value.roster.length : 0))
 /** Who's at each stop: roster members whose joined range covers it. */
 const goingAt = (seq) => q.value.roster.filter((m) => seq >= m.from_seq && seq <= m.to_seq)
+
+// ── Meeting point: photos, and a jump to it on the map ──
+const meetPlace = computed(() => placeById.value.get(q.value?.meeting_place_id) || null)
+function showMeetOnMap() {
+  const p = meetPlace.value || q.value.stops[0]
+  router.push({ path: '/map', query: { lat: p.lat, lng: p.lng, meet: q.value.meeting_label } })
+}
 
 async function act(fn, okMsg) {
   busy.value = true
@@ -77,18 +88,23 @@ const pick = ref({ from: 1, to: 1 })
 // Start with everything that fits; reset when the quest or my plan changes.
 watch([() => q.value?.id, range], () => { pick.value = { from: range.value.minFrom, to: range.value.maxTo } }, { immediate: true })
 const preview = computed(() => (q.value && hasPlan.value && canPick.value ? previewJoin(q.value, pick.value.from, pick.value.to, plan.value) : null))
+const pickCount = computed(() => pick.value.to - pick.value.from + 1)
 /** Already with someone else (one quest at a time). */
 const otherQuest = computed(() => {
   const joined = plan.value?.joined || {}
   const id = Object.keys(joined).find((k) => k !== q.value?.id)
   return id ? { id, ...joined[id] } : null
 })
+/** I can join from this page: the open stops list becomes the stop picker. */
+const pickMode = computed(() => !!q.value && !isHost.value && !q.value.mine && hasPlan.value && !otherQuest.value
+  && q.value.status === 'open' && canPick.value)
 const confirmOpen = ref(false)
 async function join() {
   busy.value = true
   try {
     await mission.joinQuest(q.value, pick.value.from, pick.value.to)
     confirmOpen.value = false
+    askNotifyPermission() // so chat messages reach me while the app is in the background
     ui.toast(`You're in! Meet ${host.value?.display_name || 'the host'} at ${q.value.stops[pick.value.from - 1].name}.`, 'success', 5000)
     await party.loadQuest(q.value.id)
   } catch (err) {
@@ -137,33 +153,48 @@ async function leave() {
         <p class="small text-muted mb-0">With <b>{{ host?.display_name || 'a traveller' }}</b> · {{ formatTime(q.starts_at) }}–{{ formatTime(q.ends_at) }}</p>
       </header>
 
-      <!-- Meeting point -->
+      <!-- Meeting point: tap to see it on the map; photos open full screen -->
       <section class="zt-card p-3 mb-3">
-        <div class="d-flex gap-3 align-items-start">
-          <div class="meet-icon"><i class="bi bi-geo-alt-fill"></i></div>
-          <div class="flex-grow-1">
-            <div class="tiny text-muted fw-800 text-uppercase">Meet · {{ formatTime(q.starts_at) }}</div>
-            <div class="fw-800">{{ q.meeting_label }}</div>
-            <p v-if="q.note" class="small mb-0 mt-1 note">“{{ q.note }}”</p>
-          </div>
-        </div>
+        <button type="button" class="meet-row" :aria-label="`Show ${q.meeting_label} on the map`" @click="showMeetOnMap">
+          <span class="meet-icon"><i class="bi bi-geo-alt-fill"></i></span>
+          <span class="flex-grow-1 min-w-0 text-start">
+            <span class="d-block tiny text-muted fw-800 text-uppercase">Meet · {{ formatTime(q.starts_at) }}</span>
+            <span class="d-block fw-800">{{ q.meeting_label }}</span>
+          </span>
+          <span class="map-link"><i class="bi bi-map"></i> Map</span>
+        </button>
+        <StopGallery v-if="meetPlace" :place="meetPlace" :height="160" class="mt-3" />
+        <p v-if="q.note" class="small mb-0 mt-3 note">“{{ q.note }}”</p>
         <div class="tiny text-muted mt-2"><i class="bi bi-shield-check"></i> Public place. Live location is only shared between people who've joined.</div>
       </section>
 
-      <!-- Open stops + who's at each -->
-      <section class="zt-card p-3 mb-3">
-        <div class="d-flex justify-content-between align-items-center mb-2">
-          <b class="small">Open stops</b>
+      <!-- Open stops + who's at each. If I can join, tapping them picks which. -->
+      <section class="zt-card p-3 mb-3" :class="{ action: pickMode }">
+        <div class="d-flex justify-content-between align-items-center gap-2 mb-2">
+          <b class="small">{{ pickMode ? "Tap the stops you'll join" : 'Open stops' }}</b>
           <MemberAvatarStack :members="q.roster" :capacity="q.capacity" :size="30" @select="profile = $event" />
         </div>
-        <ol class="stops">
+
+        <template v-if="pickMode">
+          <StopRangePicker v-model="pick" :stops="q.stops" :min-from="range.minFrom" :max-to="range.maxTo" inside-label="Join">
+            <template #detail="{ index }">
+              <template v-if="goingAt(index).length"> · <i class="bi bi-people-fill"></i> {{ goingAt(index).map((m) => m.display_name).join(', ') }}</template>
+            </template>
+          </StopRangePicker>
+          <p v-if="preview?.ok" class="small mt-2 mb-2" :class="preview.bigChange ? 'text-danger fw-800' : 'text-muted'">
+            <template v-if="preview.removed.length"><i class="bi bi-arrow-repeat"></i> Replaces {{ preview.removed.length }} of your stops.</template>
+            <template v-else><i class="bi bi-check2-circle"></i> Fits around your plan; none of your stops are removed.</template>
+          </p>
+          <button class="btn btn-primary w-100" :disabled="busy || !preview" @click="confirmOpen = true">
+            <i class="bi bi-people-fill"></i> Join {{ pickCount === 1 ? 'this stop' : `these ${pickCount} stops` }}
+          </button>
+        </template>
+
+        <ol v-else class="stops">
           <li v-for="s in q.stops" :key="s.seq">
-            <span class="dot">{{ s.seq }}</span>
+            <span class="time mono"><span class="from">{{ formatTime(s.arrive_iso) }}</span><span class="to">{{ formatTime(s.depart_iso) }}</span></span>
             <div class="flex-grow-1 min-w-0">
-              <div class="d-flex justify-content-between gap-2">
-                <RouterLink :to="`/place/${s.place_id}`" class="fw-800 text-reset text-truncate">{{ s.name }}</RouterLink>
-                <span class="tiny mono text-muted text-nowrap">{{ formatTime(s.arrive_iso) }}–{{ formatTime(s.depart_iso) }}</span>
-              </div>
+              <RouterLink :to="`/place/${s.place_id}`" class="d-block fw-800 text-reset text-truncate">{{ s.name }}</RouterLink>
               <div class="tiny text-muted">{{ s.area }} · {{ s.stay_min }} min
                 <template v-if="goingAt(s.seq).length"> · <i class="bi bi-people-fill"></i> {{ goingAt(s.seq).map((m) => m.display_name).join(', ') }}</template>
               </div>
@@ -174,13 +205,14 @@ async function leave() {
       </section>
 
       <!-- Action -->
-      <section class="action zt-card p-3">
+      <section v-if="!pickMode" class="action zt-card p-3">
         <template v-if="isHost">
           <div class="fw-800 mb-1"><i class="bi bi-star-fill"></i> This is your open quest</div>
           <p class="small text-muted mb-2">This is exactly what guests see. Edit your plan on the Mission page and it updates here.</p>
           <button v-if="DEV_PANEL && q.status === 'open'" class="btn btn-sm btn-dark w-100 mb-2" :disabled="busy" @click="demoJoin">
             <i class="bi bi-robot"></i> Demo: a traveller joins
           </button>
+          <button class="btn btn-primary w-100 mb-2" @click="party.openChat(q.id)"><i class="bi bi-chat-dots-fill"></i> Chat</button>
           <div class="d-flex gap-2">
             <button class="btn btn-soft flex-grow-1" :disabled="busy" @click="closeQuest"><i class="bi bi-x-circle"></i> Close</button>
             <button class="btn btn-outline-danger" :disabled="busy" @click="deleteQuest" aria-label="Delete quest"><i class="bi bi-trash3"></i></button>
@@ -191,6 +223,7 @@ async function leave() {
             You're joining {{ q.mine.from_seq === q.mine.to_seq ? `stop ${q.mine.from_seq}` : `stops ${q.mine.from_seq}–${q.mine.to_seq}` }}
           </div>
           <p class="small text-muted mb-2">They're in your plan at fixed times. Meet at {{ q.stops[q.mine.from_seq - 1]?.name }}, {{ formatTime(q.stops[q.mine.from_seq - 1]?.arrive_iso) }}.</p>
+          <button class="btn btn-primary w-100 mb-2" @click="party.openChat(q.id)"><i class="bi bi-chat-dots-fill"></i> Chat</button>
           <div class="d-flex gap-2">
             <RouterLink to="/mission" class="btn btn-soft flex-grow-1"><i class="bi bi-list-ol"></i> My plan</RouterLink>
             <button class="btn btn-outline-danger" :disabled="busy" @click="leave"><i class="bi bi-box-arrow-right"></i> Go solo</button>
@@ -206,24 +239,13 @@ async function leave() {
           <p class="small text-muted mb-2">One quest at a time. Leave "{{ otherQuest.title }}" to join this one.</p>
           <RouterLink :to="`/quests/${otherQuest.id}`" class="btn btn-soft w-100">Go to that quest</RouterLink>
         </template>
-        <template v-else-if="q.status === 'full'">
-          <div class="fw-800 mb-1">This quest is full</div>
+        <template v-else-if="q.status !== 'open'">
+          <div class="fw-800 mb-1">{{ q.status === 'full' ? 'This quest is full' : 'This quest has closed' }}</div>
           <p class="small text-muted mb-0">Check back later, or open some of your own stops to company.</p>
         </template>
         <template v-else-if="!canPick">
           <div class="fw-800 mb-1"><i class="bi bi-airplane"></i> None of these stops fit your layover</div>
           <p class="small text-muted mb-0">{{ fit.code === 'too_late' ? fit.detail : 'They start before you are out of the airport, or have already started.' }}</p>
-        </template>
-        <template v-else>
-          <div class="fw-800 mb-2">Pick the stops you'll join</div>
-          <StopRangePicker v-model="pick" :stops="q.stops" :min-from="range.minFrom" :max-to="range.maxTo" inside-label="Join" />
-          <p v-if="preview?.ok" class="small mt-2 mb-2" :class="preview.bigChange ? 'text-danger fw-800' : 'text-muted'">
-            <template v-if="preview.removed.length"><i class="bi bi-arrow-repeat"></i> Replaces {{ preview.removed.length }} of your stops.</template>
-            <template v-else><i class="bi bi-check2-circle"></i> Fits around your plan; none of your stops are removed.</template>
-          </p>
-          <button class="btn btn-primary w-100" :disabled="busy || !preview" @click="confirmOpen = true">
-            <i class="bi bi-people-fill"></i> Join {{ pick.from === pick.to ? `stop ${pick.from}` : `stops ${pick.from}–${pick.to}` }}
-          </button>
         </template>
       </section>
     </template>
@@ -235,11 +257,15 @@ async function leave() {
 
 <style scoped>
 .title { font-size: clamp(1.7rem, 7vw, 2.3rem); }
+.meet-row { width: 100%; display: flex; gap: 12px; align-items: center; padding: 0; border: 0; background: none; color: inherit; }
+.map-link { flex: none; font-size: 0.75rem; font-weight: 800; padding: 4px 10px; border-radius: 99px; border: 2px solid var(--zt-line); background: var(--zt-yellow-pale); color: #111; }
 .meet-icon { width: 42px; height: 42px; border-radius: 14px; display: grid; place-items: center; background: var(--zt-pink); color: #111; font-size: 1.2rem; border: 2px solid var(--zt-line); flex: none; }
 .note { padding: 6px 10px; border-radius: 12px; background: var(--zt-yellow-pale); color: #111; }
-.stops { list-style: none; padding: 0; margin: 0; display: grid; gap: 10px; }
+.stops { list-style: none; padding: 0; margin: 0; display: grid; grid-template-columns: minmax(0, 1fr); gap: 10px; }
 .stops li { display: flex; gap: 10px; align-items: flex-start; }
-.stops .dot { width: 28px; height: 28px; border-radius: 50%; display: grid; place-items: center; background: var(--zt-yellow); color: #111; border: 2px solid #111; font-weight: 800; font-size: 0.8rem; flex: none; }
+.stops .time { flex: none; width: 46px; display: flex; flex-direction: column; line-height: 1.15; font-size: 0.8rem; padding-top: 2px; }
+.stops .time .from { font-weight: 800; }
+.stops .time .to { color: var(--zt-muted); }
 .min-w-0 { min-width: 0; }
 .action { box-shadow: var(--zt-shadow); }
 .fit-ok { background: #5fd38d; color: #111; }

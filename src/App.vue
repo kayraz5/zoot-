@@ -7,6 +7,7 @@ import StampCelebration from './view/components/StampCelebration.vue'
 import RainOverlay from './view/components/RainOverlay.vue'
 import SkyEffects from './view/components/SkyEffects.vue'
 import CenterDialog from './view/components/CenterDialog.vue'
+import QuestChatHost from './view/components/QuestChatHost.vue'
 import { useUserStore } from './model/stores/user.js'
 import { usePassportStore } from './model/stores/passport.js'
 import { useUiStore } from './model/stores/ui.js'
@@ -30,4 +31,5 @@ watch(() => user.userId, (id) => passport.load(id), { immediate: true })
   <ToastHost />
   <StampCelebration />
   <CenterDialog />
+  <QuestChatHost v-if="user.isAuthed" />
 </template>
