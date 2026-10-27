@@ -12,7 +12,9 @@ import { defaultQuestTitle } from '../../model/services/social.js'
 const props = defineProps({
   quest: { type: Object, required: true },
   fit: { type: Object, default: null },
-  mine: { type: Boolean, default: false }
+  mine: { type: Boolean, default: false },
+  joined: { type: Boolean, default: false }, // the quest I've joined: highlighted
+  dimmed: { type: Boolean, default: false } // I've joined another quest: this one fades back
 })
 const host = computed(() => props.quest.roster?.find((m) => m.role === 'host'))
 const style = computed(() => STYLES[props.quest.style])
@@ -23,10 +25,11 @@ const title = computed(() => props.quest.title?.trim() || defaultQuestTitle(host
 </script>
 
 <template>
-  <RouterLink :to="`/quests/${quest.id}`" class="quest-card zt-card text-reset text-decoration-none">
+  <RouterLink :to="`/quests/${quest.id}`" class="quest-card zt-card text-reset text-decoration-none" :class="{ joined, dimmed }">
     <div class="d-flex justify-content-between align-items-start gap-2 mb-1">
       <h2 class="h5 mb-0 title">{{ title }}</h2>
-      <span v-if="mine" class="zt-pill pink flex-none">Yours</span>
+      <span v-if="joined" class="zt-pill pink flex-none"><i class="bi bi-check-circle-fill"></i> Joined</span>
+      <span v-else-if="mine" class="zt-pill pink flex-none">Yours</span>
       <span v-else-if="quest.status === 'full'" class="zt-pill paper flex-none">Full</span>
       <span v-else class="zt-pill pale flex-none">{{ spots }} spot{{ spots === 1 ? '' : 's' }} left</span>
     </div>
@@ -37,8 +40,8 @@ const title = computed(() => props.quest.title?.trim() || defaultQuestTitle(host
       <span class="small text-truncate min-w-0">with <b>{{ host?.display_name || 'a traveller' }}</b><template v-if="areas"> · <span class="text-muted">{{ areas }}</span></template></span>
     </div>
 
-    <div v-if="(fit && !mine) || style" class="d-flex flex-wrap gap-2 mt-2">
-      <span v-if="fit && !mine" class="zt-pill" :class="fit.ok ? 'fit-ok' : 'fit-no'">
+    <div v-if="(fit && !mine && !joined) || style" class="d-flex flex-wrap gap-2 mt-2">
+      <span v-if="fit && !mine && !joined" class="zt-pill" :class="fit.ok ? 'fit-ok' : 'fit-no'">
         <i class="bi" :class="fit.ok ? 'bi-check-circle-fill' : 'bi-airplane'"></i> {{ fit.reason }}
       </span>
       <span v-if="style" class="zt-pill paper"><i class="bi" :class="style.icon"></i> {{ style.label }}</span>
@@ -52,6 +55,9 @@ const title = computed(() => props.quest.title?.trim() || defaultQuestTitle(host
 .min-w-0 { min-width: 0; }
 .flex-none { flex: none; }
 .quest-card:active { transform: translateY(2px); }
+.quest-card.joined { border-color: var(--zt-pink); box-shadow: 5px 5px 0 var(--zt-pink); }
+.quest-card.dimmed { opacity: 0.5; box-shadow: none; }
+.quest-card.dimmed:hover, .quest-card.dimmed:focus-visible { opacity: 0.85; }
 .fit-ok { background: #5fd38d; color: #111; }
 .fit-no { background: var(--zt-card); color: var(--zt-muted); }
 </style>
