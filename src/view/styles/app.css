@@ -26,12 +26,13 @@
   --zt-shadow: 4px 4px 0 var(--zt-shadow-color);
   --zt-shadow-sm: 3px 3px 0 var(--zt-shadow-color);
   --zt-radius: 20px;
-  /* Bottom-nav geometry, shared so floating UI can dock above the nav without
-     guessing: nav height, the gap it keeps from the screen edge, and the gap
-     any card floating over the map leaves between itself and the nav. */
+  /* Bottom-nav geometry, shared so floating UI docks consistently:
+     the nav height, its inset from the screen edge, the breathing gap above it,
+     and the resulting dock offset used by cards/buttons that float over the nav. */
   --zt-nav-h: 68px;
   --zt-nav-inset: max(12px, env(safe-area-inset-bottom));
   --zt-nav-clearance: clamp(12px, 3.4vw, 18px);
+  --zt-nav-dock: calc(var(--zt-nav-inset) + var(--zt-nav-h) + var(--zt-nav-clearance));
   --zt-font-display: 'Bebas Neue', 'Fredoka', sans-serif;
   --zt-font-head: 'Fredoka', 'Poppins', sans-serif;
 

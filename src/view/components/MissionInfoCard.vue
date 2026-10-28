@@ -121,10 +121,9 @@ const stampArt = computed(() => placeStampUrl(props.next?.name))
   position: absolute;
   left: 50%;
   transform: translateX(-50%);
-  /* Dock above the bottom nav instead of overlapping it: the nav's own inset +
-     its height + a shared breathing gap, so the card and the nav read as two
-     separate surfaces. The old 70–100px clamp sat inside the 80px nav. */
-  bottom: calc(var(--zt-nav-inset) + var(--zt-nav-h) + var(--zt-nav-clearance));
+  /* Shared nav-dock offset: nav inset + height + breathing gap. Keeps the card
+     clearly separated from the nav instead of overlapping it. */
+  bottom: var(--zt-nav-dock);
   max-width: 600px;
   width: 90%;
   z-index: 1;

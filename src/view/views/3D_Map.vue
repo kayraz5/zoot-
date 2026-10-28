@@ -56,7 +56,7 @@ import destination from '@turf/destination'
 import { point } from '@turf/helpers'
 
 // 3D stop pins (WebGL custom layers) — see gl/pinPoint.js.
-import { PinLayer, syncStopPins, updatePinProximity } from '../gl/pinPoint.js'
+import { PinLayer, syncStopPins, updatePinProximity, LANDMARK_BADGE } from '../gl/pinPoint.js'
 // The 3D traveller: traveller.js is the body, travellerAssets.js the outfits, and
 // travellerLayer.js the MapLibre wrapper (it also exports the bearing helper).
 import { TravellerLayer, bearingBetween } from '../gl/travellerLayer.js'
@@ -93,6 +93,8 @@ import {
 } from '../../model/services/geo.js'
 import { distanceM } from '../../model/services/travel.js'
 import { addQuestLayers, createPlayerMarker, setFence, setQuestColors, syncStopMarkers } from '../map/questLayers.js'
+import { applyMapLabelStyle } from '../map/mapLabels.js'
+import { applyBuildingLayers, BUILDING_LAYERS } from '../map/mapBuildings.js'
 import { loadCatalog } from '../../model/services/catalog.js'
 import { formatTime } from '../../model/services/hours.js'
 // Street-following geometry for walk/taxi legs, with provider failover. A leg whose
@@ -109,10 +111,20 @@ import { trimRouteAtPosition } from '../../model/services/routeGeometry.js'
 // 2. Module constants
 // ─────────────────────────────────────────────────────────────────────────────
 const TRAVELLER_LAYER_ID = 'zt-traveller'
-const ROUTE_SOURCE_ID = 'mission-route'
-const ROUTE_LAYER_ID = 'mission-route-line'
-// A decorative Marina Bay Sands pin, added once the style has loaded.
-const MBS_DEMO_PIN = { id: 'mbs-pin', lng: 103.8607, lat: 1.2830 }
+
+// The live leg is drawn as three stacked lines (glow, casing, core) so it reads
+// as one bold ribbon above the basemap.
+const LIVE_ROUTE_SOURCE_ID = 'mission-route'
+const LIVE_ROUTE_LAYER_ID = 'mission-route-line'
+const LIVE_ROUTE_CASING_LAYER_ID = 'mission-route-casing'
+const LIVE_ROUTE_GLOW_LAYER_ID = 'mission-route-glow'
+const LIVE_ROUTE_COLOR = '#ff1dce' // brighter than the planned-route pink; the active leg wins
+const LIVE_ROUTE_CASING_COLOR = '#111111'
+const LIVE_ROUTE_LAYOUT = { 'line-join': 'round', 'line-cap': 'round' }
+
+// A decorative Marina Bay Sands pin, added once the style has loaded. Its star
+// badge marks it as a landmark rather than a numbered quest stop.
+const MBS_DEMO_PIN = { id: 'mbs-pin', lng: 103.8607, lat: 1.2830, label: LANDMARK_BADGE }
 
 /**
  * Otter view: a third-person camera that sits behind the traveller and looks the
@@ -225,7 +237,8 @@ const showMissionCard = ref(readMissionCardFlag())
 const flatMode = ref(false)             // true = top-down free-roam (pan enabled, no 3D)
 const mapToolsOpen = ref(false)         // right-hand map tools drawer
 const mapStyleOpen = ref(false)         // map appearance dialog
-const buildingsVisible = ref(true)      // 3D building extrusions on/off
+const buildingsVisible = ref(false)     // show map buildings at all; off gives the cleanest map
+const buildings3D = ref(false)          // true = extruded 3D buildings, false = flat 2D footprints
 const mapTheme = ref('theme')           // 'theme' | 'simple'
 const colorblindMode = ref(false)       // high-contrast map palette
 const showTraveller3D = ref(true)       // 3D character vs flat dot
@@ -372,7 +385,13 @@ function createMap() {
   // MapLibre's pinch-zoom uses touch events, so it is unaffected.
   map.getCanvas().style.touchAction = 'none'
 
-  map.on('load', applyMapColors)
+  map.on('load', () => {
+    applyBasemapStyle()
+    // A glyph/sprite request can still be settling when `load` fires, which makes
+    // isStyleLoaded() false for that tick and silently skips the basemap styling.
+    // Retry once the map has gone idle so the theme and labels always land.
+    map.once('idle', applyBasemapStyle)
+  })
   map.on('load', onMapLoad)
   map.on('load', () => centerOnMe(false))
   map.on('load', () => map.addLayer(new PinLayer(MBS_DEMO_PIN)))
@@ -388,6 +407,9 @@ function createMap() {
 function onMapLoad() {
   addQuestLayers(map)
   player = createPlayerMarker()
+  // The map opens with buildings hidden and 3D off. Both are user choices in the
+  // Map appearance dialog: buildings can be shown flat, or extruded in 3D.
+  syncBuildingLayers()
   mapReady.value = true
 }
 
@@ -450,16 +472,17 @@ function roadColorFor(layerId, palette) {
   return isCasing ? classes.minorCasing : classes.minor
 }
 
-/** Apply the selected palette to background, water, buildings, roads and land cover. */
-function applyMapColors() {
+/** Apply the active theme to the basemap: colours, land cover and labels. */
+function applyBasemapStyle() {
   if (!map || !map.isStyleLoaded()) return
 
-  const palette = mapTheme.value === 'theme' ? MAP_PALETTE.theme : MAP_PALETTE.simple
+  const isDark = mapTheme.value === 'theme'
+  const palette = isDark ? MAP_PALETTE.theme : MAP_PALETTE.simple
 
   map.setPaintProperty('background', 'background-color', palette.background)
   map.setPaintProperty('water', 'fill-color', palette.water)
-  map.setPaintProperty('building', 'fill-color', palette.building)
-  map.setPaintProperty('building-3d', 'fill-extrusion-color', palette.building)
+  map.setPaintProperty(BUILDING_LAYERS.flat, 'fill-color', palette.building)
+  map.setPaintProperty(BUILDING_LAYERS.extruded, 'fill-extrusion-color', palette.building)
 
   for (const layer of map.getStyle().layers) {
     if (layer.id.startsWith('road_') && layer.type === 'line') {
@@ -476,6 +499,8 @@ function applyMapColors() {
       map.setPaintProperty(layer.id, 'fill-color', palette.landuseFill)
     }
   }
+
+  applyMapLabelStyle(map, isDark)
 }
 
 /**
@@ -487,12 +512,12 @@ function setColorblindMode(enabled) {
   if (!map || !map.isStyleLoaded()) return
 
   if (!enabled) {
-    applyMapColors()
+    applyBasemapStyle()
     return
   }
 
-  map.setPaintProperty('building', 'fill-color', '#E69F00')            // orange
-  map.setPaintProperty('building-3d', 'fill-extrusion-color', '#E69F00')
+  map.setPaintProperty(BUILDING_LAYERS.flat, 'fill-color', '#E69F00')            // orange
+  map.setPaintProperty(BUILDING_LAYERS.extruded, 'fill-extrusion-color', '#E69F00')
   map.setPaintProperty('water', 'fill-color', '#0072B2')               // blue
 
   for (const layer of map.getStyle().layers) {
@@ -514,13 +539,27 @@ function setColorblindMode(enabled) {
   }
 }
 
-/** Show or hide the 2D/3D building layers. */
+/** Push the current building choices onto the basemap layers. */
+function syncBuildingLayers() {
+  if (!map) return
+  applyBuildingLayers(map, {
+    visible: buildingsVisible.value,
+    extruded: buildings3D.value
+  })
+}
+
+/** Show or hide all map buildings, keeping the chosen flat/3D style. */
 function setBuildingsVisible(show) {
   buildingsVisible.value = show
-  const visibility = show ? 'visible' : 'none'
-  for (const layerId of ['building', 'building-3d']) {
-    if (map?.getLayer(layerId)) map.setLayoutProperty(layerId, 'visibility', visibility)
-  }
+  syncBuildingLayers()
+}
+
+/** Switch buildings between extruded 3D and flat footprints. */
+function setBuildings3D(show) {
+  buildings3D.value = show
+  // Asking for 3D implies wanting to see buildings, so don't leave them hidden.
+  if (show) buildingsVisible.value = true
+  syncBuildingLayers()
 }
 
 /**
@@ -604,7 +643,7 @@ function syncStopVisuals() {
   if (showStopPins3D.value) {
     // An empty leg list tears the other representation down.
     syncStopMarkers(map, markers, [], next.value, flyTo)
-    syncStopPins(map, pins, missionStore.legs)
+    syncStopPins(map, pins, missionStore.legs, next.value)
   } else {
     syncStopPins(map, pins, [])
     syncStopMarkers(map, markers, missionStore.legs, next.value, flyTo)
@@ -657,24 +696,37 @@ function drawRoute() {
     }))
   }
 
-  const source = map.getSource(ROUTE_SOURCE_ID)
+  const source = map.getSource(LIVE_ROUTE_SOURCE_ID)
   if (source) {
     source.setData(data)
     return
   }
 
-  map.addSource(ROUTE_SOURCE_ID, { type: 'geojson', data })
-  map.addLayer({
-    id: ROUTE_LAYER_ID,
-    type: 'line',
-    source: ROUTE_SOURCE_ID,
-    layout: { 'line-join': 'round', 'line-cap': 'round' },
-    paint: {
-      'line-color': '#ff1dce',
-      'line-width': 5,
-      'line-opacity': 0.9
-    }
+  map.addSource(LIVE_ROUTE_SOURCE_ID, { type: 'geojson', data })
+  // Three stacked lines: a soft magenta glow, a black casing and the bright core.
+  // Together they read as one fat, outlined "follow me" ribbon instead of a thin
+  // thread that disappears between the basemap's yellow streets.
+  addLiveRouteLayer(LIVE_ROUTE_GLOW_LAYER_ID, {
+    'line-color': LIVE_ROUTE_COLOR,
+    'line-width': ['interpolate', ['linear'], ['zoom'], 12, 14, 17, 24],
+    'line-opacity': 0.3,
+    'line-blur': 3
   })
+  addLiveRouteLayer(LIVE_ROUTE_CASING_LAYER_ID, {
+    'line-color': LIVE_ROUTE_CASING_COLOR,
+    'line-width': ['interpolate', ['linear'], ['zoom'], 12, 11, 17, 19],
+    'line-opacity': 0.92
+  })
+  addLiveRouteLayer(LIVE_ROUTE_LAYER_ID, {
+    'line-color': LIVE_ROUTE_COLOR,
+    'line-width': ['interpolate', ['linear'], ['zoom'], 12, 7, 17, 13],
+    'line-opacity': 1
+  })
+}
+
+/** Add one of the stacked lines that make up the live route. */
+function addLiveRouteLayer(id, paint) {
+  map.addLayer({ id, type: 'line', source: LIVE_ROUTE_SOURCE_ID, layout: LIVE_ROUTE_LAYOUT, paint })
 }
 
 /** Where the traveller was before `leg`: the previous leg, or the trip origin. */
@@ -1311,7 +1363,7 @@ watch(
 )
 
 watch(mapTheme, () => {
-  applyMapColors()
+  applyBasemapStyle()
   if (map) setQuestColors(map, mapTheme.value === 'theme')
 })
 
@@ -1525,10 +1577,17 @@ function writeMissionCardFlag(open) {
   <div v-if="mapStyleOpen" class="map-backdrop" @click="mapStyleOpen = false"></div>
 
   <div id="MapPop" class="rounded-4" v-if="mapStyleOpen">
+    <!-- Two independent choices: whether buildings show at all, and whether they
+         are extruded 3D or flat footprints. -->
     <div class="demo-row">
-      <span class="demo-label">3D Mode</span>
+      <span class="demo-label">Buildings</span>
       <button class="btn rounded-pill btn-sm" :class="buildingsVisible === true ? 'btn-warning' : 'btn-outline-warning'" @click="setBuildingsVisible(true)">On</button>
       <button class="btn rounded-pill btn-sm" :class="buildingsVisible === false ? 'btn-warning' : 'btn-outline-warning'" @click="setBuildingsVisible(false)">Off</button>
+    </div>
+    <div class="demo-row">
+      <span class="demo-label">3D Buildings</span>
+      <button class="btn rounded-pill btn-sm" :class="buildings3D === true ? 'btn-warning' : 'btn-outline-warning'" @click="setBuildings3D(true)">On</button>
+      <button class="btn rounded-pill btn-sm" :class="buildings3D === false ? 'btn-warning' : 'btn-outline-warning'" @click="setBuildings3D(false)">Off</button>
     </div>
     <div class="demo-row">
       <span class="demo-label">Color Theme</span>
@@ -1819,8 +1878,8 @@ function writeMissionCardFlag(open) {
   position: fixed;
   left: 50%;
   transform: translateX(-50%);
-  /* Same dock as the card: clears the nav plus the shared breathing gap. */
-  bottom: calc(var(--zt-nav-inset) + var(--zt-nav-h) + var(--zt-nav-clearance));
+  /* Same dock as the next-stop card. */
+  bottom: var(--zt-nav-dock);
   width: 56px;
   height: 56px;
   border-radius: 50%;

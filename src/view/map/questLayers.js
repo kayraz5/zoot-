@@ -1,6 +1,8 @@
 import { Marker } from 'maplibre-gl'
 import destination from '@turf/destination'
 import { point } from '@turf/helpers'
+import { BRAND } from '../../model/services/brand.js'
+import { BUILDING_LAYERS } from './mapBuildings.js'
 
 /**
  * MapLibre layers and DOM markers for the quest:
@@ -15,16 +17,26 @@ import { point } from '@turf/helpers'
 
 const EMPTY = { type: 'FeatureCollection', features: [] }
 
-const THEME = {
-  dark: { walk: '#f83878', mrt: '#ffcc00', taxi: '#ff4d00', casing: '#000000' },
-  light: { walk: '#f83878', mrt: '#111111', taxi: '#ff4d00', casing: '#ffffff' }
+const ROUTE_LAYOUT = { 'line-cap': 'round', 'line-join': 'round' }
+
+// Widths grow with zoom so the follow-me line stays readable on a phone. Walking
+// legs are the chunkiest because the pink walking line is the main navigation cue.
+const ROUTE_WIDTH = {
+  casing: ['interpolate', ['linear'], ['zoom'], 12, 9, 17, 18],
+  walk: ['interpolate', ['linear'], ['zoom'], 12, 6, 17, 12],
+  ride: ['interpolate', ['linear'], ['zoom'], 12, 5, 17, 10]
 }
 
-export const FENCE = { out: '#f83878', in: '#ffcc00' }
+const THEME = {
+  dark: { walk: BRAND.pink, mrt: BRAND.yellow, taxi: '#ff4d00', casing: BRAND.ink },
+  light: { walk: BRAND.pink, mrt: BRAND.ink, taxi: '#ff4d00', casing: '#ffffff' }
+}
+
+export const FENCE = { out: BRAND.pink, in: BRAND.yellow }
 
 /** Create the route and fence sources/layers, under the 3D buildings. */
 export function addQuestLayers(map) {
-  const beforeId = map.getLayer('building-3d') ? 'building-3d' : undefined
+  const beforeId = map.getLayer(BUILDING_LAYERS.extruded) ? BUILDING_LAYERS.extruded : undefined
   map.addSource('zt-route', { type: 'geojson', data: EMPTY })
   map.addSource('zt-fence', { type: 'geojson', data: EMPTY })
 
@@ -51,10 +63,10 @@ export function addQuestLayers(map) {
       id: 'zt-route-casing',
       type: 'line',
       source: 'zt-route',
-      layout: { 'line-cap': 'round', 'line-join': 'round' },
+      layout: ROUTE_LAYOUT,
       paint: {
-        'line-width': ['interpolate', ['linear'], ['zoom'], 12, 5, 17, 14],
-        'line-opacity': ['case', ['get', 'active'], 0.9, 0.45]
+        'line-width': ROUTE_WIDTH.casing,
+        'line-opacity': ['case', ['get', 'active'], 0.95, 0.5]
       }
     },
     beforeId
@@ -64,10 +76,10 @@ export function addQuestLayers(map) {
   const routeLine = {
     type: 'line',
     source: 'zt-route',
-    layout: { 'line-cap': 'round', 'line-join': 'round' },
+    layout: ROUTE_LAYOUT,
     paint: {
-      'line-width': ['interpolate', ['linear'], ['zoom'], 12, 3, 17, 8],
-      'line-opacity': ['case', ['get', 'active'], 1, 0.55]
+      'line-width': ROUTE_WIDTH.walk,
+      'line-opacity': ['case', ['get', 'active'], 1, 0.6]
     }
   }
   map.addLayer(
@@ -79,7 +91,11 @@ export function addQuestLayers(map) {
       ...routeLine,
       id: 'zt-route-ride',
       filter: ['!=', ['get', 'mode'], 'walk'],
-      paint: { ...routeLine.paint, 'line-dasharray': [1.2, 1.4] }
+      paint: {
+        ...routeLine.paint,
+        'line-width': ROUTE_WIDTH.ride,
+        'line-dasharray': [1.2, 1.4]
+      }
     },
     beforeId
   )
