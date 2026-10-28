@@ -1,8 +1,8 @@
 <script setup>
 import { useRouter } from 'vue-router'
-import { useUserStore } from '../../model/stores/user.js'
-import { useUiStore } from '../../model/stores/ui.js'
-import { catalog } from '../../model/services/catalog.js'
+import { useUserStore } from '../../../model/stores/user.js'
+import { useUiStore } from '../../../model/stores/ui.js'
+import { catalog } from '../../../model/services/catalog.js'
 
 /** Landing page. Copy and layout follow the Zoot pitch deck (Matthew: design QA). */
 const router = useRouter()

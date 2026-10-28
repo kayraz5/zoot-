@@ -1,4 +1,4 @@
-import { BRAND, DEFAULT_COVER, onColor } from '../../model/services/brand.js'
+import { BRAND, DEFAULT_COVER, onColor } from '../../../model/services/brand.js'
 
 // Canvas drawings for each passport page (512×716). The passport turns them into page images for flipbook-vue.
 

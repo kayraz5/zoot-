@@ -1,7 +1,7 @@
 <script setup>
 import { computed, ref, watch, onUnmounted } from 'vue'
 import { useRoute } from 'vue-router'
-import { useUiStore } from '../../model/stores/ui.js'
+import { useUiStore } from '../../../model/stores/ui.js'
 
 // Haze layer + lightning flashes, drawn over the map pages only.
 

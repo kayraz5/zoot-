@@ -1,10 +1,10 @@
 <script setup>
 import { computed, ref, watch } from 'vue'
-import { usePassportStore } from '../../model/stores/passport.js'
-import snapshot from '../../model/data/sgEntrySnapshot.js'
+import { usePassportStore } from '../../../model/stores/passport.js'
+import snapshot from '../../../model/data/sgEntrySnapshot.js'
 import {
   entryStatus, withTransitVisa, CAN_LEAVE, icaLink, countryName, VFTF, VFTF_VISA_COUNTRIES, ICA_VFTF_PAGE, ICA_ARRIVAL_CARD_PAGE
-} from '../../model/services/immigration.js'
+} from '../../../model/services/immigration.js'
 
 // "Can I leave Changi?" for the traveller's passport, on the profile page.
 // Asks /api/entry-rule (live ICA list + Passport Index); falls back to the saved snapshot.

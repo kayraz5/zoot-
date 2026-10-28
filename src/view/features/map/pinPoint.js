@@ -1,7 +1,7 @@
 import * as THREE from 'three'
 import { MercatorCoordinate } from 'maplibre-gl'
-import { distanceM } from '../../model/services/travel.js'
-import { BRAND } from '../../model/services/brand.js'
+import { distanceM } from '../../../model/services/travel.js'
+import { BRAND } from '../../../model/services/brand.js'
 
 /**
  * 3D stop pin: a low-poly gem on a pillar, rendered as a MapLibre custom layer

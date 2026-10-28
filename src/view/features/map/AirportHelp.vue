@@ -1,9 +1,9 @@
 <script setup>
 import { computed, onBeforeUnmount, ref } from 'vue'
-import { airportPlan } from '../../model/services/airport.js'
-import { catalog } from '../../model/services/catalog.js'
-import { tick } from '../../model/services/clock.js'
-import { formatTime } from '../../model/services/hours.js'
+import { airportPlan } from '../../../model/services/airport.js'
+import { catalog } from '../../../model/services/catalog.js'
+import { tick } from '../../../model/services/clock.js'
+import { formatTime } from '../../../model/services/hours.js'
 
 /**
  * "I need to get to the airport" dialog.

@@ -10,7 +10,7 @@
  * hub doesn't land near its line's geometry or (known gap) the ride needs the Sentosa
  * Express line, which has no real-geometry source yet (see scripts/sync-mrt-lines.mjs).
  * Callers keep showing the last-known-good route on a null, same contract as
- * getWalkRoute()/getDriveRoute() — see refreshPlanned()/refreshLiveRoute() in 3D_Map.vue.
+ * getWalkRoute()/getDriveRoute() — see refreshPlanned()/refreshLiveRoute() in MapView.vue.
  */
 import mrtLines from '../data/mrtLines.sg.json'
 import { HUBS, transit, distanceM } from './travel.js'

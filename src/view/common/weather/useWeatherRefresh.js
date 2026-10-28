@@ -1,5 +1,5 @@
 import { onMounted, onUnmounted } from 'vue'
-import { useUiStore } from '../../model/stores/ui.js'
+import { useUiStore } from '../../../model/stores/ui.js'
 
 const REFRESH_MS = 2 * 60000 // lightning changes fast; the weather service caches each feed, so this is cheap
 

@@ -1,15 +1,15 @@
 <script setup>
 import { computed, ref, watch } from 'vue'
 import { RouterLink } from 'vue-router'
-import { usePartyStore } from '../../model/stores/party.js'
-import { useUiStore } from '../../model/stores/ui.js'
-import { useUserStore } from '../../model/stores/user.js'
-import { useMissionStore } from '../../model/stores/mission.js'
-import { openableStops, GuestModeError, defaultQuestTitle } from '../../model/services/social.js'
-import { formatTime } from '../../model/services/hours.js'
-import { DEV_PANEL } from '../../model/services/config.js'
+import { usePartyStore } from '../../../model/stores/party.js'
+import { useUiStore } from '../../../model/stores/ui.js'
+import { useUserStore } from '../../../model/stores/user.js'
+import { useMissionStore } from '../../../model/stores/mission.js'
+import { openableStops, GuestModeError, defaultQuestTitle } from '../../../model/services/social.js'
+import { formatTime } from '../../../model/services/hours.js'
+import { DEV_PANEL } from '../../../model/services/config.js'
 import StopRangePicker from './StopRangePicker.vue'
-import MemberAvatarStack from './MemberAvatarStack.vue'
+import MemberAvatarStack from '../../common/MemberAvatarStack.vue'
 
 /**
  * Host bottom sheet on my own mission: open ONE run of consecutive stops to company.

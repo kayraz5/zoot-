@@ -1,7 +1,7 @@
 import { Marker } from 'maplibre-gl'
 import destination from '@turf/destination'
 import { point } from '@turf/helpers'
-import { BRAND } from '../../model/services/brand.js'
+import { BRAND } from '../../../model/services/brand.js'
 import { BUILDING_LAYERS } from './mapBuildings.js'
 
 /**
@@ -12,7 +12,7 @@ import { BUILDING_LAYERS } from './mapBuildings.js'
  *   - numbered stop markers and the "you are here" marker
  *
  * All functions take the map as their first argument and keep no module state, so
- * the caller (3D_Map.vue) owns the collections and decides when to redraw.
+ * the caller (MapView.vue) owns the collections and decides when to redraw.
  */
 
 const EMPTY = { type: 'FeatureCollection', features: [] }

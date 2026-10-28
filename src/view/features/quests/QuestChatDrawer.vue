@@ -1,14 +1,14 @@
 <script setup>
 import { computed, nextTick, onUnmounted, ref, watch } from 'vue'
-import { usePartyStore } from '../../model/stores/party.js'
-import { useUserStore } from '../../model/stores/user.js'
-import { useUiStore } from '../../model/stores/ui.js'
-import { useMissionStore } from '../../model/stores/mission.js'
-import { QUICK_REPLIES, MESSAGE_MAX, REPORT_REASONS, reportUser } from '../../model/services/social.js'
-import { formatTime } from '../../model/services/hours.js'
-import { DEV_PANEL } from '../../model/services/config.js'
-import UserAvatar from './UserAvatar.vue'
-import ProfilePreviewModal from './ProfilePreviewModal.vue'
+import { usePartyStore } from '../../../model/stores/party.js'
+import { useUserStore } from '../../../model/stores/user.js'
+import { useUiStore } from '../../../model/stores/ui.js'
+import { useMissionStore } from '../../../model/stores/mission.js'
+import { QUICK_REPLIES, MESSAGE_MAX, REPORT_REASONS, reportUser } from '../../../model/services/social.js'
+import { formatTime } from '../../../model/services/hours.js'
+import { DEV_PANEL } from '../../../model/services/config.js'
+import UserAvatar from '../../common/UserAvatar.vue'
+import ProfilePreviewModal from '../../common/ProfilePreviewModal.vue'
 
 /**
  * A quest's chat as a bottom drawer: messages, quick-reply chips, system lines

@@ -1,6 +1,6 @@
 <script setup>
 import { computed } from 'vue'
-import { formatTime } from '../../model/services/hours.js'
+import { formatTime } from '../../../model/services/hours.js'
 
 /**
  * Pick ONE run of consecutive stops by tapping them.

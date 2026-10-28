@@ -1,15 +1,15 @@
 <script setup>
 import { onMounted, onUnmounted, ref, watch } from 'vue'
 import { useRoute } from 'vue-router'
-import { useMissionStore } from '../../model/stores/mission.js'
-import { usePartyStore } from '../../model/stores/party.js'
-import { useUserStore } from '../../model/stores/user.js'
-import * as social from '../../model/services/social.js'
-import { tick } from '../../model/services/clock.js'
-import { geo, hasFix } from '../../model/services/geo.js'
-import { distanceM } from '../../model/services/travel.js'
-import { syncMemberMarkers, clearMemberMarkers, meetingMarker } from '../map/memberMarkers.js'
-import { useActiveQuest } from '../composables/useActiveQuest.js'
+import { useMissionStore } from '../../../model/stores/mission.js'
+import { usePartyStore } from '../../../model/stores/party.js'
+import { useUserStore } from '../../../model/stores/user.js'
+import * as social from '../../../model/services/social.js'
+import { tick } from '../../../model/services/clock.js'
+import { geo, hasFix } from '../../../model/services/geo.js'
+import { distanceM } from '../../../model/services/travel.js'
+import { syncMemberMarkers, clearMemberMarkers, meetingMarker } from './memberMarkers.js'
+import { useActiveQuest } from './useActiveQuest.js'
 
 /**
  * The social-quest side of the map, with no UI of its own (the chip is QuestCoopChip):

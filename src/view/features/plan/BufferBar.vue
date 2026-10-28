@@ -1,6 +1,6 @@
 <script setup>
 import { computed } from 'vue'
-import { formatDuration, formatTime } from '../../model/services/hours.js'
+import { formatDuration, formatTime } from '../../../model/services/hours.js'
 
 /** The buffers a traveller has to trust, as one proportional bar. With startMs, each part gets clock times. */
 const props = defineProps({

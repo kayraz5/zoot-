@@ -2,7 +2,7 @@
 import { ref } from 'vue'
 import { useTripStore } from '../../../model/stores/trip.js'
 import { formatTime } from '../../../model/services/hours.js'
-import BufferBar from '../BufferBar.vue'
+import BufferBar from './BufferBar.vue'
 import { hm, usePlanTime } from './planUi.js'
 
 /** "You have 6H 02M to explore". Inline on phones (step 1), stacked with a share bar in the desktop sidebar. */

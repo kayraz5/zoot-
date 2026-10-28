@@ -9,8 +9,8 @@
 //  It's the same pattern as pinPoint.js (PinLayer) — read that first if the
 //  matrix maths below is unfamiliar; the comments there explain it step by step.
 //
-//  USE IT (in 3D_Map.vue):
-//    import { TravellerLayer } from '../gl/travellerLayer.js'
+//  USE IT (in MapView.vue):
+//    import { TravellerLayer } from './travellerLayer.js'
 //
 //    const you = new TravellerLayer({ id: 'zt-traveller', lng: 103.8607, lat: 1.2830 })
 //    map.on('load', () => map.addLayer(you))

@@ -1,17 +1,17 @@
 <script setup>
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import Flipbook from 'flipbook-vue'
-import { StampSlam } from '../gl/stampSlam.js'
-import { drawCover, drawIdentity, drawAreaPage, drawBackPage, PAGE_W, PAGE_H } from '../gl/pageArt.js'
-import { AREAS, ORIGINS, STYLES } from '../../model/data/origins.js'
-import { catalog, placeById, loadCatalog } from '../../model/services/catalog.js'
-import { usePassportStore, CHOP_TARGET } from '../../model/stores/passport.js'
-import { useUserStore } from '../../model/stores/user.js'
-import { useMissionStore } from '../../model/stores/mission.js'
-import { DEFAULT_COVER } from '../../model/services/brand.js'
-import { getDb } from '../../model/services/db/index.js'
-import entrySnapshot from '../../model/data/sgEntrySnapshot.js'
-import { placeStamp, areaStamp } from '../../model/data/stampArt.js'
+import { StampSlam } from './stampSlam.js'
+import { drawCover, drawIdentity, drawAreaPage, drawBackPage, PAGE_W, PAGE_H } from './pageArt.js'
+import { AREAS, ORIGINS, STYLES } from '../../../model/data/origins.js'
+import { catalog, placeById, loadCatalog } from '../../../model/services/catalog.js'
+import { usePassportStore, CHOP_TARGET } from '../../../model/stores/passport.js'
+import { useUserStore } from '../../../model/stores/user.js'
+import { useMissionStore } from '../../../model/stores/mission.js'
+import { DEFAULT_COVER } from '../../../model/services/brand.js'
+import { getDb } from '../../../model/services/db/index.js'
+import entrySnapshot from '../../../model/data/sgEntrySnapshot.js'
+import { placeStamp, areaStamp } from '../../../model/data/stampArt.js'
 
 // Passport page: flipbook-vue turns the pages, and a Three.js stamp slams newly earned area chops
 const passport = usePassportStore()

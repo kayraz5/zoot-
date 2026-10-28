@@ -3,7 +3,7 @@ import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 import { getPlaceImages } from '../../../model/services/placeImages.js'
 import { formatDuration, isOpenDuringVisit } from '../../../model/services/hours.js'
 import { now } from '../../../model/services/clock.js'
-import PlaceArt from '../PlaceArt.vue'
+import PlaceArt from '../../common/PlaceArt.vue'
 
 /**
  * One place in the Explore list. The photo is fetched only once the card scrolls into view:

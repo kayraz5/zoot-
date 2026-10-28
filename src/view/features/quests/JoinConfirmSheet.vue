@@ -1,6 +1,6 @@
 <script setup>
 import { computed } from 'vue'
-import { formatTime, formatDuration } from '../../model/services/hours.js'
+import { formatTime, formatDuration } from '../../../model/services/hours.js'
 
 /**
  * The one confirm step before joining: exactly what changes in MY plan (previewJoin's result).

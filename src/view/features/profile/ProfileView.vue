@@ -1,19 +1,19 @@
 <script setup>
 import {computed, defineAsyncComponent, ref} from 'vue';
 import {useRouter} from 'vue-router';
-import {useUserStore} from '../../model/stores/user.js';
-import {usePassportStore} from '../../model/stores/passport.js';
-import {useUiStore} from '../../model/stores/ui.js';
-import {STYLES} from '../../model/data/origins.js';
-import {DEV_PANEL} from '../../model/services/config.js';
-import {COVERS, DEFAULT_COVER, onColor} from '../../model/services/brand.js';
-import {useCharacterStore} from '../../model/stores/character.js';
-import EntryCheck from '../components/EntryCheck.vue';
+import {useUserStore} from '../../../model/stores/user.js';
+import {usePassportStore} from '../../../model/stores/passport.js';
+import {useUiStore} from '../../../model/stores/ui.js';
+import {STYLES} from '../../../model/data/origins.js';
+import {DEV_PANEL} from '../../../model/services/config.js';
+import {COVERS, DEFAULT_COVER, onColor} from '../../../model/services/brand.js';
+import {useCharacterStore} from '../../../model/stores/character.js';
+import EntryCheck from './EntryCheck.vue';
 
 // Loaded only when the Character tab is opened. The studio pulls in all of
 // Three.js (~540 kB), and most visits to this page are just checking XP or
 // signing out — no reason to make those pay for a 3D engine they never see.
-const CharacterStudio = defineAsyncComponent(() => import('../components/CharacterStudio.vue'));
+const CharacterStudio = defineAsyncComponent(() => import('../character/CharacterStudio.vue'));
 
 /* Steven: Profile view (except passport, only entry point here) */
 

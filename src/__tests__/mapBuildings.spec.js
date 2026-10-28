@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest'
-import { applyBuildingLayers, BUILDING_LAYERS } from '../view/map/mapBuildings.js'
+import { applyBuildingLayers, BUILDING_LAYERS } from '../view/features/map/mapBuildings.js'
 
 function fakeMap() {
   return {

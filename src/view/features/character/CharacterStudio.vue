@@ -16,8 +16,8 @@
 // ─────────────────────────────────────────────────────────────────────────────
 import { onMounted, onUnmounted, ref, watch } from 'vue'
 import * as THREE from 'three'
-import { createTraveller } from '../gl/traveller.js'
-import { EYEWEAR, FURS, HATS, OUTFITS } from '../gl/travellerAssets.js'
+import { createTraveller } from './traveller.js'
+import { EYEWEAR, FURS, HATS, OUTFITS } from './travellerAssets.js'
 
 const props = defineProps({
   outfit: { type: String, default: 'zoot' },

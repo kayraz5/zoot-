@@ -1,11 +1,11 @@
 <script setup>
 import { computed, onMounted, ref } from 'vue'
 import { RouterLink } from 'vue-router'
-import { usePartyStore } from '../../model/stores/party.js'
-import { useMissionStore } from '../../model/stores/mission.js'
-import { useUserStore } from '../../model/stores/user.js'
-import { stopsFit, airportBy } from '../../model/services/social.js'
-import QuestCard from '../components/QuestCard.vue'
+import { usePartyStore } from '../../../model/stores/party.js'
+import { useMissionStore } from '../../../model/stores/mission.js'
+import { useUserStore } from '../../../model/stores/user.js'
+import { stopsFit, airportBy } from '../../../model/services/social.js'
+import QuestCard from './QuestCard.vue'
 
 /** Open Quests feed: windows other travellers have opened, with a fit badge for my layover. */
 const party = usePartyStore()

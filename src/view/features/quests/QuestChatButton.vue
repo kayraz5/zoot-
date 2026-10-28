@@ -1,7 +1,7 @@
 <script setup>
 import { computed } from 'vue'
-import { usePartyStore } from '../../model/stores/party.js'
-import { useActiveQuest } from '../composables/useActiveQuest.js'
+import { usePartyStore } from '../../../model/stores/party.js'
+import { useActiveQuest } from './useActiveQuest.js'
 
 /**
  * The map card's main button while I'm in a social quest: "💬 Chat with Mei" (+ unread count).

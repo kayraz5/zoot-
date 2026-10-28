@@ -1,12 +1,12 @@
 <script setup>
 import { computed } from 'vue'
 import { useRouter } from 'vue-router'
-import { useUiStore } from '../../model/stores/ui.js'
-import { useUserStore } from '../../model/stores/user.js'
-import { usePassportStore, CHOP_TARGET } from '../../model/stores/passport.js'
-import { AREAS } from '../../model/data/origins.js'
-import { chopLabel } from '../gl/pageArt.js'
-import { placeStamp, areaStamp } from '../../model/data/stampArt.js'
+import { useUiStore } from '../../../model/stores/ui.js'
+import { useUserStore } from '../../../model/stores/user.js'
+import { usePassportStore, CHOP_TARGET } from '../../../model/stores/passport.js'
+import { AREAS } from '../../../model/data/origins.js'
+import { chopLabel } from './pageArt.js'
+import { placeStamp, areaStamp } from '../../../model/data/stampArt.js'
 
 // Pop-up after a stamp, or after returning to the airport/hotel.
 const ui = useUiStore()

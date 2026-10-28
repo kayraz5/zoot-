@@ -1,9 +1,9 @@
 <script setup>
 import { computed } from 'vue'
 import { RouterLink } from 'vue-router'
-import MemberAvatarStack from './MemberAvatarStack.vue'
-import { STYLES } from '../../model/data/origins.js'
-import { defaultQuestTitle } from '../../model/services/social.js'
+import MemberAvatarStack from '../../common/MemberAvatarStack.vue'
+import { STYLES } from '../../../model/data/origins.js'
+import { defaultQuestTitle } from '../../../model/services/social.js'
 
 /**
  * One open window in the feed. `fit` is stopsFit() for the WHOLE window against my layover

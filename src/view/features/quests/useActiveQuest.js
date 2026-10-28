@@ -1,7 +1,7 @@
 import { computed } from 'vue'
-import { useMissionStore } from '../../model/stores/mission.js'
-import { usePartyStore } from '../../model/stores/party.js'
-import { tick } from '../../model/services/clock.js'
+import { useMissionStore } from '../../../model/stores/mission.js'
+import { usePartyStore } from '../../../model/stores/party.js'
+import { tick } from '../../../model/services/clock.js'
 
 /** Share my location (and see the others) from this long before the meet-up. */
 export const LIVE_BEFORE_MIN = 30

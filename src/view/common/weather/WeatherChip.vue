@@ -1,9 +1,9 @@
 <script setup>
 import { computed } from 'vue'
-import { useUiStore } from '../../model/stores/ui.js'
-import { describeCode, describePsi } from '../../model/services/weather.js'
-import { tick } from '../../model/services/clock.js'
-import { CITY } from '../../model/services/config.js'
+import { useUiStore } from '../../../model/stores/ui.js'
+import { describeCode, describePsi } from '../../../model/services/weather.js'
+import { tick } from '../../../model/services/clock.js'
+import { CITY } from '../../../model/services/config.js'
 
 const ONE_HOUR_MS = 60 * 60 * 1000;
 const DEV_RAIN_CHANCE = 90;

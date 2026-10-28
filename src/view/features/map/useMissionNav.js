@@ -1,9 +1,9 @@
 import { computed } from 'vue'
-import { useMissionStore } from '../../model/stores/mission.js'
-import { geo, hasFix } from '../../model/services/geo.js'
-import { tick } from '../../model/services/clock.js'
-import { checkInStatus } from '../../model/services/checkin.js'
-import { distanceM, travel } from '../../model/services/travel.js'
+import { useMissionStore } from '../../../model/stores/mission.js'
+import { geo, hasFix } from '../../../model/services/geo.js'
+import { tick } from '../../../model/services/clock.js'
+import { checkInStatus } from '../../../model/services/checkin.js'
+import { distanceM, travel } from '../../../model/services/travel.js'
 
 /**
  * Mission navigation state shared by the map view and the next-stop card.

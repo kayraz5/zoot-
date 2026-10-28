@@ -1,9 +1,9 @@
 <script setup>
 import { computed, ref } from 'vue'
-import { formatDuration, formatTime } from '../../model/services/hours.js'
-import { describeCode } from '../../model/services/weather.js'
-import { tick } from '../../model/services/clock.js'
-import { useUiStore } from '../../model/stores/ui.js'
+import { formatDuration, formatTime } from '../../../model/services/hours.js'
+import { describeCode } from '../../../model/services/weather.js'
+import { tick } from '../../../model/services/clock.js'
+import { useUiStore } from '../../../model/stores/ui.js'
 
 /**
  * Layover card c

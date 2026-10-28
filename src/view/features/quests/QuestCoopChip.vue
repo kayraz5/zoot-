@@ -1,10 +1,10 @@
 <script setup>
 import { useRouter } from 'vue-router'
-import { usePartyStore } from '../../model/stores/party.js'
-import { useUiStore } from '../../model/stores/ui.js'
-import { formatTime } from '../../model/services/hours.js'
-import { DEV_PANEL } from '../../model/services/config.js'
-import { useActiveQuest } from '../composables/useActiveQuest.js'
+import { usePartyStore } from '../../../model/stores/party.js'
+import { useUiStore } from '../../../model/stores/ui.js'
+import { formatTime } from '../../../model/services/hours.js'
+import { DEV_PANEL } from '../../../model/services/config.js'
+import { useActiveQuest } from './useActiveQuest.js'
 
 /**
  * One line at the top of the map card while I'm in a social quest:

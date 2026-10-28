@@ -1,10 +1,10 @@
 <script setup>
 import { onUnmounted, ref, watch } from 'vue'
-import { usePartyStore } from '../../model/stores/party.js'
-import { useMissionStore } from '../../model/stores/mission.js'
-import { useUserStore } from '../../model/stores/user.js'
-import { notify } from '../../model/services/notify.js'
-import { useActiveQuest } from '../composables/useActiveQuest.js'
+import { usePartyStore } from '../../../model/stores/party.js'
+import { useMissionStore } from '../../../model/stores/mission.js'
+import { useUserStore } from '../../../model/stores/user.js'
+import { notify } from '../../../model/services/notify.js'
+import { useActiveQuest } from './useActiveQuest.js'
 import QuestChatDrawer from './QuestChatDrawer.vue'
 
 /**

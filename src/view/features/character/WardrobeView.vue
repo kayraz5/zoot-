@@ -12,7 +12,7 @@
 //  your picks away on reload; the Me tab saves them for the map.
 // ─────────────────────────────────────────────────────────────────────────────
 import { ref } from 'vue'
-import CharacterStudio from '../components/CharacterStudio.vue'
+import CharacterStudio from './CharacterStudio.vue'
 
 const outfit = ref('zoot')
 const fur = ref('zoot')

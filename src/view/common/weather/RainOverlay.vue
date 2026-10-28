@@ -1,8 +1,8 @@
 <script setup>
 import { computed } from 'vue'
 import { useRoute } from 'vue-router'
-import { useUiStore } from '../../model/stores/ui.js'
-import { tick } from '../../model/services/clock.js'
+import { useUiStore } from '../../../model/stores/ui.js'
+import { tick } from '../../../model/services/clock.js'
 
 // Draws falling raindrops over the whole screen when it is raining.
 

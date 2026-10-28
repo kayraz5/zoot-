@@ -1,10 +1,10 @@
 <script setup>
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { useMissionStore } from '../../model/stores/mission.js'
-import { useUiStore } from '../../model/stores/ui.js'
-import { loadCatalog } from '../../model/services/catalog.js'
-import { formatDuration, formatTime } from '../../model/services/hours.js'
+import { useMissionStore } from '../../../model/stores/mission.js'
+import { useUiStore } from '../../../model/stores/ui.js'
+import { loadCatalog } from '../../../model/services/catalog.js'
+import { formatDuration, formatTime } from '../../../model/services/hours.js'
 
 /**
  * Simple timeline editor: one histogram of the day, plus a plain list of stops.

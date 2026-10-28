@@ -1,11 +1,11 @@
 <script setup>
 import { computed, onMounted, ref } from 'vue'
-import PlaceArt from '../components/PlaceArt.vue'
-import { useMissionStore } from '../../model/stores/mission.js'
-import { useUiStore } from '../../model/stores/ui.js'
-import { loadCatalog, placeById } from '../../model/services/catalog.js'
-import { SIDEQUESTS } from '../../model/data/sidequests.js'
-import { distanceM } from '../../model/services/travel.js'
+import PlaceArt from '../../common/PlaceArt.vue'
+import { useMissionStore } from '../../../model/stores/mission.js'
+import { useUiStore } from '../../../model/stores/ui.js'
+import { loadCatalog, placeById } from '../../../model/services/catalog.js'
+import { SIDEQUESTS } from '../../../model/data/sidequests.js'
+import { distanceM } from '../../../model/services/travel.js'
 
 /**
  * P1 sidequest deck: swipe right to add one to the route, left to pass.

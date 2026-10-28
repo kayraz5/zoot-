@@ -1,5 +1,5 @@
 <script setup>
-import WeatherChip from './WeatherChip.vue'
+import WeatherChip from '../../common/weather/WeatherChip.vue'
 
 // Top-left column of the map HUD: Singapore badge, weather chip, GPS/demo button and
 // (via the slot) the Demo-Walk panel, all in one flex column so every gap is the same.

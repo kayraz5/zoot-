@@ -1,7 +1,7 @@
 <script setup>
 import { computed, onMounted, ref } from 'vue'
-import { catalog } from '../../model/services/catalog.js'
-import { distanceM } from '../../model/services/travel.js'
+import { catalog } from '../../../model/services/catalog.js'
+import { distanceM } from '../../../model/services/travel.js'
 
 /** Choose a catalog place to add or swap in. Nearest first; search by name, area or tag. */
 const props = defineProps({

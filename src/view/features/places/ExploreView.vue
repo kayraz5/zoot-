@@ -2,11 +2,11 @@
 
 <script setup>
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
-import { catalog, loadCatalog } from '../../model/services/catalog.js'
-import { isOpenDuringVisit } from '../../model/services/hours.js'
-import { now } from '../../model/services/clock.js'
-import { TILES } from '../components/plan/planUi.js'
-import PlaceCard from '../components/explore/PlaceCard.vue'
+import { catalog, loadCatalog } from '../../../model/services/catalog.js'
+import { isOpenDuringVisit } from '../../../model/services/hours.js'
+import { now } from '../../../model/services/clock.js'
+import { TILES } from '../../../model/data/interests.js'
+import PlaceCard from './PlaceCard.vue'
 
 /**
  * Explore: scroll through every place in the catalog. Search plus a few filters,

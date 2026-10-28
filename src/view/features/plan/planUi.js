@@ -4,16 +4,9 @@ import { useUserStore } from '../../../model/stores/user.js'
 import { STYLES } from '../../../model/data/origins.js'
 import { computeBudget } from '../../../model/services/planner.js'
 import { now, tick } from '../../../model/services/clock.js'
+import { TILES } from '../../../model/data/interests.js'
 
-/** Interest tiles, each covering one or more catalog tags the planner scores on. */
-export const TILES = [
-	{ id: 'food', label: 'Food & hawker', icon: 'bi-egg-fried', tags: ['hawker', 'food'] },
-	{ id: 'nature', label: 'Nature & gardens', icon: 'bi-flower1', tags: ['gardens', 'nature', 'beach'] },
-	{ id: 'culture', label: 'Culture & heritage', icon: 'bi-bank', tags: ['culture', 'heritage', 'museum'] },
-	{ id: 'views', label: 'Views & photos', icon: 'bi-camera', tags: ['views', 'photo'] },
-	{ id: 'shopping', label: 'Shopping', icon: 'bi-bag', tags: ['shopping'] },
-	{ id: 'nightlife', label: 'Nightlife', icon: 'bi-moon-stars', tags: ['nightlife'] }
-]
+export { TILES }
 /** What each travel style pre-picks until the traveller taps a tile. */
 const STYLE_TILES = {
 	budget: ['food', 'nature', 'views'],

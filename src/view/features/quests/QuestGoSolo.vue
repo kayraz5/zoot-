@@ -1,9 +1,9 @@
 <script setup>
 import { ref } from 'vue'
-import { useMissionStore } from '../../model/stores/mission.js'
-import { usePartyStore } from '../../model/stores/party.js'
-import { useUiStore } from '../../model/stores/ui.js'
-import { useActiveQuest } from '../composables/useActiveQuest.js'
+import { useMissionStore } from '../../../model/stores/mission.js'
+import { usePartyStore } from '../../../model/stores/party.js'
+import { useUiStore } from '../../../model/stores/ui.js'
+import { useActiveQuest } from './useActiveQuest.js'
 
 /** Small "Go solo" text link for the map card while I've joined someone's quest (nothing otherwise). */
 const store = useMissionStore()

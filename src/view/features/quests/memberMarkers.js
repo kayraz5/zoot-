@@ -1,5 +1,5 @@
 import { Marker } from 'maplibre-gl'
-import { DEFAULT_COVER, onColor } from '../../model/services/brand.js'
+import { DEFAULT_COVER, onColor } from '../../../model/services/brand.js'
 
 /**
  * Live positions of other quest members, drawn as small avatar pins (cover colour,

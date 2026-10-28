@@ -1,10 +1,10 @@
 <script setup>
 import { computed } from 'vue'
-import { placeStampUrl } from '../../model/services/stampArt.js'
+import { placeStampUrl } from '../../../model/services/stampArt.js'
 // Social quests: "With Mei until 15:40", Go solo (renders nothing when not in a quest).
-import QuestCoopChip from './QuestCoopChip.vue'
-import QuestChatButton from './QuestChatButton.vue' // "Chat with Mei" (only while in a social quest)
-import QuestGoSolo from './QuestGoSolo.vue'         // "Go solo" link (only after joining someone's quest)
+import QuestCoopChip from '../quests/QuestCoopChip.vue'
+import QuestChatButton from '../quests/QuestChatButton.vue' // "Chat with Mei" (only while in a social quest)
+import QuestGoSolo from '../quests/QuestGoSolo.vue'         // "Go solo" link (only after joining someone's quest)
 
 /**
  * Next-stop card ("center console") shown at the bottom of the map.
@@ -39,7 +39,7 @@ const stampArt = computed(() => placeStampUrl(props.next?.name))
 <template>
   <div id="CenterInfo" class="rounded-4">
     <!-- This is the only way to hide the card now that the old nav-bar toggle button
-         is gone while the card's open (see 3D_Map.vue) — without it there'd be no way
+         is gone while the card's open (see MapView.vue) — without it there'd be no way
          back to the floating flag button. -->
     <button type="button" class="card-close" aria-label="Hide next-stop card" @click="$emit('close')">
       <i class="bi bi-x-lg" aria-hidden="true"></i>

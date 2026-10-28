@@ -1,10 +1,10 @@
 <script setup>
 import { computed, onMounted, ref } from 'vue'
 import { useRoute } from 'vue-router'
-import { catalog, loadCatalog } from '../../model/services/catalog.js'
-import { usePassportStore } from '../../model/stores/passport.js'
-import { AREAS } from '../../model/data/origins.js'
-import { placeStampUrl } from '../../model/services/stampArt.js'
+import { catalog, loadCatalog } from '../../../model/services/catalog.js'
+import { usePassportStore } from '../../../model/stores/passport.js'
+import { AREAS } from '../../../model/data/origins.js'
+import { placeStampUrl } from '../../../model/services/stampArt.js'
 
 // City Codex: every place by area, shown as stamped, seen or undiscovered. ?area=X shows one area.
 const passport = usePassportStore()
