@@ -56,6 +56,11 @@ const picks = ref([]);
 const chosen = ref(null);
 const saving = ref(false);
 
+// First time = no travel style yet. Retakes come from the plan page (?next=/plan) or Me (no next).
+const firstTime = user.needsOnboarding;
+const nextPath = typeof route.query.next === 'string' ? route.query.next : null;
+const backTo = nextPath || '/me';
+
 const result = computed(() => {
     const count = {};
     picks.value.forEach((s) => (count[s] = (count[s] || 0) + 1));
@@ -71,11 +76,12 @@ function answer(style) {
     }
 }
 
-async function save() {
+/** Save the style, then go to `dest`: the first-time choices, or back where a retake came from. */
+async function save(dest = firstTime ? nextPath || '/plan' : backTo) {
     saving.value = true;
     try {
         await user.updateProfile({style: chosen.value});
-        router.replace(typeof route.query.next === 'string' ? route.query.next : '/plan');
+        router.replace(dest);
     } catch (err) {
         // Without this the button stays greyed out and nothing explains why.
         ui.toast(`Couldn't save your travel style: ${err.message}`, 'danger', 5000);
@@ -87,7 +93,11 @@ async function save() {
 
 <template>
     <main class="zt-page" style="max-width: 560px">
-        <div 
+        <!-- Retaking the quiz: a way back without changing anything -->
+        <button v-if="!firstTime" type="button" class="btn btn-link px-0 mb-2 back" @click="router.replace(backTo)">
+            <i class="bi bi-arrow-left"></i> {{ backTo === '/me' ? 'Back to profile' : 'Back' }}
+        </button>
+        <div
             class="progress mb-4" 
             style="height: 8px" 
             role="progressbar" 
@@ -144,8 +154,18 @@ async function save() {
                 </button>
             </div>
             
-            <button class="btn btn-primary btn-lg px-5" :disabled="saving" @click="save">
-                Plan my layover
+            <template v-if="firstTime">
+                <button class="btn btn-primary btn-lg px-5" :disabled="saving" @click="save(nextPath || '/plan')">
+                    <i class="bi bi-airplane"></i> Plan my layover
+                </button>
+                <p class="tiny text-muted mt-4 mb-2">Or start somewhere else</p>
+                <div class="d-flex flex-wrap justify-content-center gap-2">
+                    <button class="btn btn-soft" :disabled="saving" @click="save('/explore')"><i class="bi bi-compass"></i> Explore places</button>
+                    <button class="btn btn-soft" :disabled="saving" @click="save('/map')"><i class="bi bi-map"></i> Open the map</button>
+                </div>
+            </template>
+            <button v-else class="btn btn-primary btn-lg px-5" :disabled="saving" @click="save()">
+                {{ backTo === '/me' ? 'Save my style' : 'Save and continue' }}
             </button>
         </div>
     </main>
