@@ -31,8 +31,8 @@ vi.mock('../model/services/social.js', async (orig) => ({
 }))
 
 import * as social from '../model/services/social.js'
-import QuestChatDrawer from '../view/components/QuestChatDrawer.vue'
-import QuestChatHost from '../view/components/QuestChatHost.vue'
+import QuestChatDrawer from '../view/features/quests/QuestChatDrawer.vue'
+import QuestChatHost from '../view/features/quests/QuestChatHost.vue'
 import { usePartyStore } from '../model/stores/party.js'
 import { useUserStore } from '../model/stores/user.js'
 import { useUiStore } from '../model/stores/ui.js'

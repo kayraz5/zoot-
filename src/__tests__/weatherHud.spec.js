@@ -9,12 +9,12 @@ vi.mock('vue-router', () => ({ useRoute: () => route, useRouter: () => ({ push()
 import { useUiStore } from '../model/stores/ui.js'
 import { describeCode } from '../model/services/weather.js'
 import { tick } from '../model/services/clock.js'
-import { useWeatherRefresh } from '../view/composables/useWeatherRefresh.js'
-import WeatherChip from '../view/components/WeatherChip.vue'
-import MapStatusStack from '../view/components/MapStatusStack.vue'
-import MapMenuButton from '../view/components/MapMenuButton.vue'
-import SkyEffects from '../view/components/SkyEffects.vue'
-import RainOverlay from '../view/components/RainOverlay.vue'
+import { useWeatherRefresh } from '../view/common/weather/useWeatherRefresh.js'
+import WeatherChip from '../view/common/weather/WeatherChip.vue'
+import MapStatusStack from '../view/features/map/MapStatusStack.vue'
+import MapMenuButton from '../view/features/map/MapMenuButton.vue'
+import SkyEffects from '../view/common/weather/SkyEffects.vue'
+import RainOverlay from '../view/common/weather/RainOverlay.vue'
 
 const SGT_NOON = Date.parse('2026-10-23T04:00:00Z') // 12:00 SGT
 const SGT_NIGHT = Date.parse('2026-10-23T14:00:00Z') // 22:00 SGT

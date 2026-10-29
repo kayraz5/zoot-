@@ -1,7 +1,7 @@
 import { it, expect } from 'vitest'
 import { mount, flushPromises } from '@vue/test-utils'
 import { createPinia, setActivePinia } from 'pinia'
-import CenterDialog from '../view/components/CenterDialog.vue'
+import CenterDialog from '../view/app/CenterDialog.vue'
 import { usePartyStore } from '../model/stores/party.js'
 
 it('centred prompt: shows, then resolves with the answer', async () => {

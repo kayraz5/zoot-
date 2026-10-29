@@ -6,13 +6,11 @@ import { tick } from '../../model/services/clock.js'
 import { useUiStore } from '../../model/stores/ui.js'
 
 /**
- * Layover card c
- * The bar doubles as a scrubber: drag it to see what the plan has you doing at any moment.
+ * EDITOR: KAYRA
+ * Layover card
  */
 const props = defineProps({
-	mission: { type: Object, required: true },
-	/** Live "leave by" from where the traveller is now; used once they are out exploring. */
-	leaveByMs: { type: Number, default: null }
+	mission: { type: Object, required: true }
 })
 
 const MIN = 60000
@@ -31,9 +29,7 @@ const segs = computed(() => {
 	const b = m.value.buffers
 	const exitEnd = startMs.value + b.exit_min * MIN
 	const arriveBy = Date.parse(ret.value.arrive_by)
-	const planned = arriveBy - ret.value.travel_min * MIN
-	const live = props.leaveByMs != null && tick.value >= exitEnd ? props.leaveByMs : null
-	const headBack = Math.min(arriveBy, Math.max(exitEnd, live ?? planned))
+	const headBack = Math.min(arriveBy, Math.max(exitEnd, arriveBy - ret.value.travel_min * MIN))
 	const checkinEnd = arriveBy + b.reentry_min * MIN
 	return [
 		{ key: 'exit', label: airport.value ? 'Immigration' : 'Get ready', from: startMs.value, to: exitEnd },
@@ -50,7 +46,7 @@ const headBackMs = computed(() => explore.value?.to ?? Date.parse(ret.value.arri
 /** Faint ticks on the bar where each planned stop begins. */
 const stopTicks = computed(() => visits.value.map((l) => ({ id: l.place_id, left: pct(Date.parse(l.arrive_iso)), done: l.status === 'stamped' })))
 
-// ── Weather pill (lighter than the HUD WeatherChip) ────────────────────
+// Weather
 const weather = computed(() => {
 	if (ui.forceRain) return { icon: 'bi-cloud-rain-heavy', temp: null, prob: 90 }
 	if (!ui.weather) return null
@@ -58,7 +54,7 @@ const weather = computed(() => {
 	return { icon: describeCode(ui.weather.current.code).icon, temp: Math.round(ui.weather.current.temp), prob: hour?.prob ?? 0 }
 })
 
-// ── Focus time: follows the clock, or wherever the bar was scrubbed ────
+// fOLLOW the clock
 const scrubMs = ref(null)
 const nowMs = computed(() => tick.value)
 const nowInWindow = computed(() => nowMs.value >= startMs.value && nowMs.value <= endMs.value)
@@ -105,13 +101,14 @@ const open = ref(false)
 <template>
 	<section class="zt-card layover" aria-label="Layover timeline">
 		<!-- Summary -->
-		<!-- Weather shares the eyebrow row only, so the number and the times get the full width. -->
 		<header class="head">
-			<div class="eyebrow">Free time to explore</div>
-			<div class="big">{{ formatDuration(explore?.min ?? 0) }}</div>
-			<div class="sub">
-				<span>Head back by <b class="mono">{{ formatTime(headBackMs) }}</b></span>
-				<span>{{ airport ? 'Flight' : 'Due back' }} <b class="mono">{{ formatTime(endMs) }}</b></span>
+			<div class="min-w-0">
+				<div class="eyebrow">Free time to explore</div>
+				<div class="big">{{ formatDuration(explore?.min ?? 0) }}</div>
+				<div class="sub">
+					<span>Head back by <b class="mono">{{ formatTime(headBackMs) }}</b></span>
+					<span>{{ airport ? 'Flight' : 'Due back' }} <b class="mono">{{ formatTime(endMs) }}</b></span>
+				</div>
 			</div>
 			<div v-if="weather" class="wx">
 				<i class="bi" :class="weather.icon"></i>
@@ -167,15 +164,7 @@ const open = ref(false)
 .muted { color: var(--zt-muted); font-weight: 500; }
 
 /* Summary */
-.head {
-	display: grid; grid-template-columns: minmax(0, 1fr) auto; column-gap: 12px;
-	grid-template-areas: 'eyebrow wx' 'big big' 'sub sub';
-	align-items: center;
-}
-.head .eyebrow { grid-area: eyebrow; }
-.head .wx { grid-area: wx; justify-self: end; }
-.head .big { grid-area: big; }
-.head .sub { grid-area: sub; }
+.head { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; }
 .eyebrow { font-size: 0.8rem; color: var(--zt-muted); font-weight: 600; }
 .big { font-family: var(--zt-font-head); font-weight: 700; font-size: clamp(2.1rem, 9vw, 2.9rem); line-height: 1.02; letter-spacing: -0.01em; margin: 2px 0 4px; }
 [data-bs-theme='dark'] .big { color: var(--zt-yellow); }

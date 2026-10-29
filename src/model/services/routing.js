@@ -2,7 +2,7 @@
  * Street-following routes, with automatic failover across independent providers so a
  * single router being down never means a leg falls back to a straight line. Each mode
  * tries a short list of providers in order; a result only comes back null when every
- * provider in the list has failed or timed out. Callers (3D_Map.vue's refreshPlanned/
+ * provider in the list has failed or timed out. Callers (MapView.vue's refreshPlanned/
  * refreshLiveRoute) are the ones responsible for never drawing straight() on a null —
  * they keep the last-known-good geometry for that leg instead.
  *
