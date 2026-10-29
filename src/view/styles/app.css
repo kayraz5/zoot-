@@ -26,12 +26,13 @@
   --zt-shadow: 4px 4px 0 var(--zt-shadow-color);
   --zt-shadow-sm: 3px 3px 0 var(--zt-shadow-color);
   --zt-radius: 20px;
-  /* Bottom-nav geometry, shared so floating UI can dock above the nav without
-     guessing: nav height, the gap it keeps from the screen edge, and the gap
-     any card floating over the map leaves between itself and the nav. */
+  /* Bottom-nav geometry, shared so floating UI docks consistently:
+     the nav height, its inset from the screen edge, the breathing gap above it,
+     and the resulting dock offset used by cards/buttons that float over the nav. */
   --zt-nav-h: 68px;
   --zt-nav-inset: max(12px, env(safe-area-inset-bottom));
   --zt-nav-clearance: clamp(12px, 3.4vw, 18px);
+  --zt-nav-dock: calc(var(--zt-nav-inset) + var(--zt-nav-h) + var(--zt-nav-clearance));
   --zt-font-display: 'Bebas Neue', 'Fredoka', sans-serif;
   --zt-font-head: 'Fredoka', 'Poppins', sans-serif;
 
@@ -244,7 +245,7 @@ a { text-underline-offset: 3px; }
   background-image: repeating-conic-gradient(from 0deg at 50% 62%, rgba(255, 255, 255, 0.34) 0deg 9deg, rgba(255, 255, 255, 0) 9deg 18deg);
 }
 
-/* Live location of other quest members on the map (view/map/memberMarkers.js) */
+/* Live location of other quest members on the map (view/features/quests/memberMarkers.js) */
 .zt-member-marker { display: flex; flex-direction: column; align-items: center; gap: 2px; pointer-events: auto; }
 .zt-member-marker .face { width: 34px; height: 34px; border-radius: 32%; display: grid; place-items: center; font-family: var(--zt-font-head); font-weight: 700; font-size: 1rem; border: 3px solid #111; box-shadow: 0 3px 0 #111; }
 .zt-member-marker .name { font-size: 0.7rem; font-weight: 800; padding: 1px 6px; border-radius: 99px; background: #111; color: #ffcc00; white-space: nowrap; }
@@ -257,4 +258,18 @@ a { text-underline-offset: 3px; }
 
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation-duration: 0.01ms !important; animation-iteration-count: 1 !important; transition-duration: 0.01ms !important; }
+}
+
+/* Shared look for the map HUD chips (Singapore, weather, GPS button, countdown) */
+.zt-hud-chip {
+  background-color: var(--zt-yellow) !important;
+  color: #000;
+  border: clamp(2px, 0.7vw, 3px) solid #000 !important;
+  font-family: inherit;
+  font-weight: 700;
+  /* buttons take their fill and outline from Bootstrap variables; keep a hover state */
+  --bs-btn-bg: var(--zt-yellow);
+  --bs-btn-border-color: #000;
+  --bs-btn-hover-bg: var(--zt-yellow-soft);
+  --bs-btn-hover-border-color: #000;
 }

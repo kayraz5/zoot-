@@ -14,10 +14,10 @@ vi.mock('../model/services/social.js', async (orig) => ({
 
 vi.mock('../model/services/db/index.js', () => ({ getDb: async () => ({ kind: 'local', saveMission: async () => {} }) }))
 
-import QuestCoopChip from '../view/components/QuestCoopChip.vue'
-import QuestMapLive from '../view/components/QuestMapLive.vue'
-import QuestChatButton from '../view/components/QuestChatButton.vue'
-import QuestGoSolo from '../view/components/QuestGoSolo.vue'
+import QuestCoopChip from '../view/features/quests/QuestCoopChip.vue'
+import QuestMapLive from '../view/features/quests/QuestMapLive.vue'
+import QuestChatButton from '../view/features/quests/QuestChatButton.vue'
+import QuestGoSolo from '../view/features/quests/QuestGoSolo.vue'
 import { useMissionStore } from '../model/stores/mission.js'
 import { usePartyStore } from '../model/stores/party.js'
 

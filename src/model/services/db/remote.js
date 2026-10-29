@@ -43,7 +43,16 @@ export function createRemoteDb() {
             return must(await db.auth.signInWithPassword({ email, password })).session;
         },
         async signUpWithPassword(email, password) {
-            return must(await db.auth.signUp({ email, password, options: { emailRedirectTo: `${location.origin}/auth` } })).session;
+            const data = must(await db.auth.signUp({ email, password, options: { emailRedirectTo: `${location.origin}/auth` } }));
+            // Supabase answers a sign-up for an email that already has an account with a fake user
+            // (no identities) and sends no email, so the app must not say "check your inbox".
+            if (data?.user && Array.isArray(data.user.identities) && data.user.identities.length === 0) {
+                throw new Error('An account with this email already exists. Sign in instead, or use a magic link.');
+            }
+            return data?.session ?? null;
+        },
+        async resendSignup(email) {
+            must(await db.auth.resend({ type: 'signup', email, options: { emailRedirectTo: `${location.origin}/auth` } }));
         },
         // not widely implemented yet
         async signInWithGoogle() {
