@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
-import { HUBS, mrtRunning, nearestHub, rideMinutes, transit, travel, walkMinutes } from '../model/services/travel.js'
+import { HUBS, distanceM, mrtRunning, nearestHub, rideMinutes, transit, travel, walkMinutes } from '../model/services/travel.js'
 import { T, useCleanSlate } from './helpers/index.js'
+import { forAll, int } from './helpers/gen.js'
 
 useCleanSlate()
 
@@ -102,4 +103,23 @@ describe('travel mode selection', () => {
       detail: expect.stringContaining('MRT'),
     })
   })
+})
+
+
+describe('distanceM: measures geographic distance', () => {
+  // Feature: test-coverage-expansion, Property 3: Distance symmetry and identity
+  it('is symmetric and returns zero for every generated point paired with itself', () => {
+    const point = (r) => ({
+      lat: int(r, -90_000_000, 90_000_000) / 1_000_000,
+      lng: int(r, -180_000_000, 180_000_000) / 1_000_000,
+    })
+
+    forAll((r) => ({ a: point(r), b: point(r) }), ({ a, b }) => {
+      expect(distanceM(a, b)).toBeCloseTo(distanceM(b, a), 6)
+      expect(distanceM(a, a)).toBe(0)
+      expect(distanceM(b, b)).toBe(0)
+    })
+  })
+
+  // **Validates: Requirements 2.2**
 })

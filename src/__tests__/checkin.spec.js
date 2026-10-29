@@ -1,5 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { at, T, useCleanSlate } from './helpers/index.js'
+import { forAll, int } from './helpers/gen.js'
+import { CHECKIN } from '../model/services/config.js'
 import { checkInStatus, getSgTimeParts, radiusFor, sameSgDay } from '../model/services/checkin.js'
 
 useCleanSlate()
@@ -70,7 +72,35 @@ describe('checkInStatus', () => {
       message: 'In range. Stamp it!',
     })
   })
+
+  // Feature: test-coverage-expansion, Property 5: Check-in geofence rule
+  it('follows configured radius and fake-mode accuracy rules for generated positions', () => {
+    forAll((r) => ({
+      accuracy: int(r, 0, 200),
+      distanceM: int(r, 0, 200),
+      fake: r() < 0.5,
+    }), ({ accuracy, distanceM, fake }) => {
+      const position = positionAt(accuracy, {
+        lat: place.lat + distanceM / 111_320,
+      })
+      const result = checkInStatus({ place, position, fake })
+      const radius = accuracy > CHECKIN.poorAccuracyM
+        ? CHECKIN.poorAccuracyRadiusM
+        : CHECKIN.radiusM
+
+      if (!fake && accuracy > CHECKIN.rejectAccuracyM) {
+        expect(result).toMatchObject({ ok: false, code: 'accuracy' })
+        return
+      }
+
+      expect(result.radius).toBe(radius)
+      expect(result.ok).toBe(result.distance <= radius)
+    })
+  })
+
+  // **Validates: Requirements 2.2, 2.3**
 })
+
 
 describe('Singapore day helpers', () => {
   it('rolls to the next Singapore day at 16:00Z', () => {

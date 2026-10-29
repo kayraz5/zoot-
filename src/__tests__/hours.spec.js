@@ -8,6 +8,9 @@ import {
   isOpenDuringVisit,
   toSgLocalInput,
 } from '../model/services/hours.js'
+import { hm } from '../view/components/plan/planUi.js'
+import { sameSgDay } from '../model/services/checkin.js'
+import { forAll, int } from './helpers/gen.js'
 import { at, DAY, T, useCleanSlate } from './helpers/index.js'
 
 useCleanSlate()
@@ -97,6 +100,25 @@ describe('Singapore opening-hours helpers', () => {
     it('clamps negative durations to zero', () => {
       expect(formatDuration(-15)).toBe('0 min')
     })
+
+    // Feature: test-coverage-expansion, Property 6: Duration formatting preserves minutes
+    it('preserves generated duration minutes across both formatters', () => {
+      forAll((r) => int(r, -10000, 200000) / 100, (minutes) => {
+        const formatted = formatDuration(minutes)
+        const formattedMinutes = Number(formatted.match(/^(?:(\d+) h)?(?: ?(\d+) min)?$/)?.[1] || 0) * 60
+          + Number(formatted.match(/(\d+) min$/)?.[1] || 0)
+        const hmText = hm(minutes)
+        const hmMinutes = Number(hmText.match(/^(\d+)H/)?.[1] || 0) * 60
+          + Number(hmText.match(/(\d+)M$/)?.[1] || 0)
+        const expected = Math.max(0, Math.round(minutes))
+
+        expect(formattedMinutes).toBe(expected)
+        expect(hmMinutes).toBe(expected)
+        expect(hmMinutes).toBe(formattedMinutes)
+      })
+    })
+
+    // **Validates: Requirements 2.2, 2.3**
   })
 
   describe('Singapore local datetime inputs', () => {
@@ -108,4 +130,42 @@ describe('Singapore opening-hours helpers', () => {
       expect(fromSgLocalInput(localInput)).toBe(timestamp)
     })
   })
+
+  // Feature: test-coverage-expansion, Property 4: Singapore time helpers agree
+  it('keeps generated Singapore timestamps consistent across time helpers', () => {
+    const timestamp = (r) => {
+      const year = int(r, 2026, 2035)
+      const month = int(r, 1, 12)
+      const maxDay = new Date(Date.UTC(year, month, 0)).getUTCDate()
+      const day = int(r, 1, maxDay)
+      const hour = int(r, 0, 23)
+      const minute = int(r, 0, 59)
+      const date = `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`
+      return Date.parse(at(`${String(hour).padStart(2, '0')}:${String(minute).padStart(2, '0')}`, date))
+    }
+
+    forAll((r) => ({ first: timestamp(r), second: timestamp(r) }), ({ first, second }) => {
+      const firstLocal = toSgLocalInput(first)
+      const secondLocal = toSgLocalInput(second)
+      const [firstHour, firstMinute] = firstLocal.slice(11, 16).split(':').map(Number)
+      const [secondHour, secondMinute] = secondLocal.slice(11, 16).split(':').map(Number)
+
+      expect(fromSgLocalInput(firstLocal)).toBe(first)
+      expect(fromSgLocalInput(secondLocal)).toBe(second)
+      expect(formatTime(first)).toBe(firstLocal.slice(11, 16))
+      expect(formatTime(second)).toBe(secondLocal.slice(11, 16))
+      expect(getSgTimeParts(first)).toEqual({
+        minutes: firstHour * 60 + firstMinute,
+        day: new Date(`${firstLocal.slice(0, 10)}T00:00:00Z`).getUTCDay(),
+      })
+      expect(getSgTimeParts(second)).toEqual({
+        minutes: secondHour * 60 + secondMinute,
+        day: new Date(`${secondLocal.slice(0, 10)}T00:00:00Z`).getUTCDay(),
+      })
+      expect(sameSgDay(first, second)).toBe(firstLocal.slice(0, 10) === secondLocal.slice(0, 10))
+    })
+  })
+
+  // **Validates: Requirements 2.2, 2.5**
 })
+

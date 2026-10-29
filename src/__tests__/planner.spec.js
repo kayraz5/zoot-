@@ -20,6 +20,7 @@ import {
   xpFor,
 } from '../model/services/planner.js'
 import { ctx } from './helpers/fixtures.js'
+import { forAll, int, pick } from './helpers/gen.js'
 import { setNow, T, useCleanSlate } from './helpers/index.js'
 
 useCleanSlate()
@@ -182,6 +183,32 @@ describe('planner public plan and replanning helpers', () => {
     expect(result.ok).toBe(false)
     expect(result.reason).toMatch(/usable minutes after buffers/)
   })
+
+  // Feature: test-coverage-expansion, Property 7: Plans always beat the clock
+  it('keeps generated planning contexts feasible and returns by the deadline', () => {
+    forAll((r) => planningContext({
+      style: pick(r, ['budget', 'adventurous', 'party', 'conservative']),
+      interests: pick(r, [['hawker', 'gardens'], ['photo', 'heritage'], ['museum', 'food'], ['nature', 'views']]),
+      energy: pick(r, ['low', 'med', 'high']),
+      maxWalk: pick(r, [15, 30]),
+      partySize: int(r, 1, 4),
+      indoorPref: pick(r, [undefined, 'prefer']),
+      cleared: pick(r, [false, true]),
+    }), (context) => {
+      const result = planDeterministic(context)
+
+      expect(result.ok).toBe(true)
+      const returnLeg = result.mission.legs.at(-1)
+      const returnedAt = Date.parse(returnLeg.arrive_iso)
+      const arriveBy = Date.parse(returnLeg.arrive_by)
+
+      expect(slackMinutes(result.mission, context.origin, context.startMs, placeById.value)).toBeGreaterThanOrEqual(0)
+      expect(returnedAt).toBeLessThanOrEqual(arriveBy)
+      expect(returnedAt).toBeLessThanOrEqual(result.budget.arriveByMs)
+    }, { n: 30, seed: 216 })
+  })
+
+  // **Validates: Requirements 2.2, 2.5**
 
   it('reports the documented message when every selected place id is unknown', () => {
     const result = sequencePicks(planningContext(), ['not-a-real-place'])
