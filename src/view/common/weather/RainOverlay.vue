@@ -2,12 +2,9 @@
 import { computed } from 'vue'
 import { useRoute } from 'vue-router'
 import { useUiStore } from '../../../model/stores/ui.js'
-import { tick } from '../../../model/services/clock.js'
 
 // Draws falling raindrops over the whole screen when it is raining.
 
-const ONE_HOUR_MS = 60 * 60 * 1000;
-const RAIN_THRESHOLD = 60; // show rain when the chance is above this (%)
 const DROP_COUNT = 100; // how many raindrops to draw
 
 const ui = useUiStore();
@@ -18,23 +15,11 @@ const RAIN_PAGES = ['map']
 const route = useRoute();
 const onRainPage = computed(() => RAIN_PAGES.includes(route.name));
 
-// Rain chance for the current hour (same idea as WeatherChip.vue).
-const rainChance = computed(() => {
-	if (ui.forceRain) return 90;
+// Rain only falls when measurable rain is happening right now. The hourly
+// chance of rain is just a forecast, so it is not used here.
+const rainingNow = computed(() => ui.forceRain || (ui.weather?.current?.mm ?? 0) > 0);
 
-	const hours = ui.weather?.hours;
-	if (!hours) return 0;
-
-	const hour = hours.find((h) => {
-		return tick.value >= h.ms && tick.value < h.ms + ONE_HOUR_MS;
-	});
-	return hour ? hour.prob : 0;
-});
-
-// Rain falls when the chance is high, or when the forecast says it is raining right now (same rule as the chip's rain icon)
-const rainingNow = computed(() => (ui.weather?.current?.mm ?? 0) > 0);
-
-const isRaining = computed(() => onRainPage.value && (rainChance.value > RAIN_THRESHOLD || rainingNow.value));
+const isRaining = computed(() => onRainPage.value && rainingNow.value);
 
 // Make each raindrop slightly different so the rain looks natural.
 // This runs once, not on every update.
