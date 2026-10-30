@@ -19,11 +19,12 @@ const EXIT_MIN = 30
 
 /**
  * SCENARIO: Whether the traveller is already landside, so the planner can skip the exit buffer.
- * Worked out instead of asked: Jewel is landside, and anyone heading out at least 30 min
- * after landing has had time to clear immigration. (bcs GPS can't tell airside from landside.)
+ * They can say so ("I'm landside already"); otherwise it's worked out: Jewel is landside, and
+ * anyone heading out at least 30 min after landing has had time to clear immigration.
+ * (GPS can't tell airside from landside, so location alone never decides it.)
  */
-export function isCleared(originId, arrivalMs, startMs) {
-	return originId === 'jewel' || startMs - arrivalMs >= EXIT_MIN * 60000
+export function isCleared(originId, arrivalMs, startMs, landside = false) {
+	return landside || originId === 'jewel' || startMs - arrivalMs >= EXIT_MIN * 60000
 }
 
 /**
@@ -54,7 +55,11 @@ export const useTripStore = defineStore('trip', {
 		current: null
 	}),
 	getters: {
+		/** Where the trip starts: the arrival terminal, Jewel, or wherever "My location" snapped to. */
 		origin: (s) => ORIGINS.find((o) => o.id === s.draft.originId) || ORIGINS[0],
+		/** The terminal they land at, and the one their next flight leaves from (the trip ends there). */
+		arrivalTerminal: (s) => ORIGINS.find((o) => o.id === s.draft.arrivalTerminal) || ORIGINS[0],
+		returnTo: (s) => ORIGINS.find((o) => o.id === s.draft.departureTerminal) || ORIGINS[0],
 		arrivalMs: (s) => fromSgLocalInput(s.draft.arrivalLocal),
 		/** The departure (gate) time: the planner's must-return time. */
 		mustReturnMs: (s) => fromSgLocalInput(s.draft.mustReturnLocal),
@@ -73,16 +78,28 @@ export const useTripStore = defineStore('trip', {
 		landed() {
 			return (tick.value, this.arrivalMs <= now())
 		},
-		/** Already through immigration (see isCleared). Replaces the old manual toggle. */
+		/** Already through immigration (see isCleared). */
 		cleared(s) {
-			return isCleared(s.draft.originId, this.arrivalMs, this.startMs)
+			return isCleared(s.draft.originId, this.arrivalMs, this.startMs, s.draft.landside)
 		}
 	},
 	actions: {
-		/** Arrival + departure from the layover dialog. Returns '' or the reason it was refused. */
-		setLayover(arrivalLocal, departureLocal) {
+		/**
+		 * Arrival + departure (times and terminals) from the layover form.
+		 * Returns '' or the reason it was refused.
+		 */
+		setLayover(arrivalLocal, departureLocal, {
+			arrivalTerminal = this.draft.arrivalTerminal,
+			departureTerminal = this.draft.departureTerminal,
+			originId = arrivalTerminal, // where they head out from: the arrival terminal, or Jewel via "My location"
+			landside = this.draft.landside
+		} = {}) {
 			const error = layoverError(fromSgLocalInput(arrivalLocal), fromSgLocalInput(departureLocal))
 			if (error) return error
+			this.draft.originId = originId
+			this.draft.landside = landside
+			this.draft.arrivalTerminal = arrivalTerminal
+			this.draft.departureTerminal = departureTerminal
 			this.draft.arrivalLocal = arrivalLocal
 			this.draft.mustReturnLocal = departureLocal
 			this.draft.layoverSet = true
@@ -112,6 +129,7 @@ export const useTripStore = defineStore('trip', {
 			this.current = await db.saveTrip({
 				user_id: user.userId,
 				origin: { ...this.origin },
+				returnTo: { ...this.returnTo },
 				start_at: new Date(this.startMs).toISOString(),
 				must_return_at: new Date(this.mustReturnMs).toISOString(),
 				style: user.profile?.style || 'budget',
@@ -135,7 +153,10 @@ function roundTo5(ms) {
 function defaultDraft() {
 	const landing = roundTo5(now() + 3600e3)
 	return {
-		originId: 'changi-t3',
+		originId: 'changi-t3', // where the trip starts (see the origin getter)
+		arrivalTerminal: 'changi-t3',
+		departureTerminal: 'changi-t3',
+		landside: false, // "I'm landside already": past immigration, so no exit buffer
 		arrivalLocal: toSgLocalInput(landing),
 		mustReturnLocal: toSgLocalInput(landing + 8 * 3600e3), // departure
 		layoverSet: false, // the plan page asks for arrival + departure first

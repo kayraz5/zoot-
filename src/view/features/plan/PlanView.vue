@@ -7,11 +7,10 @@ import { useTripStore } from '../../../model/stores/trip.js'
 import { useMissionStore } from '../../../model/stores/mission.js'
 import { useUiStore } from '../../../model/stores/ui.js'
 import { hm, usePlanTime, usePrePickedInterests } from './planUi.js'
-import LayoverDialog from './LayoverDialog.vue'
+import LayoverForm from './LayoverForm.vue'
 import LayoverSummary from './LayoverSummary.vue'
 import EntryBanner from './EntryBanner.vue'
 import TimeBudgetCard from './TimeBudgetCard.vue'
-import OriginPicker from './OriginPicker.vue'
 import InterestTiles from './InterestTiles.vue'
 import StylePicker from './StylePicker.vue'
 import MoreOptions from './MoreOptions.vue'
@@ -39,7 +38,7 @@ const step = ref(1)
 const STEPS = ['Where & when', 'What you like', 'Your style']
 const showStep = (n) => wide.value || step.value === n
 
-// Planning is a focused flow: no bottom nav, a back arrow to Home instead. Set during setup
+// Planning is a focused flow: no bottom nav, a back arrow instead. Set during setup
 // (not after an async check) so the nav never flashes in and out when the page opens.
 ui.navHidden = true
 onMounted(() => {
@@ -52,12 +51,12 @@ onBeforeUnmount(() => {
 	ui.navHidden = false
 })
 
-// Layover dialog: first thing on the page, reopened from the layover card.
+// Layover form: first thing on the page until it's filled in, reopened from the layover card.
 const editingLayover = ref(false)
-const showLayoverDialog = computed(() => !d.layoverSet || editingLayover.value)
+const showLayoverForm = computed(() => !d.layoverSet || editingLayover.value)
 
 // ── Steps and submit ───────────────────────────────────────────────────
-const canLeaveStep1 = computed(() => d.layoverSet && !tooShort.value && !startInPast.value)
+const canLeaveStep1 = computed(() => d.layoverSet && !editingLayover.value && !tooShort.value && !startInPast.value)
 const canBuild = computed(() => canLeaveStep1.value && d.interests.length > 0 && !planning.value)
 
 function next() {
@@ -66,12 +65,17 @@ function next() {
 	step.value = Math.min(3, step.value + 1)
 	window.scrollTo?.({ top: 0 })
 }
-/** Header back arrow: previous step on phones, otherwise out to Home. */
+/**
+ * Header back arrow: previous step on phones, otherwise back to wherever they came from
+ * (often the profile's entry check), or the profile when the plan page was opened directly.
+ */
+const cameFrom = typeof window !== 'undefined' ? window.history.state?.back : null
 function back() {
 	if (!wide.value && step.value > 1) step.value -= 1
-	else router.push('/')
+	else if (cameFrom) router.back()
+	else router.push('/me')
 }
-const backLabel = computed(() => (!wide.value && step.value > 1 ? 'Previous step' : 'Back to home'))
+const backLabel = computed(() => (!wide.value && step.value > 1 ? 'Previous step' : cameFrom ? 'Back' : 'Back to profile'))
 
 async function submit() {
 	if (!canBuild.value) return
@@ -107,10 +111,12 @@ async function submit() {
 		<div class="plan-grid">
 			<div class="plan-main d-grid gap-3">
 				<template v-if="showStep(1)">
-					<LayoverSummary @edit="editingLayover = true" />
-					<EntryBanner />
-					<TimeBudgetCard v-if="!wide" />
-					<OriginPicker />
+					<LayoverForm v-if="showLayoverForm" :can-cancel="d.layoverSet" @close="editingLayover = false" />
+					<template v-else>
+						<LayoverSummary @edit="editingLayover = true" />
+						<EntryBanner />
+						<TimeBudgetCard v-if="!wide" />
+					</template>
 				</template>
 				<InterestTiles v-if="showStep(2)" :wide="wide" />
 				<template v-if="showStep(3)">
@@ -119,7 +125,7 @@ async function submit() {
 				</template>
 
 				<!-- Phones: one primary action per step, at the bottom of the screen -->
-				<div v-if="!wide" class="step-action">
+				<div v-if="!wide && !(step === 1 && showLayoverForm)" class="step-action">
 					<button v-if="step < 3" type="button" class="btn btn-primary btn-lg w-100" :disabled="step === 1 && !canLeaveStep1" @click="next">
 						Next <i class="bi bi-chevron-right"></i>
 					</button>
@@ -139,8 +145,6 @@ async function submit() {
 				</button>
 			</aside>
 		</div>
-
-		<LayoverDialog v-if="showLayoverDialog" :can-cancel="d.layoverSet" @close="editingLayover = false" />
 
 		<div v-if="planning" class="planning-overlay" role="alert" aria-live="assertive">
 			<div class="zt-card p-4 text-center">
