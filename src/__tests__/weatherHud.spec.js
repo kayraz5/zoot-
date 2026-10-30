@@ -186,12 +186,12 @@ describe('SkyEffects', () => {
 })
 
 describe('RainOverlay', () => {
-  it('falls for forced rain, a high chance, or rain right now; not on other pages', () => {
+  it('falls for forced rain or rain right now (not just a high chance); not on other pages', () => {
     expect(mount(RainOverlay).find('.rain').exists()).toBe(false)
     ui.weather = forecast(0, 0, 30)
     expect(mount(RainOverlay).find('.rain').exists()).toBe(false)
     ui.weather = forecast(0, 0, 80)
-    expect(mount(RainOverlay).find('.rain').exists()).toBe(true)
+    expect(mount(RainOverlay).find('.rain').exists()).toBe(false)
     ui.weather = forecast(0, 0.3, 10)
     expect(mount(RainOverlay).find('.rain').exists()).toBe(true)
     ui.weather = null

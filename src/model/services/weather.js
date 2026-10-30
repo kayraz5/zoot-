@@ -25,7 +25,6 @@ export function describeCode(code) {
 // 2. Fetching the forecast
 // ---------------------------------------------------------------
 
-
 const CACHE_MINUTES = 15;
 
 // The cache is a Map: key -> { savedAt, data }
