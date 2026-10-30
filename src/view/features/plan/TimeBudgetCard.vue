@@ -21,7 +21,7 @@ const share = () => Math.max(0, Math.min(100, (100 * budget.value.usable_min) / 
 			<div class="amount">
 				<span class="big">{{ hm(budget.usable_min) }}</span><b class="small">to explore</b>
 			</div>
-			<p class="small fw-800 mb-1 mt-1">Be back at {{ trip.origin.short }} by {{ formatTime(budget.arriveByMs) }}</p>
+			<p class="small fw-800 mb-1 mt-1">Be back at {{ trip.returnTo.short }} by {{ formatTime(budget.arriveByMs) }}</p>
 			<div v-if="side" class="share mb-2" :title="`${budget.usable_min} of ${budget.window_min} min outside`"><span :style="{ width: share() + '%' }"></span></div>
 			<button type="button" class="link-btn" @click="showBuffers = !showBuffers">
 				<i class="bi bi-info-circle"></i> Includes {{ bufferMin }} min airport buffer
