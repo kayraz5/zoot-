@@ -153,6 +153,13 @@ export function radiusClusters(cands, radiusM = CLUSTER_RADIUS_M) {
 	return clusters
 }
 
+/**
+ * Where the trip ends: the departure terminal when it differs from where they landed
+ * (ctx.returnTo / mission.return_to), else the origin. Missions saved before return_to existed
+ * fall back to the origin, so old trips keep working.
+ */
+export const homeOf = (x) => x.returnTo || x.return_to || x.origin
+
 /** Can we visit p from `cur` at time t and still make it home? Returns the timed visit or null. */
 function tryVisit(ctx, budget, cur, t, p) {
 	const opts = { maxWalk: ctx.maxWalk, style: ctx.style }
@@ -163,7 +170,7 @@ function tryVisit(ctx, budget, cur, t, p) {
 	if (!isOpenDuringVisit(p, arrive, depart)) return null
 	if (!p.indoor && rainRisk(ctx, arrive, depart) > RAIN_LIMIT) return null
 	if (tooRisky(ctx, p)) return null
-	const back = travel(p, ctx.origin, { ...opts, atMs: depart })
+	const back = travel(p, homeOf(ctx), { ...opts, atMs: depart })
 	if (depart + back.minutes * MIN > budget.arriveByMs) return null
 	return { p, tr, arrive, depart, stay, back }
 }
@@ -227,7 +234,7 @@ function timeChain(ctx, budget, start, visits, stays, latestHomeMs = budget.arri
 		cur = p
 		t = depart
 	}
-	const back = travel(cur, ctx.origin, { ...opts, atMs: t })
+	const back = travel(cur, homeOf(ctx), { ...opts, atMs: t })
 	if (t + back.minutes * MIN > latestHomeMs) return null
 	if (out.length) out[out.length - 1].back = back
 	return out
@@ -314,15 +321,16 @@ export function assembleMission(ctx, budget, visits, meta = {}) {
 	const last = visits[visits.length - 1]
 	const lastIsNew = last && last.status !== 'stamped'
 	const leaveMs = lastIsNew ? last.depart : ctx.start?.ms ?? budget.departMs
-	const back = lastIsNew ? last.back : travel(ctx.start?.point || ctx.origin, ctx.origin, { maxWalk: ctx.maxWalk, style: ctx.style, atMs: leaveMs })
+	const home = homeOf(ctx)
+	const back = lastIsNew ? last.back : travel(ctx.start?.point || ctx.origin, home, { maxWalk: ctx.maxWalk, style: ctx.style, atMs: leaveMs })
 	const homeMs = leaveMs + back.minutes * MIN
 	legs.push({
 		seq: legs.length + 1,
 		kind: 'return',
 		place_id: 'origin',
-		name: `Return to ${ctx.origin.label}`,
-		lat: ctx.origin.lat,
-		lng: ctx.origin.lng,
+		name: `Return to ${home.label}`,
+		lat: home.lat,
+		lng: home.lng,
 		arrive_iso: new Date(homeMs).toISOString(),
 		depart_iso: new Date(homeMs).toISOString(),
 		arrive_by: new Date(budget.arriveByMs).toISOString(),
@@ -343,6 +351,7 @@ export function assembleMission(ctx, budget, visits, meta = {}) {
 		title: meta.title || titleFor(ctx, visits),
 		style: ctx.style,
 		origin: { label: ctx.origin.label, lat: ctx.origin.lat, lng: ctx.origin.lng, kind: ctx.origin.kind },
+		return_to: { label: home.label, lat: home.lat, lng: home.lng, kind: home.kind },
 		start_iso: new Date(ctx.startMs).toISOString(),
 		must_return_iso: new Date(budget.mustReturnMs).toISOString(),
 		buffers: { exit_min: budget.exit_min, reentry_min: budget.reentry_min, safety_min: budget.safety_min },
@@ -461,7 +470,7 @@ export function keptVisits(mission, catalogById, capMs) {
 			depart,
 			stay,
 			status: 'stamped',
-			back: travel(p, mission.origin, { atMs: depart })
+			back: travel(p, homeOf(mission), { atMs: depart })
 		}
 	})
 }
@@ -511,7 +520,7 @@ export function retimeMission(mission, { start, catalogById }) {
 		t = depart
 		cur = p
 	}
-	const back = travel(cur, m.origin, { ...opts, atMs: t })
+	const back = travel(cur, homeOf(m), { ...opts, atMs: t })
 	const homeMs = t + back.minutes * MIN
 	Object.assign(ret, { travel_mode: back.mode, travel_min: back.minutes, travel_detail: back.detail, arrive_iso: iso(homeMs), depart_iso: iso(homeMs) })
 	if (homeMs > Date.parse(ret.arrive_by)) problems.push(`You would be back at ${formatTime(homeMs)}, after ${formatTime(ret.arrive_by)}`)
@@ -535,14 +544,14 @@ export function slackMinutes(mission, here, nowMs, catalogById) {
 		t += travel(cur, p, { ...opts, atMs: t }).minutes * MIN + l.stay_min * MIN
 		cur = p
 	}
-	t += travel(cur, mission.origin, { ...opts, atMs: t }).minutes * MIN
+	t += travel(cur, homeOf(mission), { ...opts, atMs: t }).minutes * MIN
 	return Math.round((arriveBy - t) / MIN)
 }
 
 /** Latest moment to start heading back from `here` and still make arrive_by. */
 export function leaveByMs(mission, here, nowMs) {
 	const arriveBy = Date.parse(mission.legs.at(-1).arrive_by)
-	const back = travel(here, mission.origin, { maxWalk: mission.prefs?.maxWalk, style: mission.style, atMs: nowMs })
+	const back = travel(here, homeOf(mission), { maxWalk: mission.prefs?.maxWalk, style: mission.style, atMs: nowMs })
 	return { ms: arriveBy - back.minutes * MIN, back }
 }
 

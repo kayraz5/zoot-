@@ -71,9 +71,10 @@ export function airportPlan({ from, mission = null, nowMs = Date.now(), places =
     }
   }
 
-  // If the traveller is going back to the airport they started from, use that
-  // terminal; otherwise default to Changi Airport.
-  const terminal = mission?.origin?.kind === 'airport' ? mission.origin : null
+  // Head for the terminal their next flight leaves from (or the one they started
+  // from, on older missions); otherwise default to Changi Airport.
+  const home = mission && (mission.return_to || mission.origin)
+  const terminal = home?.kind === 'airport' ? home : null
   const destination = terminal
     ? { label: terminal.label || 'Changi Airport', lat: terminal.lat, lng: terminal.lng }
     : { label: 'Changi Airport', lat: HUBS.changi_airport.lat, lng: HUBS.changi_airport.lng }
