@@ -5,6 +5,7 @@ import { placeStampUrl } from '../../../model/services/stampArt.js'
 import QuestCoopChip from '../quests/QuestCoopChip.vue'
 import QuestChatButton from '../quests/QuestChatButton.vue' // "Chat with Mei" (only while in a social quest)
 import QuestGoSolo from '../quests/QuestGoSolo.vue'         // "Go solo" link (only after joining someone's quest)
+import TransitSteps from './TransitSteps.vue'               // MRT/bus step-by-step for the current leg
 
 /**
  * Next-stop card ("center console") shown at the bottom of the map.
@@ -21,6 +22,9 @@ const props = defineProps({
   distance: { type: Number, default: null },       // metres to `next`
   lateBy: { type: Number, default: null },         // minutes behind plan (negative = early)
   guidance: { type: Object, default: null },       // { icon, text }
+  steps: { type: Array, default: () => [] },       // transit steps for this leg (empty when walking/taxi)
+  stepIndex: { type: Number, default: 0 },         // which of `steps` the traveller is on
+  busAlt: { type: Object, default: null },         // a bus that replaces a taxi leg, if any
   check: { type: Object, default: null },          // { ok, message } — can you stamp right now?
   stamping: { type: Boolean, default: false },     // a stamp request is in flight
   stampedCount: { type: Number, default: 0 },
@@ -83,7 +87,7 @@ const stampArt = computed(() => placeStampUrl(props.next?.name))
           <span v-else-if="lateBy > 0" class="behind">{{ lateBy }} min behind plan</span>
           <span v-else class="ontime">on time</span>
         </div>
-        <div v-if="guidance" class="stop-guide"><i class="bi" :class="guidance.icon"></i> {{ guidance.text }}</div>
+        <div v-if="guidance && !steps.length" class="stop-guide"><i class="bi" :class="guidance.icon"></i> {{ guidance.text }}</div>
         <!-- "868 m away. Get within 80 m" repeats the distance above; GPS / in-range messages still show. -->
         <div v-if="check?.code !== 'far'" class="stop-near">{{ check?.message }}</div>
       </div>
@@ -96,6 +100,11 @@ const stampArt = computed(() => placeStampUrl(props.next?.name))
           </span>
           <span class="stamp-label">{{ stamping ? '…' : next.kind === 'return' ? "I'm back" : 'Stamp' }}</span>
         </button>
+      </div>
+
+      <!-- Train/bus legs: what to do now, then every step, full width under the stop. -->
+      <div v-if="steps.length || busAlt" class="col-12">
+        <TransitSteps :steps="steps" :index="stepIndex" :bus-alt="busAlt" />
       </div>
 
       <div class="col-12">

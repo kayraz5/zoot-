@@ -41,7 +41,7 @@
 // ─────────────────────────────────────────────────────────────────────────────
 // 1. Imports
 // ─────────────────────────────────────────────────────────────────────────────
-import { ref, onMounted, onUnmounted, watch } from 'vue'
+import { ref, computed, onMounted, onUnmounted, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { Map as MapLibreMap, LngLatBounds, setWorkerUrl } from 'maplibre-gl'
 import 'maplibre-gl/dist/maplibre-gl.css'
@@ -101,8 +101,13 @@ import { formatTime } from '../../../model/services/hours.js'
 // router calls are still pending (or all failing) is simply not drawn — never a
 // straight line.
 import { getWalkRoute, getDriveRoute } from '../../../model/services/routing.js'
-// Same contract for MRT legs: walk + real track geometry + walk, stitched together.
-import { getMrtRoute } from '../../../model/services/mrtRoute.js'
+// Same contract for public-transport legs: OneMap (bus + MRT) when the server has keys, else
+// our own MRT (walk + real track + walk) or direct-bus route. Each comes back as `parts`.
+import { getTransitRoute } from '../../../model/services/transitRoute.js'
+import { findDirectBus } from '../../../model/services/busRoute.js'
+import { transitSteps, currentPartIndex, transferPoints } from '../../../model/services/transitSteps.js'
+import { addTransitLayers, syncBusStops, setTransitTheme, setTransitVisible, setTransferPoints, routeFeatures, TAPPABLE_LAYERS } from './transitLayers.js'
+import TransitStopSheet from './TransitStopSheet.vue'
 // Trim a resolved route to the traveller's current position so the drawn line
 // starts exactly at the character (no straight "tail" from a stale route origin).
 import { trimRouteAtPosition } from '../../../model/services/routeGeometry.js'
@@ -143,7 +148,7 @@ const OTTER_VIEW = {
 const HEADING_SMOOTH_MS = 160
 
 /** Pick the right route resolver for a leg's travel mode. */
-const ROUTE_BY_MODE = { walk: getWalkRoute, taxi: getDriveRoute, mrt: getMrtRoute }
+const ROUTE_BY_MODE = { walk: getWalkRoute, taxi: getDriveRoute, mrt: getTransitRoute }
 
 /**
  * Live-route refresh policy. The drawn line is re-trimmed to the traveller every
@@ -157,6 +162,11 @@ const ROUTE_CHECK_AFTER_MS = 250
 const ROUTE_REFRESH_MS = 800
 const ROUTE_MIN_INTERVAL_MS = 500
 const ROUTE_DEVIATION_M = 20
+// Transit legs are planned once (station, line, stop) and then followed: re-plan only when
+// the traveller is clearly somewhere else, or every so often in case a quicker one appears.
+const TRANSIT_DEVIATION_M = 150
+const TRANSIT_REFRESH_MS = 30000
+const BUS_STOPS_RELOAD_M = 400 // reload nearby bus stops after the camera moves this far
 
 /** Demo-Walk keyboard controls: key → bearing offset relative to the map's north. */
 const KEY_DIRECTIONS = {
@@ -250,8 +260,15 @@ const wasdEnabled = ref(true)           // keyboard movement during Demo-Walk
 
 // Route geometry: the live leg's resolved street path, and the cached paths for
 // the legs after it. Both are produced by refreshLiveRoute/refreshPlannedRoutes.
-const liveRoute = ref(null)             // { coords, from, to }
-const plannedSegments = ref([])         // [{ coords, mode, active }]
+const liveRoute = ref(null)             // { coords, parts?, from, to }
+const plannedSegments = ref([])         // [{ coords, mode, parts?, active }]
+
+// Public transport: network layers on/off, the stop the traveller tapped, and a bus
+// alternative to show when a leg would otherwise be a taxi.
+const transitVisible = ref(true)
+const selectedStop = ref(null)          // { kind: 'station'|'bus', name, … } from a tap
+const busAlt = ref(null)                // { service, stop, minutes } or null
+let busStopsAt = null                   // map centre bus stops were last loaded around
 
 // ─────────────────────────────────────────────────────────────────────────────
 // 4. Stores & derived mission state
@@ -405,6 +422,9 @@ function createMap() {
 
 /** First style load: add quest layers and start rendering. */
 function onMapLoad() {
+  addTransitLayers(map, mapTheme.value === 'theme')
+  map.on('click', onTransitTap)
+  map.on('moveend', loadBusStopsInView)
   addQuestLayers(map)
   player = createPlayerMarker()
   // The map opens with buildings hidden and 3D off. Both are user choices in the
@@ -501,6 +521,7 @@ function applyBasemapStyle() {
   }
 
   applyMapLabelStyle(map, isDark)
+  setTransitTheme(map, isDark)
 }
 
 /**
@@ -669,32 +690,30 @@ function drawFence() {
 function drawRoute() {
   if (!mapReady.value) return
 
-  const segments = []
+  const features = []
+  let points = []
   const target = next.value
+  liveDeviationM = Infinity
   if (target) {
     const live = liveRoute.value
     if (live && live.to === target) {
       // Re-trim every frame: the line begins at the character's exact position and
-      // only the path ahead is drawn, so there is no stale tail as they move.
-      const trimmed = trimRouteAtPosition(live.coords, here.value)
+      // only the path ahead is drawn, so there is no stale tail as they move. A transit
+      // leg is trimmed inside the part the traveller is on; earlier parts are dropped.
+      const parts = live.parts || [{ mode: liveTravel.value?.mode || 'walk', coords: live.coords }]
+      const index = currentPartIndex(parts, here.value)
+      const trimmed = trimRouteAtPosition(parts[index].coords, here.value)
       liveDeviationM = trimmed.distanceM
-      if (trimmed.coords.length > 1) segments.push(trimmed.coords)
-    } else {
-      liveDeviationM = Infinity
+      features.push(...routeFeatures([{ ...parts[index], coords: trimmed.coords }, ...parts.slice(index + 1)]))
+      points = live.parts ? transferPoints(parts.slice(index)) : []
     }
-  } else {
-    liveDeviationM = Infinity
   }
-  for (const segment of plannedSegments.value) segments.push(segment.coords)
+  for (const segment of plannedSegments.value) {
+    features.push(...routeFeatures(segment.parts || [{ mode: segment.mode, coords: segment.coords }]))
+  }
+  setTransferPoints(map, points)
 
-  const data = {
-    type: 'FeatureCollection',
-    features: segments.map((coordinates) => ({
-      type: 'Feature',
-      geometry: { type: 'LineString', coordinates },
-      properties: {}
-    }))
-  }
+  const data = { type: 'FeatureCollection', features }
 
   const source = map.getSource(LIVE_ROUTE_SOURCE_ID)
   if (source) {
@@ -703,11 +722,12 @@ function drawRoute() {
   }
 
   map.addSource(LIVE_ROUTE_SOURCE_ID, { type: 'geojson', data })
-  // Three stacked lines: a soft magenta glow, a black casing and the bright core.
+  // Three stacked lines: a soft glow, a black casing and the bright core.
   // Together they read as one fat, outlined "follow me" ribbon instead of a thin
-  // thread that disappears between the basemap's yellow streets.
+  // thread that disappears between the basemap's yellow streets. Each part keeps its
+  // own colour: pink to walk, the line's colour on a train, blue on a bus.
   addLiveRouteLayer(LIVE_ROUTE_GLOW_LAYER_ID, {
-    'line-color': LIVE_ROUTE_COLOR,
+    'line-color': ['coalesce', ['get', 'color'], LIVE_ROUTE_COLOR],
     'line-width': ['interpolate', ['linear'], ['zoom'], 12, 14, 17, 24],
     'line-opacity': 0.3,
     'line-blur': 3
@@ -718,7 +738,7 @@ function drawRoute() {
     'line-opacity': 0.92
   })
   addLiveRouteLayer(LIVE_ROUTE_LAYER_ID, {
-    'line-color': LIVE_ROUTE_COLOR,
+    'line-color': ['coalesce', ['get', 'color'], LIVE_ROUTE_COLOR],
     'line-width': ['interpolate', ['linear'], ['zoom'], 12, 7, 17, 13],
     'line-opacity': 1
   })
@@ -726,7 +746,9 @@ function drawRoute() {
 
 /** Add one of the stacked lines that make up the live route. */
 function addLiveRouteLayer(id, paint) {
-  map.addLayer({ id, type: 'line', source: LIVE_ROUTE_SOURCE_ID, layout: LIVE_ROUTE_LAYOUT, paint })
+  // Below the board/change/get-off pins, so they stay readable on top of the line.
+  const before = map.getLayer('mission-transit-points') ? 'mission-transit-points' : undefined
+  map.addLayer({ id, type: 'line', source: LIVE_ROUTE_SOURCE_ID, layout: LIVE_ROUTE_LAYOUT, paint }, before)
 }
 
 /** Where the traveller was before `leg`: the previous leg, or the trip origin. */
@@ -747,7 +769,7 @@ function syncPlannedSegments(pendingLegs) {
     .slice(1)
     .map((leg, index) => {
       const segment = plannedRouteCache.get(legKey(pendingLegs[index], leg))
-      return segment && { coords: segment.coords, mode: segment.mode, active: false }
+      return segment && { coords: segment.coords, mode: segment.mode, parts: segment.parts, active: false }
     })
     .filter(Boolean)
 
@@ -779,7 +801,7 @@ async function refreshPlannedRoutes() {
       const route = await resolveRoute(previous, leg)
       if (!route) return // keep the cached geometry, if any
 
-      plannedRouteCache.set(legKey(previous, leg), { coords: route.coords, mode: leg.travel_mode })
+      plannedRouteCache.set(legKey(previous, leg), { coords: route.coords, mode: leg.travel_mode, parts: route.parts })
       syncPlannedSegments(pendingLegs)
     })
   )
@@ -808,7 +830,10 @@ async function refreshLiveRoute(force = false) {
   const sameTarget = current?.to === target
   const ageMs = Date.now() - lastRouteAt
 
-  if (!force && sameTarget) {
+  // A planned transit leg is followed, not re-planned on every step.
+  if (!force && sameTarget && current.parts && travelMode === 'mrt') {
+    if (ageMs < TRANSIT_REFRESH_MS && liveDeviationM < TRANSIT_DEVIATION_M) return drawRoute()
+  } else if (!force && sameTarget) {
     // Just fetched or checked: the trimmed line is already current.
     if (ageMs < ROUTE_CHECK_AFTER_MS) return drawRoute()
 
@@ -834,13 +859,16 @@ async function refreshLiveRoute(force = false) {
     const route = await resolveRoute(from, target)
     // Ignore late responses for a target that is no longer next.
     if (route && next.value === target) {
-      liveRoute.value = { coords: route.coords, from, to: target }
+      liveRoute.value = { coords: route.coords, parts: route.parts, from, to: target }
     }
   } catch (err) {
     console.warn('[3D_Map] live route failed', err)
   } finally {
     routeInFlight = false
   }
+  // The next stop changed while this request was out (a stamp, a replan): the refresh for
+  // the new stop was skipped as "in flight", so run it now rather than wait for a GPS move.
+  if (next.value && next.value !== target) return refreshLiveRoute(true)
   drawRoute()
 }
 
@@ -1200,6 +1228,50 @@ function openAirportHelp() {
   airportOpen.value = true
 }
 
+// ── Public transport ──────────────────────────────────────────────────────
+
+/** Plain-language steps for the leg being travelled (only for bus/MRT legs). */
+const liveParts = computed(() => (liveRoute.value?.to === next.value ? liveRoute.value?.parts : null) || null)
+const liveSteps = computed(() => transitSteps(liveParts.value))
+/** Which step the traveller is on, from where they are along the route. */
+const liveStepIndex = computed(() => currentPartIndex(liveParts.value, here.value))
+
+/** Tap on a station or bus stop: open its sheet (lines, or live bus arrivals). */
+function onTransitTap(event) {
+  if (!transitVisible.value) return
+  const { x, y } = event.point
+  const layers = TAPPABLE_LAYERS.filter((id) => map.getLayer(id))
+  const hit = map.queryRenderedFeatures([[x - 14, y - 14], [x + 14, y + 14]], { layers })[0]
+  if (!hit) return
+  const [lng, lat] = hit.geometry.coordinates
+  selectedStop.value = { ...hit.properties, lat, lng }
+}
+
+/** Bus stops only show at street zoom, so load the ones around wherever the camera is. */
+function loadBusStopsInView() {
+  if (!map || map.getZoom() < 14.5) return
+  const { lat, lng } = map.getCenter()
+  if (busStopsAt && distanceM(busStopsAt, { lat, lng }) < BUS_STOPS_RELOAD_M) return
+  busStopsAt = { lat, lng }
+  syncBusStops(map, busStopsAt)
+}
+
+/** When a leg is a taxi (no train nearby), look for a single bus that does the job. */
+async function refreshBusAlternative() {
+  busAlt.value = null
+  const target = next.value
+  if (!target || !here.value || liveTravel.value?.mode !== 'taxi') return
+  const route = await findDirectBus({ ...here.value }, target).catch(() => null)
+  const bus = route?.parts.find((p) => p.mode === 'bus')
+  if (bus && next.value === target) busAlt.value = { service: bus.service, stop: bus.from.name, minutes: route.minutes }
+}
+watch(() => [next.value, liveTravel.value?.mode], refreshBusAlternative)
+
+watch(transitVisible, (visible) => {
+  if (map) setTransitVisible(map, visible)
+  if (!visible) selectedStop.value = null
+})
+
 // ─────────────────────────────────────────────────────────────────────────────
 // 11. Demo-Walk (fake GPS you move with WASD / taps)
 // ─────────────────────────────────────────────────────────────────────────────
@@ -1505,6 +1577,9 @@ function writeMissionCardFlag(open) {
       :distance="distance"
       :late-by="lateBy"
       :guidance="guidance"
+      :steps="liveSteps"
+      :step-index="liveStepIndex"
+      :bus-alt="busAlt"
       :check="check"
       :stamping="stamping"
       :stamped-count="missionStore.stampedCount"
@@ -1519,6 +1594,9 @@ function writeMissionCardFlag(open) {
       @close="showMissionCard = false"
     />
   </Transition>
+
+  <!-- ── Tapped MRT station / bus stop (lines, live bus arrivals) ───────── -->
+  <TransitStopSheet v-if="selectedStop" :stop="selectedStop" @close="selectedStop = null" />
 
   <!-- ── Top-left HUD column: Singapore badge, weather chip, GPS/demo button ── -->
   <!-- The Demo-Walk controls (fake GPS, dev/demo only) sit in its slot, so they stack with the same gap. -->
@@ -1589,6 +1667,12 @@ function writeMissionCardFlag(open) {
       <button class="btn rounded-pill btn-sm" :class="buildings3D === true ? 'btn-warning' : 'btn-outline-warning'" @click="setBuildings3D(true)">On</button>
       <button class="btn rounded-pill btn-sm" :class="buildings3D === false ? 'btn-warning' : 'btn-outline-warning'" @click="setBuildings3D(false)">Off</button>
     </div>
+    <!-- MRT lines + stations and nearby bus stops (tap one for live arrivals). -->
+    <div class="demo-row">
+      <span class="demo-label">MRT &amp; Bus</span>
+      <button class="btn rounded-pill btn-sm" :class="transitVisible === true ? 'btn-warning' : 'btn-outline-warning'" @click="transitVisible = true">On</button>
+      <button class="btn rounded-pill btn-sm" :class="transitVisible === false ? 'btn-warning' : 'btn-outline-warning'" @click="transitVisible = false">Off</button>
+    </div>
     <div class="demo-row">
       <span class="demo-label">Color Theme</span>
       <button class="btn rounded-pill btn-sm" :class="mapTheme === 'theme' ? 'btn-warning' : 'btn-outline-warning'" @click="mapTheme = 'theme'">Zoot</button>
@@ -1612,7 +1696,7 @@ function writeMissionCardFlag(open) {
        is ever on screen and the transition reads as one motion. -->
   <Transition name="fab-pop">
     <button
-      v-if="!showMissionCard"
+      v-if="!showMissionCard && !selectedStop"
       type="button"
       class="map-nav-fab"
       aria-label="Show next-stop card"

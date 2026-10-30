@@ -10,6 +10,7 @@
     "preview": "vite preview",
     "sync:places": "node scripts/sync-places.mjs",
     "sync:mrt-lines": "node scripts/sync-mrt-lines.mjs",
+    "sync:transit": "node scripts/sync-transit.mjs",
     "test:unit": "vitest",
     "test:e2e": "playwright test"
   },

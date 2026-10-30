@@ -1,13 +1,14 @@
 import distance from '@turf/distance'
 import { point } from '@turf/helpers'
+import network from '../data/mrtNetwork.sg.json'
+import { LINES } from '../data/transitLines.js'
 
 /**
  * Travel-time model. Groq never produces minutes; this file does.
  *   walk  = Turf great-circle distance × 1.3 detour ÷ 80 m/min
  *   mrt   = walk to nearest hub + 4 min wait + graph ride (+4 min per line change) + walk from hub
  *   taxi  = distance × 1.35 ÷ 28 km/h + 6 min pickup (only when no MRT hub is walkable)
- * The MRT graph is a small static slice of the real network, enough for
- * Changi ↔ City Hall ↔ Chinatown ↔ HarbourFront ↔ Gardens by the Bay.
+ * The MRT graph is the whole network (mrtNetwork.sg.json), so the nearest station is real.
  */
 
 export const WALK_M_PER_MIN = 80
@@ -27,63 +28,31 @@ export function mrtRunning(ms) {
   return m >= MRT_OPEN_MIN && m < MRT_CLOSE_MIN
 }
 
-export const HUBS = {
-  changi_airport: { name: 'Changi Airport', code: 'CG2', lat: 1.3574, lng: 103.9884 },
-  tanah_merah: { name: 'Tanah Merah', code: 'EW4', lat: 1.3272, lng: 103.9465 },
-  eunos: { name: 'Eunos', code: 'EW7', lat: 1.3197, lng: 103.9030 },
-  paya_lebar: { name: 'Paya Lebar', code: 'EW8/CC9', lat: 1.3177, lng: 103.8927 },
-  dakota: { name: 'Dakota', code: 'CC8', lat: 1.3083, lng: 103.8884 },
-  stadium: { name: 'Stadium', code: 'CC6', lat: 1.3029, lng: 103.8753 },
-  lavender: { name: 'Lavender', code: 'EW11', lat: 1.3073, lng: 103.8631 },
-  bugis: { name: 'Bugis', code: 'EW12/DT14', lat: 1.3008, lng: 103.8559 },
-  city_hall: { name: 'City Hall', code: 'EW13/NS25', lat: 1.2932, lng: 103.8520 },
-  raffles_place: { name: 'Raffles Place', code: 'EW14/NS26', lat: 1.2839, lng: 103.8514 },
-  tanjong_pagar: { name: 'Tanjong Pagar', code: 'EW15', lat: 1.2764, lng: 103.8455 },
-  outram_park: { name: 'Outram Park', code: 'EW16/NE3/TE17', lat: 1.2803, lng: 103.8395 },
-  tiong_bahru: { name: 'Tiong Bahru', code: 'EW17', lat: 1.2861, lng: 103.8270 },
-  marina_bay: { name: 'Marina Bay', code: 'NS27/CE2/TE20', lat: 1.2764, lng: 103.8546 },
-  bayfront: { name: 'Bayfront', code: 'CE1/DT16', lat: 1.2818, lng: 103.8590 },
-  promenade: { name: 'Promenade', code: 'CC4/DT15', lat: 1.2934, lng: 103.8610 },
-  esplanade: { name: 'Esplanade', code: 'CC3', lat: 1.2934, lng: 103.8554 },
-  bras_basah: { name: 'Bras Basah', code: 'CC2', lat: 1.2969, lng: 103.8506 },
-  gardens_by_the_bay: { name: 'Gardens by the Bay', code: 'TE22', lat: 1.2789, lng: 103.8687 },
-  marine_parade: { name: 'Marine Parade', code: 'TE26', lat: 1.3027, lng: 103.9055 },
-  maxwell: { name: 'Maxwell', code: 'TE18', lat: 1.2805, lng: 103.8437 },
-  chinatown: { name: 'Chinatown', code: 'NE4/DT19', lat: 1.2844, lng: 103.8441 },
-  clarke_quay: { name: 'Clarke Quay', code: 'NE5', lat: 1.2887, lng: 103.8466 },
-  dhoby_ghaut: { name: 'Dhoby Ghaut', code: 'NS24/NE6/CC1', lat: 1.2990, lng: 103.8455 },
-  little_india: { name: 'Little India', code: 'NE7/DT12', lat: 1.3066, lng: 103.8494 },
-  farrer_park: { name: 'Farrer Park', code: 'NE8', lat: 1.3124, lng: 103.8543 },
-  orchard: { name: 'Orchard', code: 'NS22/TE14', lat: 1.3040, lng: 103.8320 },
-  newton: { name: 'Newton', code: 'NS21/DT11', lat: 1.3128, lng: 103.8381 },
-  napier: { name: 'Napier', code: 'TE12', lat: 1.3067, lng: 103.8189 },
-  botanic_gardens: { name: 'Botanic Gardens', code: 'CC19/DT9', lat: 1.3224, lng: 103.8154 },
-  holland_village: { name: 'Holland Village', code: 'CC21', lat: 1.3113, lng: 103.7960 },
-  haw_par_villa: { name: 'Haw Par Villa', code: 'CC25', lat: 1.2826, lng: 103.7822 },
-  harbourfront: { name: 'HarbourFront', code: 'NE1/CC29', lat: 1.2653, lng: 103.8221 },
-  rws: { name: 'Resorts World (Sentosa Express)', code: 'SE2', lat: 1.2557, lng: 103.8210 },
-  beach: { name: 'Beach (Sentosa Express)', code: 'SE3', lat: 1.2535, lng: 103.8174 }
+const pt = (p) => point([p.lng, p.lat])
+
+export function distanceM(a, b) {
+  return distance(pt(a), pt(b), { units: 'kilometers' }) * 1000
 }
 
-// [from, to, ride minutes, line]
-const EDGES = [
-  ['changi_airport', 'tanah_merah', 5, 'CG'],
-  ['tanah_merah', 'eunos', 6, 'EW'], ['eunos', 'paya_lebar', 2, 'EW'], ['paya_lebar', 'lavender', 6, 'EW'],
-  ['lavender', 'bugis', 2, 'EW'], ['bugis', 'city_hall', 2, 'EW'], ['city_hall', 'raffles_place', 2, 'EW'],
-  ['raffles_place', 'tanjong_pagar', 2, 'EW'], ['tanjong_pagar', 'outram_park', 2, 'EW'], ['outram_park', 'tiong_bahru', 2, 'EW'],
-  ['city_hall', 'dhoby_ghaut', 2, 'NS'], ['dhoby_ghaut', 'orchard', 4, 'NS'], ['orchard', 'newton', 2, 'NS'], ['raffles_place', 'marina_bay', 2, 'NS'],
-  ['harbourfront', 'outram_park', 4, 'NE'], ['outram_park', 'chinatown', 2, 'NE'], ['chinatown', 'clarke_quay', 2, 'NE'],
-  ['clarke_quay', 'dhoby_ghaut', 2, 'NE'], ['dhoby_ghaut', 'little_india', 2, 'NE'], ['little_india', 'farrer_park', 2, 'NE'],
-  ['dhoby_ghaut', 'bras_basah', 2, 'CC'], ['bras_basah', 'esplanade', 2, 'CC'], ['esplanade', 'promenade', 2, 'CC'],
-  ['promenade', 'stadium', 4, 'CC'], ['stadium', 'dakota', 4, 'CC'], ['dakota', 'paya_lebar', 2, 'CC'],
-  ['promenade', 'bayfront', 2, 'CE'], ['bayfront', 'marina_bay', 2, 'CE'],
-  ['botanic_gardens', 'holland_village', 4, 'CC'], ['holland_village', 'haw_par_villa', 8, 'CC'], ['haw_par_villa', 'harbourfront', 7, 'CC'],
-  ['botanic_gardens', 'newton', 4, 'DT'], ['newton', 'little_india', 2, 'DT'], ['little_india', 'bugis', 4, 'DT'],
-  ['bugis', 'promenade', 3, 'DT'], ['promenade', 'bayfront', 2, 'DT'], ['bayfront', 'chinatown', 5, 'DT'],
-  ['napier', 'orchard', 4, 'TE'], ['orchard', 'outram_park', 6, 'TE'], ['outram_park', 'maxwell', 2, 'TE'],
-  ['maxwell', 'marina_bay', 4, 'TE'], ['marina_bay', 'gardens_by_the_bay', 4, 'TE'], ['gardens_by_the_bay', 'marine_parade', 8, 'TE'],
-  ['harbourfront', 'rws', 5, 'SE'], ['rws', 'beach', 3, 'SE']
-]
+// Every MRT station (pnpm sync:transit), keyed by a name slug: `changi_airport`, `city_hall`…
+// The Sentosa Express isn't in that dataset, so its two island stops are added by hand.
+export const HUBS = {}
+for (const [id, s] of Object.entries(network.stations)) {
+  HUBS[id] = { name: s.name, code: s.codes.filter((c) => !/^[A-Z]{2}0$/.test(c)).join('/'), lat: s.lat, lng: s.lng, exits: s.exits }
+}
+HUBS.rws = { name: 'Resorts World (Sentosa Express)', code: 'SE2', lat: 1.2557, lng: 103.8210, exits: [] }
+HUBS.beach = { name: 'Beach (Sentosa Express)', code: 'SE3', lat: 1.2535, lng: 103.8174, exits: [] }
+
+/** Ride time between neighbouring stations: track ≈ 1.15 × straight line at 55 km/h, plus a 30 s stop. */
+const hopMinutes = (a, b) => (distanceM(HUBS[a], HUBS[b]) * 1.15) / (55000 / 60) + 0.5
+
+// [from, to, ride minutes, line]: consecutive stations along each line, plus loop links.
+const EDGES = []
+for (const [line, { stations, links }] of Object.entries(network.lines)) {
+  for (let i = 1; i < stations.length; i++) EDGES.push([stations[i - 1], stations[i], hopMinutes(stations[i - 1], stations[i]), line])
+  for (const [a, b] of links) EDGES.push([a, b, hopMinutes(a, b), line])
+}
+EDGES.push(['harbourfront', 'rws', 5, 'SE'], ['rws', 'beach', 3, 'SE'])
 
 const ADJ = {}
 for (const [a, b, t, line] of EDGES) {
@@ -113,7 +82,7 @@ export function rideMinutes(fromHub, toHub) {
     const stateKey = cur.node + '|' + cur.line
     if (best.has(stateKey) && best.get(stateKey) <= cur.cost) continue
     best.set(stateKey, cur.cost)
-    if (cur.node === toHub) { result = { minutes: cur.cost, lines: cur.lines, path: cur.path, edgeLines: cur.edgeLines }; break }
+    if (cur.node === toHub) { result = { minutes: Math.round(cur.cost), lines: cur.lines, path: cur.path, edgeLines: cur.edgeLines }; break }
     for (const e of ADJ[cur.node] || []) {
       const change = cur.line && cur.line !== e.line ? TRANSFER_MIN : 0
       const lines = cur.line === e.line ? cur.lines : [...cur.lines, e.line]
@@ -124,11 +93,6 @@ export function rideMinutes(fromHub, toHub) {
   return result
 }
 
-const pt = (p) => point([p.lng, p.lat])
-
-export function distanceM(a, b) {
-  return distance(pt(a), pt(b), { units: 'kilometers' }) * 1000
-}
 
 export function walkMinutes(a, b) {
   return Math.max(1, Math.round((distanceM(a, b) * DETOUR) / WALK_M_PER_MIN))
@@ -163,8 +127,45 @@ export function transit(a, b) {
     waitMin: MRT_WAIT_MIN,
     lines: ride.lines,
     path: ride.path,
-    edgeLines: ride.edgeLines
+    edgeLines: ride.edgeLines,
+    runs: rideRuns(ride)
   }
+}
+
+/** Line position of a station, for working out which way a train is heading. */
+function lineIndex(line, hub) {
+  return network.lines[line]?.stations.indexOf(hub) ?? -1
+}
+
+/**
+ * Group a ride into one run per train: [{ line, from, to, stops, towards, nextStop }] (hub ids).
+ * `towards` is the terminus shown on platform signs; loop lines (Circle) have none, so
+ * `nextStop` is what to look for instead.
+ */
+export function rideRuns(ride) {
+  const runs = []
+  ride.edgeLines.forEach((line, i) => {
+    const last = runs.at(-1)
+    if (last?.line === line) {
+      last.to = ride.path[i + 1]
+      last.stops++
+    } else {
+      runs.push({ line, from: ride.path[i], to: ride.path[i + 1], nextStop: ride.path[i + 1], stops: 1 })
+    }
+  })
+  for (const run of runs) {
+    const stations = network.lines[run.line]?.stations
+    const a = lineIndex(run.line, run.from)
+    const b = lineIndex(run.line, run.nextStop)
+    run.towards = stations && !LINES[run.line]?.loop && a >= 0 && b >= 0 ? (b > a ? stations.at(-1) : stations[0]) : null
+  }
+  return runs
+}
+
+/** ['CG', 'EW', 'NS'] -> "Green → Red line": what travellers see on signs, not line codes. */
+function lineColours(lines) {
+  const colours = lines.map((l) => LINES[l]?.colour || l).filter((c, i, all) => c !== all[i - 1])
+  return `${colours.join(' → ')} line`
 }
 
 /** Door-to-door taxi/Grab estimate: detoured road distance at 28 km/h plus pickup. */
@@ -186,7 +187,7 @@ export function travel(a, b, opts = {}) {
 
   const t = mrtRunning(opts.atMs) ? transit(a, b) : null
   const taxi = taxiMinutes(a, b)
-  const byMrt = t && { mode: 'mrt', minutes: t.minutes, walk_min: walk, distance_m, detail: `MRT ${t.from} → ${t.to} (${t.lines.join('→')})` }
+  const byMrt = t && { mode: 'mrt', minutes: t.minutes, walk_min: walk, distance_m, detail: `MRT ${t.from} → ${t.to} · ${lineColours(t.lines)}` }
   const byTaxi = (why) => ({ mode: 'taxi', minutes: taxi, walk_min: walk, distance_m, detail: `Taxi / Grab · ${why}` })
   // Budget travellers ride the MRT; others take a cab when it saves 20+ min.
   const mrtOrTaxi = () => (opts.style !== 'budget' && taxi + 20 < t.minutes ? byTaxi(`saves ${t.minutes - taxi} min vs MRT`) : byMrt)
