@@ -46,7 +46,7 @@ describe('geo: shared location state', () => {
     vi.stubGlobal('navigator', {})
     setFake(false)
 
-    expect(geo).toEqual({ lat: null, lng: null, accuracy: null, source: null, fake: false })
+    expect(geo).toEqual({ lat: null, lng: null, accuracy: null, source: null, fake: false, heading: null })
   })
 
   it('does nothing when geolocation is unavailable', async () => {

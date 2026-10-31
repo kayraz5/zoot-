@@ -5,7 +5,7 @@ import { missionFixture } from './helpers/fixtures.js'
 import { tick } from './helpers/fakeClock.js'
 import { geo, setFake } from '../model/services/geo.js'
 import { useMissionStore } from '../model/stores/mission.js'
-import { useMissionNav } from '../view/composables/useMissionNav.js'
+import { useMissionNav } from '../view/features/map/useMissionNav.js'
 
 vi.mock('../model/services/clock.js', () => import('./helpers/fakeClock.js'))
 

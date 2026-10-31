@@ -1,15 +1,14 @@
 /**
- * DRAFT — Feature: onboarded layover planning, generation, and return-leg safety.
- * Status: unfinished journey draft; reference: docs/repo-audit.md §1 and Requirements 11.1–11.5, 12.3.
- * Enable (bash): E2E_DRAFTS=1 pnpm run test:e2e e2e/drafts/plan.spec.js
- * Enable (PowerShell): $env:E2E_DRAFTS='1'; pnpm run test:e2e e2e/drafts/plan.spec.js
+ * Journey — Feature: onboarded layover planning, generation, and return-leg safety.
+ * Runs in the guest harness (zoot.guest='1', /api/plan built from the posted catalog); see e2e/fixtures/harness.js.
+ * Reference: docs/repo-audit.md §1.
  */
-import { draft, expect, test } from '../fixtures/draft.js'
+import { expect, test } from '../fixtures/harness.js'
 
 test.describe('onboarded layover planning', () => {
   test.use({ auth: 'onboarded' })
 
-  draft('lets an onboarded traveller set times and see the generated quest return leg', async ({ page }) => {
+  test('lets an onboarded traveller set times and see the generated quest return leg', async ({ page }) => {
     await page.clock.install({ time: new Date('2030-01-15T09:00:00+08:00') })
     await page.goto('/plan')
 

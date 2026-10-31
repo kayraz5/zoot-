@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { createPinia, setActivePinia } from 'pinia'
+import { toRaw } from 'vue'
 import { at, jsonResponse, T, setNow, stubFetch, useCleanSlate } from './helpers/index.js'
 import { missionFixture } from './helpers/fixtures.js'
 import { tick } from './helpers/fakeClock.js'
@@ -127,7 +128,7 @@ describe('mission planning and persistence', () => {
 
     expect(store.status).toBe('ready')
     expect(store.lastSource).toBe('fallback')
-    expect(mission).toBe(store.mission)
+    expect(toRaw(store.mission)).toBe(mission)
     expect(mission).toMatchObject({ trip_id: 'trip-fallback', source: 'fallback' })
     expect(localStorage.getItem('zoot.activeMission')).toBe(mission.id)
     expect(await (await getDb()).getMission(mission.id)).toEqual(mission)
@@ -178,8 +179,9 @@ describe('mission planning and persistence', () => {
     store.mission = null
     localStorage.removeItem('zoot.activeMission')
 
-    await expect(store.loadActive()).resolves.toEqual(latest)
-    expect(store.mission).toBe(latest)
+    const loaded = await store.loadActive()
+    expect(loaded).toEqual(latest)
+    expect(toRaw(store.mission)).toBe(loaded)
     expect(localStorage.getItem('zoot.activeMission')).toBe('latest-mission')
     await drainSyncHostedWindow()
   })

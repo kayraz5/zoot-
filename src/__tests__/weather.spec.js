@@ -115,18 +115,14 @@ describe('Open-Meteo forecast fetching', () => {
     const fetchMock = stubFetch([
       ['api.open-meteo.com', () => jsonResponse({}, 500)],
     ])
-    // D1 is bypassed here so this test can exercise the HTTP failure branch.
-    vi.stubGlobal('newURLSearchParams', (params) => new URLSearchParams(params))
 
     await expect(weather.fetchForecast(1.2903, 103.8519)).rejects.toThrow('Open-Meteo 500')
     expect(fetchMock).toHaveBeenCalledTimes(1)
   })
 
-  // Defect_Report D1: src/model/services/weather.js, fetchForecast, input
-  // fetchForecast(1.2903, 103.8519) with a successful Open-Meteo response,
-  // expected a { current, hours } forecast, but actual was
-  // ReferenceError: newURLSearchParams is not defined.
-  it.fails('builds the forecast from the Open-Meteo response (Defect_Report D1)', async () => {
+  // Defect_Report D1 (ReferenceError: newURLSearchParams) was fixed upstream in weather.js.
+  // This case is now a regression test.
+  it('builds the forecast from the Open-Meteo response', async () => {
     const weather = await loadWeather()
     stubFetch([
       ['api.open-meteo.com', () => jsonResponse(forecastJson)],

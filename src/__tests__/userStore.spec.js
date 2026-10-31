@@ -1,6 +1,7 @@
-import { beforeEach, describe, expect, it } from 'vitest'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { createPinia, setActivePinia } from 'pinia'
 import { useUserStore } from '../model/stores/user.js'
+import { localDb } from '../model/services/db/local.js'
 import { useCleanSlate } from './helpers/index.js'
 
 useCleanSlate()
@@ -29,12 +30,18 @@ describe('user store initial state and getters', () => {
 describe('user store initialization', () => {
   it('memoizes local initialization and marks the store ready', async () => {
     const user = useUserStore()
+    const getSession = vi.spyOn(localDb, 'getSession')
+    const onAuthChange = vi.spyOn(localDb, 'onAuthChange')
+
     const firstInit = user.init()
+    const memo = user._init // raw Promise: Vue does not proxy Promise objects
     const secondInit = user.init()
 
-    expect(secondInit).toBe(firstInit)
-    await firstInit
-
+    expect(memo).toBeInstanceOf(Promise)
+    expect(user._init).toBe(memo) // second call reused the memo
+    await Promise.all([firstInit, secondInit])
+    expect(getSession).toHaveBeenCalledTimes(1)
+    expect(onAuthChange).toHaveBeenCalledTimes(1)
     expect(user.mode).toBe('local')
     expect(user.ready).toBe(true)
     expect(user.session).toBeNull()

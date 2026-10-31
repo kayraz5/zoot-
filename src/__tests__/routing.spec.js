@@ -95,14 +95,19 @@ describe('routing service', () => {
 
   it('reuses a successful route for the same coordinate pair', async () => {
     const fetchMock = stubFetch([
-      ['routed-foot', () => jsonResponse(osrmResponse({ distance: 88 }))],
+      ['routed-foot', () => jsonResponse(osrmResponse({
+        distance: 88,
+        steps: [{ maneuver: { type: 'depart', location: [103.8001, 1.3001] }, name: 'River Valley Road', distance: 88 }],
+      }))],
     ])
 
     const first = routing.getWalkRoute(from, to)
     const second = routing.getWalkRoute(from, to)
     const [firstRoute, secondRoute] = await Promise.all([first, second])
 
-    expect(firstRoute).toEqual(secondRoute)
+    expect(firstRoute).not.toBeNull()
+    expect(firstRoute.distance_m).toBe(88)
+    expect(secondRoute).toBe(firstRoute)
     expect(fetchMock).toHaveBeenCalledTimes(1)
   })
 

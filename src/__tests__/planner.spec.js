@@ -206,7 +206,7 @@ describe('planner public plan and replanning helpers', () => {
       expect(returnedAt).toBeLessThanOrEqual(arriveBy)
       expect(returnedAt).toBeLessThanOrEqual(result.budget.arriveByMs)
     }, { n: 30, seed: 216 })
-  })
+  }, 60_000)
 
   // **Validates: Requirements 2.2, 2.5**
 

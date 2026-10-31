@@ -40,10 +40,14 @@ const request = (method = 'GET', headers = {}) => mockReq({
 
 const authorizedRequest = (method = 'GET') => request(method, { authorization })
 
-function configuredDb() {
+const SEED_ROW = { id: 'seed-place', source: 'seed' }
+const OSM_ROW = { id: 'osm-place', source: 'osm' }
+const PREVIOUS = [SEED_ROW, OSM_ROW]
+
+function configuredDb(rows = PREVIOUS) {
   const db = { select: vi.fn() }
   places.placesDbFromEnv.mockReturnValue(db)
-  db.select.mockResolvedValue([])
+  db.select.mockResolvedValue(rows)
   return db
 }
 
@@ -91,9 +95,22 @@ describe('/api/sync-places', () => {
     expect(res.statusCode).toBe(502)
     expect(res.body).toEqual({ error: 'OpenStreetMap failed, nothing written', report })
     expect(places.syncPlaces).toHaveBeenCalledTimes(1)
-    expect(places.syncPlaces).toHaveBeenCalledWith(expect.objectContaining({ previous: [] }))
+    expect(places.syncPlaces).toHaveBeenCalledWith({ seed: [SEED_ROW], previous: PREVIOUS })
     expect(places.savePlaces).not.toHaveBeenCalled()
     expect(db.select).toHaveBeenCalledWith('places', 'select=*')
+  })
+
+  it('returns 500 and writes nothing when the table has no hand-picked places', async () => {
+    const db = configuredDb([OSM_ROW])
+    const res = mockRes()
+
+    await handler(authorizedRequest(), res)
+
+    expect(res.statusCode).toBe(500)
+    expect(res.body).toEqual({ error: 'No hand-picked places in the table, nothing written' })
+    expect(db.select).toHaveBeenCalledWith('places', 'select=*')
+    expect(places.syncPlaces).not.toHaveBeenCalled()
+    expect(places.savePlaces).not.toHaveBeenCalled()
   })
 
   // The handler has no HTTP method guard, so a valid POST is processed instead of rejected.

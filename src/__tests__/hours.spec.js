@@ -8,7 +8,7 @@ import {
   isOpenDuringVisit,
   toSgLocalInput,
 } from '../model/services/hours.js'
-import { hm } from '../view/components/plan/planUi.js'
+import { hm } from '../view/features/plan/planUi.js'
 import { sameSgDay } from '../model/services/checkin.js'
 import { forAll, int } from './helpers/gen.js'
 import { at, DAY, T, useCleanSlate } from './helpers/index.js'
@@ -28,41 +28,43 @@ describe('Singapore opening-hours helpers', () => {
 
   describe('isOpenDuringVisit', () => {
     it('treats 24-hour places as open for any visit', () => {
-      expect(isOpenDuringVisit({ hours: '24h' }, at('23:50'), at('00:20', '2030-01-16'))).toBe(true)
+      expect(isOpenDuringVisit({ hours: '24h' }, T('23:50'), T('00:20', '2030-01-16'))).toBe(true)
     })
 
     it('treats a place with missing hours as always open', () => {
-      expect(isOpenDuringVisit({}, at('03:00'), at('04:00'))).toBe(true)
+      expect(isOpenDuringVisit({}, T('03:00'), T('04:00'))).toBe(true)
     })
 
     it('rejects visits that arrive on a closed weekday', () => {
       const place = { hours: [['09:00', '17:00']], closed_days: [2] }
-      expect(isOpenDuringVisit(place, at('10:00'), at('11:00'))).toBe(false)
+      expect(isOpenDuringVisit(place, T('10:00'), T('11:00'))).toBe(false)
+      // Same place on Wednesday 2030-01-16 (not a closed day): the rejection above comes from the closed weekday.
+      expect(isOpenDuringVisit(place, T('10:00', '2030-01-16'), T('11:00', '2030-01-16'))).toBe(true)
     })
 
     it('accepts a visit fully inside a daytime range', () => {
       const place = { hours: [['09:00', '17:00']] }
-      expect(isOpenDuringVisit(place, at('10:00'), at('11:00'))).toBe(true)
+      expect(isOpenDuringVisit(place, T('10:00'), T('11:00'))).toBe(true)
     })
 
     it('rejects a visit that falls outside a daytime range', () => {
       const place = { hours: [['09:00', '17:00']] }
-      expect(isOpenDuringVisit(place, at('17:00'), at('18:00'))).toBe(false)
+      expect(isOpenDuringVisit(place, T('17:00'), T('18:00'))).toBe(false)
     })
 
     it('accepts an arrival on the opening side of an overnight range', () => {
       const place = { hours: [['22:00', '02:00']] }
-      expect(isOpenDuringVisit(place, at('23:00'), at('01:00', '2030-01-16'))).toBe(true)
+      expect(isOpenDuringVisit(place, T('23:00'), T('01:00', '2030-01-16'))).toBe(true)
     })
 
     it('does not match an overnight range when arriving after midnight', () => {
       const place = { hours: [['22:00', '02:00']] }
-      expect(isOpenDuringVisit(place, at('01:00', '2030-01-16'), at('01:30', '2030-01-16'))).toBe(false)
+      expect(isOpenDuringVisit(place, T('01:00', '2030-01-16'), T('01:30', '2030-01-16'))).toBe(false)
     })
 
     it('treats 23:59 as the end of the day', () => {
       const place = { hours: [['22:00', '23:59']] }
-      expect(isOpenDuringVisit(place, at('23:58'), at('00:00', '2030-01-16'))).toBe(true)
+      expect(isOpenDuringVisit(place, T('23:58'), T('00:00', '2030-01-16'))).toBe(true)
     })
   })
 

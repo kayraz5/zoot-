@@ -2,8 +2,8 @@ import { test as base, expect } from '@playwright/test'
 import { readFileSync } from 'node:fs'
 
 const fixture = (path) => JSON.parse(readFileSync(new URL(`./${path}`, import.meta.url), 'utf8'))
-const APP_HOSTS = new Set(['localhost', '127.0.0.1'])
-const EXTERNAL_FIXTURES = [
+export const APP_HOSTS = new Set(['localhost', '127.0.0.1'])
+export const EXTERNAL_FIXTURES = [
   [/api\.open-meteo\.com\/.+\/forecast/, 'external/open-meteo.json'],
   [/api-open\.data\.gov\.sg\/.*psi/, 'external/psi.json'],
   [/api-open\.data\.gov\.sg\/.*lightning/, 'external/lightning.json']
@@ -37,13 +37,26 @@ export async function installHarness(page, { auth = 'signed-out', profile = {} }
     }))
   }, { auth, profile })
 
-  await page.route((url) => !APP_HOSTS.has(url.hostname), (route) => {
+  await routeExternalHosts(page)
+  await installApiStubs(page)
+}
+
+/**
+ * Fulfil the external fixtures (Open-Meteo, PSI, lightning) and abort every other non-localhost
+ * request. `passThrough(url)` excludes hosts from routing altogether (the Supabase harness uses it
+ * for the configured project's origin); the guest harness passes nothing, so it aborts them all.
+ */
+export async function routeExternalHosts(page, { passThrough = () => false } = {}) {
+  await page.route((url) => !APP_HOSTS.has(url.hostname) && !passThrough(url), (route) => {
     const hit = EXTERNAL_FIXTURES.find(([pattern]) => pattern.test(route.request().url()))
     return hit
       ? route.fulfill({ json: fixture(hit[1]) })
       : route.abort()
   })
+}
 
+/** Stub the Vercel functions under /api/* from e2e/fixtures/api (/api/plan built from the posted catalog). */
+export async function installApiStubs(page) {
   await page.route('**/api/**', (route) => {
     const { pathname } = new URL(route.request().url())
 

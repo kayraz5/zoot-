@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { createPinia, setActivePinia } from 'pinia'
+import { toRaw } from 'vue'
 import { useUiStore } from '../model/stores/ui.js'
 import { useCleanSlate } from './helpers/index.js'
 
@@ -98,7 +99,7 @@ describe('ui store preferences and notifications', () => {
 
     store.celebrate(payload)
 
-    expect(store.celebration).toBe(payload)
+    expect(toRaw(store.celebration)).toBe(payload)
   })
 })
 
@@ -109,10 +110,11 @@ describe('ui store weather loading', () => {
     const store = useUiStore()
     store.weatherError = 'Previous weather failure'
 
-    await expect(store.loadWeather(1.3, 103.8)).resolves.toBe(forecast)
+    const result = await store.loadWeather(1.3, 103.8)
 
+    expect(toRaw(result)).toBe(forecast)
     expect(weather.fetchForecast).toHaveBeenCalledWith(1.3, 103.8)
-    expect(store.weather).toBe(forecast)
+    expect(toRaw(store.weather)).toBe(forecast)
     expect(store.weatherError).toBeNull()
   })
 
@@ -122,9 +124,10 @@ describe('ui store weather loading', () => {
     const store = useUiStore()
     store.weather = previousForecast
 
-    await expect(store.loadWeather(1.3, 103.8)).resolves.toBe(previousForecast)
+    const result = await store.loadWeather(1.3, 103.8)
 
-    expect(store.weather).toBe(previousForecast)
+    expect(toRaw(result)).toBe(previousForecast)
+    expect(toRaw(store.weather)).toBe(previousForecast)
     expect(store.weatherError).toBe('Weather unavailable')
   })
 })

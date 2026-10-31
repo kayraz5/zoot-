@@ -1,20 +1,20 @@
 /**
- * DRAFT — Feature: guest onboarding and travel-style selection.
- * Status: unfinished journey draft; reference: docs/repo-audit.md §1 and Requirements 11.1–11.5, 12.3.
- * Enable (bash): E2E_DRAFTS=1 pnpm run test:e2e e2e/drafts/onboarding.spec.js
- * Enable (PowerShell): $env:E2E_DRAFTS='1'; pnpm run test:e2e e2e/drafts/onboarding.spec.js
+ * Journey — Feature: guest onboarding and travel-style selection.
+ * Runs in the guest harness (zoot.guest='1', external hosts aborted); see e2e/fixtures/harness.js.
+ * Reference: docs/repo-audit.md §1.
  */
-import { draft, expect } from '../fixtures/draft.js'
+import { expect, test } from '../fixtures/harness.js'
 
-draft('lets a new guest choose a travel style and reach the plan page', async ({ page }) => {
+test('lets a new guest choose a travel style and reach the plan page', async ({ page }) => {
   await page.goto('/')
   await page.getByRole('button', { name: 'Start a layover' }).click()
 
-  await expect(page).toHaveURL(/\/auth\?next=%2Fplan$/)
-  await page.getByLabel('Traveller name (optional)').fill('E2E Traveller')
+  await expect(page).toHaveURL(/\/auth\?next=\/plan$/)
+  // The guest name input is labelled "Play as guest"; "Traveller name (optional)" is its placeholder.
+  await page.getByLabel('Play as guest').fill('E2E Traveller')
   await page.getByRole('button', { name: 'Continue as guest' }).click()
 
-  await expect(page).toHaveURL(/\/onboard\?next=%2Fplan$/)
+  await expect(page).toHaveURL(/\/onboard\?next=\/plan$/)
   await page.getByRole('button', { name: 'Find the cheapest great meal' }).click()
   await page.getByRole('button', { name: 'Duck into a hawker centre' }).click()
   await page.getByRole('button', { name: 'Whatever keeps it cheap' }).click()

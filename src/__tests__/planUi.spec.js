@@ -13,7 +13,7 @@ import {
   usePlanTime,
   usePrePickedInterests,
   useStyleId,
-} from '../view/components/plan/planUi.js'
+} from '../view/features/plan/planUi.js'
 import { T, setNow, useCleanSlate } from './helpers/index.js'
 import { tick } from './helpers/fakeClock.js'
 

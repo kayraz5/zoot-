@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, vi } from 'vitest'
+import { redact } from '../../../tests/support/redact.js'
 
 /** Fixed future day in Singapore time for deterministic date-based tests. */
 export const DAY = '2030-01-15'
@@ -36,7 +37,7 @@ export function stubFetch(routes = []) {
     const hit = routes.find(([matcher]) => (
       matcher instanceof RegExp ? matcher.test(url) : url.includes(matcher)
     ))
-    if (!hit) throw new Error(`Unexpected fetch in test: ${url}`)
+    if (!hit) throw new Error(`Unexpected fetch in test: ${redact(url)}`)
     return hit[1](url, init)
   })
   vi.stubGlobal('fetch', fn)
@@ -80,6 +81,9 @@ export function useCleanSlate() {
     vi.useRealTimers()
     vi.unstubAllEnvs()
     vi.unstubAllGlobals()
+    // Vitest 4's restoreAllMocks no longer clears vi.fn() call history, so clear it
+    // first; implementations set in beforeEach are kept.
+    vi.clearAllMocks()
     vi.restoreAllMocks()
     clearStorage()
   })
