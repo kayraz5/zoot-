@@ -12,7 +12,7 @@ import vueDevTools from 'vite-plugin-vue-devtools'
 function vercelApiDev() {
   return {
     name: 'vercel-api-dev',
-    apply: 'serve',
+    apply: (_config, { command }) => command === 'serve' && !process.env.VITEST,
     configureServer(server) {
       Object.assign(process.env, loadEnv(server.config.mode, process.cwd(), ''))
       server.middlewares.use('/api', async (req, res, next) => {

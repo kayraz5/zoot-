@@ -1,0 +1,63 @@
+{
+  "data": {
+    "items": [
+      {
+        "timestamp": "2030-01-15T08:00:00+08:00",
+        "updatedTimestamp": "2030-01-15T08:05:00+08:00",
+        "readings": {
+          "psi_twenty_four_hourly": {
+            "central": 42,
+            "east": 45,
+            "north": 39,
+            "south": 44,
+            "west": 41
+          },
+          "pm25_twenty_four_hourly": {
+            "central": 18,
+            "east": 20,
+            "north": 16,
+            "south": 19,
+            "west": 17
+          }
+        }
+      }
+    ],
+    "regionMetadata": [
+      {
+        "name": "central",
+        "labelLocation": {
+          "latitude": 1.2903,
+          "longitude": 103.8519
+        }
+      },
+      {
+        "name": "east",
+        "labelLocation": {
+          "latitude": 1.3521,
+          "longitude": 103.9448
+        }
+      },
+      {
+        "name": "north",
+        "labelLocation": {
+          "latitude": 1.4382,
+          "longitude": 103.7891
+        }
+      },
+      {
+        "name": "south",
+        "labelLocation": {
+          "latitude": 1.2667,
+          "longitude": 103.8191
+        }
+      },
+      {
+        "name": "west",
+        "labelLocation": {
+          "latitude": 1.3508,
+          "longitude": 103.7059
+        }
+      }
+    ]
+  }
+}

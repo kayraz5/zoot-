@@ -12,6 +12,8 @@ import { defineConfig, devices } from '@playwright/test'
  */
 export default defineConfig({
   testDir: './e2e',
+  /* Computes the Tier 0 Supabase gate once per run (name-only reason in ZOOT_SUPABASE_GATE). Not run by --list. */
+  globalSetup: './e2e/global-setup.js',
   /* Maximum time one test can run for. */
   timeout: 30 * 1000,
   expect: {
@@ -47,20 +49,42 @@ export default defineConfig({
   projects: [
     {
       name: 'chromium',
+      testIgnore: /\.supabase\.spec\.js$/,
       use: {
         ...devices['Desktop Chrome'],
       },
     },
     {
       name: 'firefox',
+      testIgnore: /\.supabase\.spec\.js$/,
+      /* Headed Firefox misses frames and load events locally, so it runs headless and serially. */
+      workers: 1,
       use: {
         ...devices['Desktop Firefox'],
+        headless: true,
       },
     },
     {
       name: 'webkit',
+      testIgnore: /\.supabase\.spec\.js$/,
       use: {
         ...devices['Desktop Safari'],
+      },
+    },
+
+    /*
+     * Supabase-gated social journeys. Traces, screenshots and videos are off because they would
+     * record request headers (anon key, access tokens). One worker, so test accounts never race.
+     */
+    {
+      name: 'supabase',
+      testMatch: /\.supabase\.spec\.js$/,
+      workers: 1,
+      use: {
+        ...devices['Desktop Chrome'],
+        trace: 'off',
+        screenshot: 'off',
+        video: 'off',
       },
     },
 
@@ -93,8 +117,12 @@ export default defineConfig({
     // },
   ],
 
-  /* Folder for test artifacts such as screenshots, videos, traces, etc. */
-  // outputDir: 'test-results/',
+  /*
+   * Folder for test artifacts such as screenshots, videos, traces, etc. Playwright empties this
+   * folder at the start of a run, so it is a dedicated subfolder: the unit-test JSON reports in
+   * test-results/ stay intact. Git-ignored through test-results/.
+   */
+  outputDir: 'test-results/playwright',
 
   /* Run your local dev server before starting the tests */
   webServer: {
